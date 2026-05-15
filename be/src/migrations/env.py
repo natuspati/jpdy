@@ -1,7 +1,6 @@
 import logging
 import os
 from collections.abc import Iterable
-from logging.config import fileConfig
 
 from alembic import context, util
 from alembic.operations import MigrationScript
@@ -9,14 +8,14 @@ from alembic.runtime.migration import MigrationContext
 from sqlalchemy import create_engine, pool
 
 from configs import settings
+from configs.log import configure_logging
 from models.base import meta
+
+configure_logging()
 
 _logger = logging.getLogger(__name__)
 
 config = context.config
-
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
 
 target_metadata = meta
 
