@@ -1,0 +1,26 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-board-bg: #0b1437;
+  --color-board-tile: #0d4ea6;
+  --color-board-tile-spent: #1e293b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
