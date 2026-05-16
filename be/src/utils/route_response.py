@@ -1,6 +1,6 @@
 from typing import Any
 
-from schemas.error import ErrorResponse
+from schemas.error import ErrorResponse, ErrorSchema
 
 
 def generate_responses(
@@ -9,6 +9,10 @@ def generate_responses(
     """
     Convert a sequence of :class:`ErrorResponse` dataclasses into the dict
     shape FastAPI expects in a route's ``responses=`` decorator argument.
+
+    Every entry is tagged with ``model=ErrorSchema`` so the OpenAPI document
+    shows the actual JSON body (``{"detail": "...", "extra_info": ...}``) the
+    error handlers in ``errors/handlers.py`` produce.
 
     Multiple ``ErrorResponse`` values that share a status code have their
     descriptions concatenated, so every failure mode for a given code stays
@@ -21,7 +25,10 @@ def generate_responses(
     for response in responses:
         existing = result.get(response.status_code)
         if existing is None:
-            result[response.status_code] = {"description": response.description}
+            result[response.status_code] = {
+                "description": response.description,
+                "model": ErrorSchema,
+            }
         else:
             existing["description"] = f"{existing['description']}; {response.description}"
     return result

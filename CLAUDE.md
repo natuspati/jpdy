@@ -46,6 +46,9 @@ ruff check --fix src tests
 
 Run both commands in this exact order before considering any task complete.
 
+**DO NOT** run pytest suite. There are only integration tests and they take considerable time. I will run tests
+myself.
+
 ### Database compatibility (SQLite + PostgreSQL)
 
 All queries and models **must work on both** SQLite (local) and PostgreSQL (cloud). Follow these rules at all times:

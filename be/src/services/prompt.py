@@ -25,19 +25,19 @@ from schemas.user.base import UserPublicSchema
 class PromptService:
     def __init__(self, uow: Annotated[UnitOfWork, Depends()]):
         self._uow = uow
-    
+
     async def search_prompt_category(
-            self,
-            filters: PromptCategoryFilterSchema,
+        self,
+        filters: PromptCategoryFilterSchema,
     ) -> PaginatedPromptCategoryWithPromptsInDBSchema:
         async with self._uow as uow:
             return await uow.prompt_category_repo.search_prompt_categories(
                 filters=filters,
             )
-    
+
     async def get_prompt_category(
-            self,
-            category_id: int,
+        self,
+        category_id: int,
     ) -> PromptCategoryWithPromptsInDBSchema:
         async with self._uow as uow:
             category = await uow.prompt_category_repo.select_prompt_category(
@@ -46,23 +46,23 @@ class PromptService:
         if category is None:
             raise NotFoundError(f"Prompt category {category_id} not found")
         return category
-    
+
     async def create_prompt_category(
-            self,
-            schema: PromptCategoryCreateSchema,
-            owner_id: int,
+        self,
+        schema: PromptCategoryCreateSchema,
+        owner_id: int,
     ) -> PromptCategoryInDBSchema:
         async with self._uow as uow:
             return await uow.prompt_category_repo.insert_prompt_category(
                 schema=schema,
                 owner_id=owner_id,
             )
-    
+
     async def update_prompt_category(
-            self,
-            category_id: int,
-            user: UserPublicSchema,
-            schema: PromptCategoryUpdateSchema,
+        self,
+        category_id: int,
+        user: UserPublicSchema,
+        schema: PromptCategoryUpdateSchema,
     ) -> PromptCategoryWithPromptsInDBSchema:
         async with self._uow as uow:
             await self._ensure_owned_category(uow, category_id, user)
@@ -73,21 +73,21 @@ class PromptService:
         if updated is None:
             raise NotFoundError(f"Prompt category {category_id} not found")
         return updated
-    
+
     async def delete_prompt_category(
-            self,
-            category_id: int,
-            user: UserPublicSchema,
+        self,
+        category_id: int,
+        user: UserPublicSchema,
     ) -> None:
         async with self._uow as uow:
             await self._ensure_owned_category(uow, category_id, user)
             await uow.prompt_category_repo.delete_prompt_category(category_id)
-    
+
     async def create_prompt(
-            self,
-            category_id: int,
-            schema: PromptCreateSchema,
-            user: UserPublicSchema,
+        self,
+        category_id: int,
+        schema: PromptCreateSchema,
+        user: UserPublicSchema,
     ) -> PromptInDBSchema:
         async with self._uow as uow:
             category = await self._ensure_owned_category(uow, category_id, user)
@@ -99,13 +99,13 @@ class PromptService:
                 category_id=category_id,
                 schema=schema,
             )
-    
+
     async def update_prompt(
-            self,
-            category_id: int,
-            prompt_id: int,
-            user: UserPublicSchema,
-            schema: PromptUpdateSchema,
+        self,
+        category_id: int,
+        prompt_id: int,
+        user: UserPublicSchema,
+        schema: PromptUpdateSchema,
     ) -> PromptInDBSchema:
         async with self._uow as uow:
             await self._ensure_owned_category(
@@ -118,12 +118,12 @@ class PromptService:
         if prompt is None:
             raise NotFoundError(f"Prompt {prompt_id} not found")
         return prompt
-    
+
     async def delete_prompt(
-            self,
-            category_id: int,
-            prompt_id: int,
-            user: UserPublicSchema,
+        self,
+        category_id: int,
+        prompt_id: int,
+        user: UserPublicSchema,
     ) -> None:
         async with self._uow as uow:
             await self._ensure_owned_category(
@@ -133,14 +133,14 @@ class PromptService:
                 prompt_id=prompt_id,
             )
             await uow.prompt_repo.delete_prompt(prompt_id)
-    
+
     @classmethod
     async def _ensure_owned_category(
-            cls,
-            uow: UnitOfWork,
-            category_id: int,
-            user: UserPublicSchema,
-            prompt_id: int | None = None,
+        cls,
+        uow: UnitOfWork,
+        category_id: int,
+        user: UserPublicSchema,
+        prompt_id: int | None = None,
     ) -> PromptCategoryWithPromptsInDBSchema:
         """
         Load a category by id and assert (1) it exists, (2) ``user`` owns it,

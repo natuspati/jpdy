@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from schemas.base import BaseSchema
+
 
 @dataclass(frozen=True, slots=True)
 class ErrorResponse:
@@ -11,3 +13,8 @@ class ErrorResponse:
 
     status_code: int
     description: str
+
+
+class ErrorSchema(BaseSchema):
+    detail: str
+    extra_info: str | dict | None = None

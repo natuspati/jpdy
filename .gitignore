@@ -67,3 +67,6 @@ htmlcov/
 # Secrets
 *.pem
 *.key
+
+# Test files
+*.db
