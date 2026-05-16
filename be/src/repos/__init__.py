@@ -1,3 +1,4 @@
+from repos.game_state import GameStateRepo
 from repos.lobby import LobbyRepo
 from repos.prompt import PromptRepo
 from repos.prompt_category import PromptCategoryRepo

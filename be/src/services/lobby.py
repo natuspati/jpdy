@@ -20,6 +20,7 @@ from schemas.lobby.nested import (
     PaginatedLobbyWithCategoriesInDBSchema,
 )
 from schemas.user.base import UserPublicSchema
+from services.game import GameService
 
 
 class LobbyService:
@@ -73,6 +74,11 @@ class LobbyService:
                     lobby_id=lobby_id,
                     state=schema.state,
                 )
+                if (
+                    lobby.state == LobbyStateEnum.CREATED
+                    and schema.state == LobbyStateEnum.WAITING_START
+                ):
+                    await GameService.materialize_state_in_uow(uow, lobby_id)
 
             updated = await uow.lobby_repo.select_lobby(lobby_id=lobby_id)
         if updated is None:

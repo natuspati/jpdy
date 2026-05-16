@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.session import get_db_session, get_redis_session
-from repos import LobbyRepo, PromptCategoryRepo, PromptRepo, UserRepo
+from repos import GameStateRepo, LobbyRepo, PromptCategoryRepo, PromptRepo, UserRepo
 
 
 class UnitOfWork:
@@ -33,6 +33,10 @@ class UnitOfWork:
     @cached_property
     def lobby_repo(self) -> LobbyRepo:
         return LobbyRepo(self._session)
+
+    @cached_property
+    def game_state_repo(self) -> GameStateRepo:
+        return GameStateRepo(self._redis)
 
     async def __aenter__(self):
         return self

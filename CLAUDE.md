@@ -82,14 +82,7 @@ All queries and models **must work on both** SQLite (local) and PostgreSQL (clou
 
 - **Framework:** React
 - **Language:** Modern TypeScript only — no `.js`/`.jsx` files
-- **Node package manager:** npm
-
-### Running the dev server
-
-```bash
-cd fe
-npm run dev
-```
+- **Node package manager:** bun
 
 ### TypeScript conventions
 

@@ -121,6 +121,10 @@ async def test_get_lobby_returns_categories_initially_empty(
     body = response.json()
     assert body["id"] == lobby_id
     assert body["prompt_categories"] == []
+    assert body["owner"] == {
+        "id": authed_user["user_id"],
+        "username": authed_user["username"],
+    }
 
 
 async def test_get_unknown_lobby_returns_404(

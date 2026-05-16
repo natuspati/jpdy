@@ -9,6 +9,7 @@ from models.user import User
 from schemas.lobby.base import LobbyFilterSchema, LobbyInDBSchema
 from schemas.lobby.nested import (
     LobbyWithCategoriesInDBSchema,
+    LobbyWithCategoryPromptsInDBSchema,
     PaginatedLobbyWithCategoriesInDBSchema,
 )
 from utils.model_validation import validate_model
@@ -17,10 +18,10 @@ from utils.model_validation import validate_model
 class LobbyRepo:
     def __init__(self, session: AsyncSession):
         self._session = session
-    
+
     async def search_lobbies(
-            self,
-            filters: LobbyFilterSchema,
+        self,
+        filters: LobbyFilterSchema,
     ) -> PaginatedLobbyWithCategoriesInDBSchema:
         """
         Search lobbies with pagination, returning each lobby with its joined
@@ -42,33 +43,36 @@ class LobbyRepo:
             conditions.append(Lobby.updated_at <= filters.updated_at_end)
         if filters.owner_username is not None:
             conditions.append(User.username.ilike(f"%{filters.owner_username}%"))
-        
+
         base_query = select(Lobby).where(*conditions)
         if filters.owner_username is not None:
             base_query = base_query.join(User, Lobby.owner_id == User.id)
-        
+
         total_query = select(func.count()).select_from(base_query.subquery())
         total = (await self._session.execute(total_query)).scalar_one()
-        
+
         paginated_query = (
-            base_query.options(selectinload(Lobby.prompt_categories))
+            base_query.options(
+                selectinload(Lobby.prompt_categories),
+                selectinload(Lobby.owner),
+            )
             .order_by(Lobby.updated_at.desc(), Lobby.id.desc())
             .limit(filters.limit)
             .offset(filters.offset)
         )
         rows = (await self._session.execute(paginated_query)).scalars().all()
         contents = validate_model(rows, LobbyWithCategoriesInDBSchema)
-        
+
         return PaginatedLobbyWithCategoriesInDBSchema(
             contents=contents,
             total=total,
             page=filters.page,
             size=filters.size,
         )
-    
+
     async def select_lobby(
-            self,
-            lobby_id: int,
+        self,
+        lobby_id: int,
     ) -> LobbyWithCategoriesInDBSchema | None:
         """
         Select a lobby by id with its prompt categories eagerly loaded.
@@ -77,11 +81,42 @@ class LobbyRepo:
         :return: matched lobby with categories, or ``None`` if no lobby matches
         """
         query = (
-            select(Lobby).where(Lobby.id == lobby_id).options(selectinload(Lobby.prompt_categories))
+            select(Lobby)
+            .where(Lobby.id == lobby_id)
+            .options(
+                selectinload(Lobby.prompt_categories),
+                selectinload(Lobby.owner),
+            )
         )
         lobby = (await self._session.execute(query)).scalar_one_or_none()
         return validate_model(lobby, LobbyWithCategoriesInDBSchema)
-    
+
+    async def select_lobby_with_prompts(
+        self,
+        lobby_id: int,
+    ) -> LobbyWithCategoryPromptsInDBSchema | None:
+        """
+        Select a lobby by id with its prompt categories *and* the prompts
+        belonging to each category eagerly loaded. Used to snapshot a lobby
+        into Redis when the game starts.
+
+        :param lobby_id: lobby primary key
+        :return: matched lobby with categories and prompts, or ``None`` if no
+            lobby matches
+        """
+        query = (
+            select(Lobby)
+            .where(Lobby.id == lobby_id)
+            .options(
+                selectinload(Lobby.owner),
+                selectinload(Lobby.prompt_categories).selectinload(
+                    PromptCategory.prompts,
+                ),
+            )
+        )
+        lobby = (await self._session.execute(query)).scalar_one_or_none()
+        return validate_model(lobby, LobbyWithCategoryPromptsInDBSchema)
+
     async def insert_lobby(self, owner_id: int) -> LobbyInDBSchema:
         """
         Insert a new lobby with state ``CREATED`` using SQL ``INSERT ... RETURNING``.
@@ -90,17 +125,15 @@ class LobbyRepo:
         :return: the inserted lobby as ``LobbyInDBSchema``
         """
         stmt = (
-            insert(Lobby)
-            .values(owner_id=owner_id, state=LobbyStateEnum.CREATED)
-            .returning(Lobby)
+            insert(Lobby).values(owner_id=owner_id, state=LobbyStateEnum.CREATED).returning(Lobby)
         )
         lobby = (await self._session.execute(stmt)).scalar_one()
         return validate_model(lobby, LobbyInDBSchema)
-    
+
     async def update_lobby_state(
-            self,
-            lobby_id: int,
-            state: LobbyStateEnum,
+        self,
+        lobby_id: int,
+        state: LobbyStateEnum,
     ) -> bool:
         """
         Update the ``state`` column on a lobby.
@@ -112,7 +145,7 @@ class LobbyRepo:
         stmt = update(Lobby).where(Lobby.id == lobby_id).values(state=state)
         result = await self._session.execute(stmt)
         return result.rowcount > 0
-    
+
     async def delete_lobby(self, lobby_id: int) -> bool:
         """
         Delete a lobby by id. Rows in ``lobby_prompt_category`` are cascaded by
@@ -124,7 +157,7 @@ class LobbyRepo:
         stmt = delete(Lobby).where(Lobby.id == lobby_id)
         result = await self._session.execute(stmt)
         return result.rowcount > 0
-    
+
     async def select_existing_category_ids(self, category_ids: list[int]) -> set[int]:
         """
         Return the subset of ``category_ids`` that actually exist in the
@@ -139,11 +172,11 @@ class LobbyRepo:
             return set()
         query = select(PromptCategory.id).where(PromptCategory.id.in_(category_ids))
         return set((await self._session.execute(query)).scalars().all())
-    
+
     async def replace_lobby_categories(
-            self,
-            lobby_id: int,
-            category_ids: list[int],
+        self,
+        lobby_id: int,
+        category_ids: list[int],
     ) -> None:
         """
         Replace the full set of categories attached to ``lobby_id`` with
