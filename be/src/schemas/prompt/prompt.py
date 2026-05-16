@@ -1,5 +1,7 @@
+from pydantic import Field, field_validator
+
 from enums import AnswerTypeEnum, QuestionTypeEnum
-from schemas.base import BaseSchema
+from schemas.base import BaseSchema, OneFieldSetSchemaMixin
 
 
 class PromptInDBSchema(BaseSchema):
@@ -10,3 +12,32 @@ class PromptInDBSchema(BaseSchema):
     answer_type: AnswerTypeEnum
     category_id: int
     order: int | None
+
+
+class PromptCreateSchema(BaseSchema):
+    question: str = Field(min_length=1, max_length=256)
+    question_type: QuestionTypeEnum
+    answer: str = Field(min_length=1, max_length=256)
+    answer_type: AnswerTypeEnum
+    category_id: int
+    order: int | None = None
+
+
+class PromptUpdateSchema(OneFieldSetSchemaMixin):
+    question: str | None = Field(default=None, min_length=1, max_length=256)
+    question_type: QuestionTypeEnum | None = None
+    answer: str | None = Field(default=None, min_length=1, max_length=256)
+    answer_type: AnswerTypeEnum | None = None
+
+    @field_validator(
+        "question",
+        "question_type",
+        "answer",
+        "answer_type",
+        mode="before",
+    )
+    @classmethod
+    def _reject_explicit_null(cls, v: object) -> object:
+        if v is None:
+            raise ValueError("must not be null")
+        return v

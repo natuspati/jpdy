@@ -1,3 +1,4 @@
+from functools import cached_property
 from typing import Annotated
 
 from fastapi.params import Depends
@@ -5,6 +6,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.session import get_db_session, get_redis_session
+from repos import LobbyRepo, PromptCategoryRepo, PromptRepo, UserRepo
 
 
 class UnitOfWork:
@@ -15,6 +17,22 @@ class UnitOfWork:
     ):
         self._session = session
         self._redis = redis
+
+    @cached_property
+    def user_repo(self) -> UserRepo:
+        return UserRepo(self._session)
+
+    @cached_property
+    def prompt_repo(self) -> PromptRepo:
+        return PromptRepo(self._session)
+
+    @cached_property
+    def prompt_category_repo(self) -> PromptCategoryRepo:
+        return PromptCategoryRepo(self._session)
+
+    @cached_property
+    def lobby_repo(self) -> LobbyRepo:
+        return LobbyRepo(self._session)
 
     async def __aenter__(self):
         return self

@@ -6,6 +6,7 @@ from errors.base import BaseError
 from models.user import User
 from schemas.user.base import UserCreateSchema, UserInDBSchema
 from schemas.user.nested import UserWithPromptsLobbiesInDBSchema
+from utils.model_validation import validate_model
 
 
 class UserRepo:
@@ -45,15 +46,9 @@ class UserRepo:
             )
 
         user = (await self._session.execute(query)).scalar_one_or_none()
-        if user is None:
-            return None
-
         if include_extra:
-            return UserWithPromptsLobbiesInDBSchema.model_validate(
-                user,
-                from_attributes=True,
-            )
-        return UserInDBSchema.model_validate(user, from_attributes=True)
+            return validate_model(user, UserWithPromptsLobbiesInDBSchema)
+        return validate_model(user, UserInDBSchema)
 
     async def insert_user(self, schema: UserCreateSchema) -> UserInDBSchema:
         """
@@ -73,4 +68,4 @@ class UserRepo:
             .returning(User)
         )
         user = (await self._session.execute(stmt)).scalar_one()
-        return UserInDBSchema.model_validate(user, from_attributes=True)
+        return validate_model(user, UserInDBSchema)
