@@ -3,7 +3,7 @@ from functools import cached_property
 from pydantic import Field, computed_field
 
 from schemas.base import BaseSchema
-from utils.password import hash_password
+from utils.auth import hash_password
 
 
 class UserCreateSchema(BaseSchema):
@@ -16,7 +16,10 @@ class UserCreateSchema(BaseSchema):
         return hash_password(self.password)
 
 
-class UserInDBSchema(BaseSchema):
+class UserPublicSchema(BaseSchema):
     id: int
     username: str
+
+
+class UserInDBSchema(UserPublicSchema):
     hashed_password: str

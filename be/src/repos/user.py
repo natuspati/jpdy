@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from errors.base import BaseError
 from models.user import User
 from schemas.user.base import UserCreateSchema, UserInDBSchema
-from schemas.user.nested import UserWithPromptsLobbiesInDBSchema
+from schemas.user.nested import UserWithPromptsLobbiesPublicSchema
 from utils.model_validation import validate_model
 
 
@@ -19,7 +19,7 @@ class UserRepo:
         user_id: int | None = None,
         username: str | None = None,
         include_extra: bool = False,
-    ) -> UserInDBSchema | UserWithPromptsLobbiesInDBSchema | None:
+    ) -> UserInDBSchema | UserWithPromptsLobbiesPublicSchema | None:
         """
         Select a user by id or username.
 
@@ -27,8 +27,9 @@ class UserRepo:
         :param username: optional username to filter by
         :param include_extra: when True, eagerly loads the user's prompt
             categories and lobbies and returns a
-            ``UserWithPromptsLobbiesInDBSchema``; when False, returns a plain
-            ``UserInDBSchema``
+            ``UserWithPromptsLobbiesPublicSchema`` (no ``hashed_password``,
+            suitable for response payloads); when False, returns a plain
+            ``UserInDBSchema`` which includes the hash for internal use.
         :return: the matched user schema, or ``None`` if no user matches
         """
         if user_id is None and username is None:
@@ -47,7 +48,7 @@ class UserRepo:
 
         user = (await self._session.execute(query)).scalar_one_or_none()
         if include_extra:
-            return validate_model(user, UserWithPromptsLobbiesInDBSchema)
+            return validate_model(user, UserWithPromptsLobbiesPublicSchema)
         return validate_model(user, UserInDBSchema)
 
     async def insert_user(self, schema: UserCreateSchema) -> UserInDBSchema:

@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # Authentication
     openapi_schema_user: str = "user"
     openapi_schema_password: str = "password"
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
 
     # CORS
     allowed_hosts: list[str] = ["*"]

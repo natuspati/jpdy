@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
-from errors.base import BaseError
 from errors.request import BadRequestError
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
@@ -23,10 +22,10 @@ from utils.model_validation import validate_model
 class PromptCategoryRepo:
     def __init__(self, session: AsyncSession):
         self._session = session
-    
+
     async def search_prompt_categories(
-            self,
-            filters: PromptCategoryFilterSchema,
+        self,
+        filters: PromptCategoryFilterSchema,
     ) -> PaginatedPromptCategoryWithPromptsInDBSchema:
         """
         Search prompt categories with pagination, returning each category with
@@ -51,7 +50,7 @@ class PromptCategoryRepo:
             .correlate(PromptCategory)
             .scalar_subquery()
         )
-        
+
         conditions = []
         if filters.ids is not None:
             conditions.append(PromptCategory.id.in_(filters.ids))
@@ -68,12 +67,12 @@ class PromptCategoryRepo:
                 conditions.append(prompt_count_subq == NUM_PROMPTS_IN_CATEGORY)
             else:
                 conditions.append(prompt_count_subq < NUM_PROMPTS_IN_CATEGORY)
-        
+
         base_query = select(PromptCategory).where(*conditions)
-        
+
         total_query = select(func.count()).select_from(base_query.subquery())
         total = (await self._session.execute(total_query)).scalar_one()
-        
+
         paginated_query = (
             base_query.options(selectinload(PromptCategory.prompts))
             .order_by(PromptCategory.updated_at.desc(), PromptCategory.id.desc())
@@ -82,17 +81,17 @@ class PromptCategoryRepo:
         )
         rows = (await self._session.execute(paginated_query)).scalars().all()
         contents = validate_model(rows, PromptCategoryWithPromptsInDBSchema)
-        
+
         return PaginatedPromptCategoryWithPromptsInDBSchema(
             contents=contents,
             total=total,
             page=filters.page,
             size=filters.size,
         )
-    
+
     async def select_prompt_category(
-            self,
-            category_id: int,
+        self,
+        category_id: int,
     ) -> PromptCategoryWithPromptsInDBSchema | None:
         """
         Select a prompt category by id with its prompts eagerly loaded.
@@ -107,10 +106,10 @@ class PromptCategoryRepo:
         )
         category = (await self._session.execute(query)).scalar_one_or_none()
         return validate_model(category, PromptCategoryWithPromptsInDBSchema)
-    
+
     async def insert_prompt_category(
-            self,
-            schema: PromptCategoryCreateSchema,
+        self,
+        schema: PromptCategoryCreateSchema,
     ) -> PromptCategoryInDBSchema:
         """
         Insert a new prompt category using SQL ``INSERT ... RETURNING``.
@@ -124,11 +123,11 @@ class PromptCategoryRepo:
         stmt = insert(PromptCategory).values(**schema.model_dump()).returning(PromptCategory)
         category = (await self._session.execute(stmt)).scalar_one()
         return validate_model(category, PromptCategoryInDBSchema)
-    
+
     async def update_prompt_category(
-            self,
-            category_id: int,
-            schema: PromptCategoryUpdateSchema,
+        self,
+        category_id: int,
+        schema: PromptCategoryUpdateSchema,
     ) -> PromptCategoryInDBSchema | None:
         """
         Update an existing prompt category. Only the ``name`` column on the
@@ -148,7 +147,7 @@ class PromptCategoryRepo:
         """
         if schema.prompt_order is not None:
             await self._apply_prompt_order(category_id, schema.prompt_order)
-        
+
         update_values = schema.model_dump(
             exclude_unset=True,
             exclude={"prompt_order"},
@@ -157,7 +156,7 @@ class PromptCategoryRepo:
             query = select(PromptCategory).where(PromptCategory.id == category_id)
             category = (await self._session.execute(query)).scalar_one_or_none()
             return validate_model(category, PromptCategoryInDBSchema)
-        
+
         stmt = (
             update(PromptCategory)
             .where(PromptCategory.id == category_id)
@@ -166,7 +165,7 @@ class PromptCategoryRepo:
         )
         category = (await self._session.execute(stmt)).scalar_one_or_none()
         return validate_model(category, PromptCategoryInDBSchema)
-    
+
     async def delete_prompt_category(self, category_id: int) -> bool:
         """
         Delete a prompt category by id. Prompts that belong to the category
@@ -179,15 +178,15 @@ class PromptCategoryRepo:
         stmt = delete(PromptCategory).where(PromptCategory.id == category_id)
         result = await self._session.execute(stmt)
         return result.rowcount > 0
-    
+
     async def _apply_prompt_order(
-            self,
-            category_id: int,
-            prompt_order: dict[int, int],
+        self,
+        category_id: int,
+        prompt_order: dict[int, int],
     ) -> None:
         if not prompt_order:
             return
-        
+
         new_orders = list(prompt_order.values())
         if len(set(new_orders)) != len(new_orders):
             raise BadRequestError("Prompt orders must be unique within the mapping")
@@ -196,7 +195,7 @@ class PromptCategoryRepo:
                 raise BadRequestError(
                     f"Prompt order must be between 1 and {NUM_PROMPTS_IN_CATEGORY}",
                 )
-        
+
         prompt_ids = list(prompt_order.keys())
         owned_query = select(Prompt.id).where(
             Prompt.id.in_(prompt_ids),
@@ -210,7 +209,7 @@ class PromptCategoryRepo:
             raise BadRequestError(
                 f"Prompts {sorted(missing)} do not belong to category {category_id}",
             )
-        
+
         for prompt_id, new_order in prompt_order.items():
             stmt = update(Prompt).where(Prompt.id == prompt_id).values(order=new_order)
             await self._session.execute(stmt)
