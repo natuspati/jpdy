@@ -15,7 +15,6 @@ class PromptCategoryInDBSchema(BaseSchema):
 
 class PromptCategoryCreateSchema(BaseSchema):
     name: str = Field(min_length=1, max_length=256)
-    owner_id: int | None = None
 
 
 class PromptCategoryUpdateSchema(OneFieldSetSchemaMixin):

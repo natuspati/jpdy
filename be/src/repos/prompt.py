@@ -1,4 +1,4 @@
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import delete, insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.prompt import Prompt
@@ -14,26 +14,23 @@ class PromptRepo:
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    async def select_prompt(self, prompt_id: int) -> PromptInDBSchema | None:
-        """
-        Select a prompt by id.
-
-        :param prompt_id: prompt primary key
-        :return: matched prompt schema, or ``None`` if no prompt matches
-        """
-        query = select(Prompt).where(Prompt.id == prompt_id)
-        prompt = (await self._session.execute(query)).scalar_one_or_none()
-        return validate_model(prompt, PromptInDBSchema)
-
-    async def insert_prompt(self, schema: PromptCreateSchema) -> PromptInDBSchema:
+    async def insert_prompt(
+        self,
+        category_id: int,
+        schema: PromptCreateSchema,
+    ) -> PromptInDBSchema:
         """
         Insert a new prompt using SQL ``INSERT ... RETURNING``.
 
-        :param schema: validated prompt create payload; ``order`` is managed by
-            the application layer and may be ``None`` at insert time.
+        :param category_id: id of the category the prompt belongs to
+        :param schema: validated prompt create payload; ``order`` is required
+            and bounded by ``NUM_PROMPTS_IN_CATEGORY`` (uniqueness within the
+            category is enforced by the service layer).
         :return: the inserted prompt as ``PromptInDBSchema``
         """
-        stmt = insert(Prompt).values(**schema.model_dump()).returning(Prompt)
+        stmt = (
+            insert(Prompt).values(category_id=category_id, **schema.model_dump()).returning(Prompt)
+        )
         prompt = (await self._session.execute(stmt)).scalar_one()
         return validate_model(prompt, PromptInDBSchema)
 

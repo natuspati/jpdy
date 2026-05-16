@@ -1,5 +1,6 @@
 from pydantic import Field, field_validator
 
+from configs.constants import NUM_PROMPTS_IN_CATEGORY
 from enums import AnswerTypeEnum, QuestionTypeEnum
 from schemas.base import BaseSchema, OneFieldSetSchemaMixin
 
@@ -19,8 +20,7 @@ class PromptCreateSchema(BaseSchema):
     question_type: QuestionTypeEnum
     answer: str = Field(min_length=1, max_length=256)
     answer_type: AnswerTypeEnum
-    category_id: int
-    order: int | None = None
+    order: int = Field(ge=1, le=NUM_PROMPTS_IN_CATEGORY)
 
 
 class PromptUpdateSchema(OneFieldSetSchemaMixin):

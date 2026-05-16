@@ -110,6 +110,7 @@ class PromptCategoryRepo:
     async def insert_prompt_category(
         self,
         schema: PromptCategoryCreateSchema,
+        owner_id: int,
     ) -> PromptCategoryInDBSchema:
         """
         Insert a new prompt category using SQL ``INSERT ... RETURNING``.
@@ -118,9 +119,14 @@ class PromptCategoryRepo:
         for that.
 
         :param schema: validated prompt category create payload
+        :param owner_id: id of the user who will own the new category
         :return: the inserted prompt category as ``PromptCategoryInDBSchema``
         """
-        stmt = insert(PromptCategory).values(**schema.model_dump()).returning(PromptCategory)
+        stmt = (
+            insert(PromptCategory)
+            .values(name=schema.name, owner_id=owner_id)
+            .returning(PromptCategory)
+        )
         category = (await self._session.execute(stmt)).scalar_one()
         return validate_model(category, PromptCategoryInDBSchema)
 
@@ -128,7 +134,7 @@ class PromptCategoryRepo:
         self,
         category_id: int,
         schema: PromptCategoryUpdateSchema,
-    ) -> PromptCategoryInDBSchema | None:
+    ) -> PromptCategoryWithPromptsInDBSchema | None:
         """
         Update an existing prompt category. Only the ``name`` column on the
         category itself can be changed; ``prompt_order`` is a side-channel for
@@ -141,9 +147,14 @@ class PromptCategoryRepo:
         the category overall is the caller's responsibility — the DB allows
         temporary ``NULL`` / negative values to support staged reorders.
 
+        After applying changes the category is re-fetched via
+        :meth:`select_prompt_category` so the response includes the prompts
+        with their (potentially new) ordering.
+
         :param category_id: prompt category primary key
         :param schema: validated update payload
-        :return: the updated prompt category, or ``None`` if no category matches
+        :return: the updated category with prompts, or ``None`` if no category
+            matches
         """
         if schema.prompt_order is not None:
             await self._apply_prompt_order(category_id, schema.prompt_order)
@@ -152,19 +163,17 @@ class PromptCategoryRepo:
             exclude_unset=True,
             exclude={"prompt_order"},
         )
-        if not update_values:
-            query = select(PromptCategory).where(PromptCategory.id == category_id)
-            category = (await self._session.execute(query)).scalar_one_or_none()
-            return validate_model(category, PromptCategoryInDBSchema)
+        if update_values:
+            stmt = (
+                update(PromptCategory)
+                .where(PromptCategory.id == category_id)
+                .values(**update_values)
+            )
+            result = await self._session.execute(stmt)
+            if result.rowcount == 0:
+                return None
 
-        stmt = (
-            update(PromptCategory)
-            .where(PromptCategory.id == category_id)
-            .values(**update_values)
-            .returning(PromptCategory)
-        )
-        category = (await self._session.execute(stmt)).scalar_one_or_none()
-        return validate_model(category, PromptCategoryInDBSchema)
+        return await self.select_prompt_category(category_id)
 
     async def delete_prompt_category(self, category_id: int) -> bool:
         """

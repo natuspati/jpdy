@@ -24,6 +24,7 @@ class PromptCategory(Base):
         back_populates="category",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        order_by="Prompt.order.asc()",
     )
     lobbies: Mapped[list[Lobby]] = relationship(
         secondary="lobby_prompt_category",
