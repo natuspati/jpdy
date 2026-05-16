@@ -1,3 +1,7 @@
+from factories.lobby_factories import (
+    LobbyCreateSchemaFactory,
+    LobbyUpdateSchemaFactory,
+)
 from factories.prompt_factories import (
     PromptCategoryCreateSchemaFactory,
     PromptCategoryUpdateSchemaFactory,
@@ -7,6 +11,8 @@ from factories.prompt_factories import (
 from factories.user_factories import UserCreateSchemaFactory
 
 __all__ = [
+    "LobbyCreateSchemaFactory",
+    "LobbyUpdateSchemaFactory",
     "PromptCategoryCreateSchemaFactory",
     "PromptCategoryUpdateSchemaFactory",
     "PromptCreateSchemaFactory",

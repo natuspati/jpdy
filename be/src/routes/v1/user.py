@@ -8,7 +8,7 @@ from schemas.error import ErrorResponse
 from schemas.token import TokenSchema
 from schemas.user.base import UserCreateSchema, UserInDBSchema, UserPublicSchema
 from schemas.user.nested import UserWithPromptsLobbiesPublicSchema
-from services.user import UserService
+from services import UserService
 from utils.route_response import generate_responses
 
 router = APIRouter(prefix="/user", tags=["user"])
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/user", tags=["user"])
             "Username already taken",
         ),
         ErrorResponse(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Invalid registration payload",
         ),
     ),
@@ -43,7 +43,7 @@ async def register(
             "Invalid username or password",
         ),
         ErrorResponse(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Invalid sign-in form",
         ),
     ),

@@ -26,6 +26,7 @@ def socket_server_url(app) -> Generator[str]:
         port=port,
         log_level="warning",
         lifespan="off",
+        ws="wsproto",
     )
     server = uvicorn.Server(config)
 

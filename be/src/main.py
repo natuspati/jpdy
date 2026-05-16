@@ -11,4 +11,5 @@ if __name__ == "__main__":
         port=settings.port,
         workers=settings.workers_count,
         reload=settings.reload,
+        ws="wsproto",
     )

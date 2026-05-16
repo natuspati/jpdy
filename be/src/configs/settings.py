@@ -1,3 +1,4 @@
+import secrets
 from functools import cached_property
 from typing import Literal
 
@@ -22,7 +23,7 @@ class Settings(BaseSettings):
     environment: AppEnvironmentEnum = AppEnvironmentEnum.LOCAL
     name: str = "Jeopardy Back-end"
     version: str = get_version()
-    secret_key: str = "secret"
+    secret_key: str | bytes = secrets.token_bytes(32)
 
     # Uvicorn
     host: str = "0.0.0.0"
