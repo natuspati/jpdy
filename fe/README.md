@@ -2,7 +2,10 @@
 
 See the repository [local-play guide](../README.md) for the complete
 Compose-based local runtime, seed data, URLs, Socket.IO path, and multi-user
-browser workflow.
+browser workflow. [`GAME_FLOW.md`](../GAME_FLOW.md) defines the desired
+server-authoritative voice-answer and answer-reveal experience; the current
+client retains a temporary typed-answer/host-judging UI until that contract is
+implemented.
 
 From this directory:
 

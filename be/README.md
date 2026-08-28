@@ -2,6 +2,10 @@
 
 See the repository [local-play guide](../README.md) for Compose startup,
 seeding, Redis, environment, migration, and database-reset instructions.
+The desired server-authoritative gameplay contract is documented in
+[`GAME_FLOW.md`](../GAME_FLOW.md). The current implementation still contains a
+temporary typed-answer/host-judging path while the documented voice-answer and
+answer-reveal flow is implemented.
 
 From this directory, the development server command is:
 

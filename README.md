@@ -9,6 +9,20 @@ This repository contains a text-only Jeopardy MVP:
 The existing JWT sign-in is only a lightweight local identity mechanism. This
 setup is for local development, not production deployment.
 
+## Game-flow status
+
+[`GAME_FLOW.md`](GAME_FLOW.md) defines the desired game contract for this
+project: players answer through an external voice channel, the host judges
+directly, and every resolved clue gets a short public answer-reveal period.
+
+The current checked-out implementation has not yet completed that game-flow
+migration. It still uses a temporary typed-answer submission followed by a
+separate host-judging phase, and does not yet show a public answer reveal.
+The local startup and seed instructions below work for the current runtime;
+the on-screen controls reflect the implementation that is running. The
+implementation must be brought into line with `GAME_FLOW.md` before this
+temporary behavior is removed.
+
 ## Prerequisites
 
 - Docker Engine with Compose (Colima is supported; Docker Desktop is not required)
@@ -82,8 +96,11 @@ are also the display identities shown in the app.
 4. As the host, return to **Lobbies**, choose **New lobby**, and select one or more ready
    categories. Ready categories are visible to any signed-in user, while only
    the category owner can edit them.
-5. In the player windows, join the waiting lobby. The host starts the game,
-   chooses a starting player, and judges submitted answers.
+5. In the player windows, join the waiting lobby. The host starts the game
+   and chooses a starting player. In the **desired** flow, players answer by
+   voice and the host judges directly; see [Game-flow status](#game-flow-status).
+   In the current implementation, follow the temporary typed-answer and
+   host-judging controls shown by the application.
 6. Continue until every clue is selected. The server marks the lobby complete
    and displays the final leaderboard.
 
@@ -95,11 +112,22 @@ unbanned.
 ## State and answer visibility
 
 Gameplay state is server-authoritative and replaced wholesale after each
-Socket.IO update. Player frames include the board, scores, timer deadline, and
-submitted answer while judging, but **never** include a clue's expected answer.
-Only the host receives the `host_judging_answer` event containing the expected
-answer during the judging phase. Redis retains the internal game snapshot,
-including answers, for the active game.
+Socket.IO update. Redis retains the internal game snapshot, including prompt
+answers, for the active game.
+
+The desired visibility rules are specified in [`GAME_FLOW.md`](GAME_FLOW.md):
+
+- players answer through voice software; their answer text is never sent to
+  the application;
+- only the host sees an expected answer while a clue is active;
+- no player receives the expected answer before the host resolves the clue;
+- the correct answer becomes public only during the short `answer_reveal`
+  phase after resolution.
+
+Until the desired flow is implemented, the current runtime uses the legacy
+`host_judging_answer` event: the host sees the expected answer during the
+separate judging phase, while player-visible frames still exclude it. This is
+temporary compatibility behavior, not the target contract.
 
 ## Native development (without Compose)
 
@@ -164,4 +192,5 @@ registered local accounts and authored categories.
 Prompts are text-only for this version. The underlying content-type columns
 remain in the database for a future media extension, but the API accepts only
 `question_type=text` and `answer_type=text`, and the UI exposes only text
-inputs.
+inputs for prompt authoring. Future prompt-stage support may add image, audio,
+and video content; it is out of scope for the current MVP.
