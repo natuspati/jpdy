@@ -25,4 +25,9 @@ describe('HostJudgePanel', () => {
     await userEvent.click(screen.getByRole('button', { name: /wrong/i }));
     expect(onJudge).toHaveBeenCalledWith(false);
   });
+
+  it('does not display an expected-answer section without host-private data', () => {
+    render(<HostJudgePanel submittedAnswer="a" onJudge={() => undefined} />);
+    expect(screen.queryByText('Expected')).not.toBeInTheDocument();
+  });
 });

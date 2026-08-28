@@ -119,3 +119,53 @@ async def test_player_disconnect_flips_state(
     final_state = await host_socket.expect("state_changed")
     player_row = next(p for p in final_state["players"] if p["user_id"] == player.id)
     assert player_row["connection_status"] == PlayerConnectionStatusEnum.DISCONNECTED.value
+
+
+async def test_existing_player_can_reconnect_after_game_start(
+    seed_lobby: Callable[..., Awaitable[SeededLobby]],
+    connect_socket: Callable[[int, str], Awaitable[SocketClient]],
+):
+    seeded = await seed_lobby(player_count=1)
+    host_socket = await connect_socket(seeded.lobby_id, seeded.host.token)
+    await host_socket.expect("state_changed")
+    player = seeded.players[0]
+    first_connection = await connect_socket(seeded.lobby_id, player.token)
+    await host_socket.expect("state_changed")
+    await first_connection.expect("state_changed")
+
+    await host_socket.client.emit("start_game", namespace=f"/lobbies/{seeded.lobby_id}")
+    await host_socket.expect("state_changed")
+    await first_connection.expect("state_changed")
+    await first_connection.client.disconnect()
+    await host_socket.expect("state_changed")
+
+    reconnected = await connect_socket(seeded.lobby_id, player.token)
+    await reconnected.expect("state_changed")
+
+
+async def test_new_player_is_rejected_after_game_start(
+    seed_lobby: Callable[..., Awaitable[SeededLobby]],
+    connect_socket: Callable[[int, str], Awaitable[SocketClient]],
+    socket_server_url: str,
+    socket_session_overrides: None,
+    make_socket_client: Callable[[], socketio.AsyncClient],
+):
+    seeded = await seed_lobby(player_count=2)
+    host_socket = await connect_socket(seeded.lobby_id, seeded.host.token)
+    await host_socket.expect("state_changed")
+    player_socket = await connect_socket(seeded.lobby_id, seeded.players[0].token)
+    await host_socket.expect("state_changed")
+    await player_socket.expect("state_changed")
+
+    await host_socket.client.emit("start_game", namespace=f"/lobbies/{seeded.lobby_id}")
+    await host_socket.expect("state_changed")
+    await player_socket.expect("state_changed")
+
+    client = make_socket_client()
+    with pytest.raises(socketio.exceptions.ConnectionError):
+        await client.connect(
+            f"{socket_server_url}?token={seeded.players[1].token}",
+            socketio_path="ws",
+            namespaces=[f"/lobbies/{seeded.lobby_id}"],
+            wait_timeout=2,
+        )

@@ -59,7 +59,7 @@ async def _run_event[T: pydantic.BaseModel](
     payload: Any,
     payload_schema: type[T] | None,
     action: Callable[[GameService, int, int, T | None], Awaitable[GameLobbyState]],
-) -> None:
+) -> bool:
     """
     Validate the payload, run ``action`` inside a fresh UoW, broadcast the
     new state, and re-arm any phase-driven timer. Any service-level error is
@@ -68,7 +68,7 @@ async def _run_event[T: pydantic.BaseModel](
     """
     ctx = await _resolve_context(namespace, sid)
     if ctx is None:
-        return
+        return False
     lobby_id, user_id = ctx
 
     validated: pydantic.BaseModel | None
@@ -79,7 +79,7 @@ async def _run_event[T: pydantic.BaseModel](
             validated = payload_schema.model_validate(payload or {})
         except pydantic.ValidationError as e:
             await emit_error(namespace, sid, "bad_request", e.errors()[0]["msg"])
-            return
+            return False
 
     try:
         async with build_uow() as uow:
@@ -87,14 +87,15 @@ async def _run_event[T: pydantic.BaseModel](
     except BaseError as e:
         code = _ERROR_CODES.get(type(e), "error")
         await emit_error(namespace, sid, code, e.detail)
-        return
+        return False
     except Exception:
         _logger.exception("Unhandled error in socket event for lobby %s", lobby_id)
         await emit_error(namespace, sid, "internal_error", "Internal server error")
-        return
+        return False
 
     await broadcast_state(lobby_id, state)
     arm_timer_if_needed(lobby_id, state)
+    return True
 
 
 @sio.on("start_game", namespace="*")
@@ -210,7 +211,10 @@ async def on_ban_player(namespace: str, sid: str, data: Any = None) -> None:
             payload=payload,
         )
 
-    await _run_event(namespace, sid, data, BanPlayerPayload, _action)
+    succeeded = await _run_event(namespace, sid, data, BanPlayerPayload, _action)
+    if not succeeded:
+        return
+
     # After ban, force the banned player off the namespace.
     try:
         banned_id = BanPlayerPayload.model_validate(data or {}).user_id

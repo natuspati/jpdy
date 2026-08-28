@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { AnswerTypeEnum, QuestionTypeEnum } from './enums';
 import { Paginated } from './pagination';
 
 // NUM_PROMPTS_IN_CATEGORY mirrors be constants
@@ -10,9 +9,9 @@ export const NUM_PROMPTS_IN_CATEGORY = 5;
 export const PromptInDB = z.object({
   id: z.number().int(),
   question: z.string(),
-  question_type: QuestionTypeEnum,
+  question_type: z.literal('text'),
   answer: z.string(),
-  answer_type: AnswerTypeEnum,
+  answer_type: z.literal('text'),
   category_id: z.number().int(),
   order: z.number().int().nullable(),
 });
@@ -21,9 +20,9 @@ export type PromptInDB = z.infer<typeof PromptInDB>;
 // PromptCreateSchema
 export const PromptCreate = z.object({
   question: z.string().min(1).max(256),
-  question_type: QuestionTypeEnum,
+  question_type: z.literal('text'),
   answer: z.string().min(1).max(256),
-  answer_type: AnswerTypeEnum,
+  answer_type: z.literal('text'),
   order: z.number().int().min(1).max(NUM_PROMPTS_IN_CATEGORY),
 });
 export type PromptCreate = z.infer<typeof PromptCreate>;
@@ -32,9 +31,9 @@ export type PromptCreate = z.infer<typeof PromptCreate>;
 export const PromptUpdate = z
   .object({
     question: z.string().min(1).max(256).optional(),
-    question_type: QuestionTypeEnum.optional(),
+    question_type: z.literal('text').optional(),
     answer: z.string().min(1).max(256).optional(),
-    answer_type: AnswerTypeEnum.optional(),
+    answer_type: z.literal('text').optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: 'No fields to update' });
 export type PromptUpdate = z.infer<typeof PromptUpdate>;

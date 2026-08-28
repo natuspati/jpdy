@@ -18,10 +18,3 @@ export type GamePhaseEnum = z.infer<typeof GamePhaseEnum>;
 
 export const PlayerConnectionStatusEnum = z.enum(['connected', 'disconnected']);
 export type PlayerConnectionStatusEnum = z.infer<typeof PlayerConnectionStatusEnum>;
-
-// Mirrors be/src/enums/prompt.py
-export const QuestionTypeEnum = z.enum(['text', 'image', 'audio', 'video']);
-export type QuestionTypeEnum = z.infer<typeof QuestionTypeEnum>;
-
-export const AnswerTypeEnum = z.enum(['text', 'image', 'audio', 'video']);
-export type AnswerTypeEnum = z.infer<typeof AnswerTypeEnum>;

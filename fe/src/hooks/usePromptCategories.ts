@@ -29,7 +29,7 @@ interface CategoryFilters {
 
 export function useMyCategories(filters: CategoryFilters = {}) {
   const { userId, isAuthed } = useAuth();
-  const merged = { ...filters, owner_ids: userId ? [userId] : undefined, is_complete: false };
+  const merged = { ...filters, owner_ids: userId ? [userId] : undefined };
   return useQuery({
     queryKey: queryKeys.categories.list(merged),
     queryFn: () => searchCategories(merged),

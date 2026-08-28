@@ -52,4 +52,14 @@ describe('schemas (round-trip)', () => {
     const parsed = GameLobbyState.parse(JSON.parse(JSON.stringify(built)));
     expect(parsed).toEqual(built);
   });
+
+  it('rejects an expected answer in a player-visible game state', () => {
+    const frame = buildGameState();
+    const prompt = frame.categories[0].prompts[0] as typeof frame.categories[0]['prompts'][number] & {
+      answer: string;
+    };
+    prompt.answer = 'secret';
+
+    expect(GameLobbyState.safeParse(frame).success).toBe(false);
+  });
 });

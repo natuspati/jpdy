@@ -26,4 +26,11 @@ describe('FinalLeaderboard', () => {
     expect(screen.getByText(/non-scoring/i)).toBeInTheDocument();
     expect(screen.getByText(state.host.username)).toBeInTheDocument();
   });
+
+  it('explains an empty completed board', () => {
+    const state = buildGameState({ players: [] });
+    render(<FinalLeaderboard state={state} />);
+
+    expect(screen.getByText(/no players finished/i)).toBeInTheDocument();
+  });
 });

@@ -1,6 +1,7 @@
 import type {
   BanPlayerPayload,
   GameLobbyState,
+  HostJudgingAnswer,
   JudgeAnswerPayload,
   SelectPromptPayload,
   SelectStarterPayload,
@@ -11,6 +12,7 @@ import type {
 
 export interface ServerToClientEvents {
   state_changed: (state: GameLobbyState) => void;
+  host_judging_answer: (payload: HostJudgingAnswer) => void;
   error: (payload: SocketErrorPayload) => void;
 }
 

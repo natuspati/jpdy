@@ -56,8 +56,8 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
         category_id: 10,
         name: 'Animals',
         prompts: [
-          { prompt_id: 101, question: 'Q1', answer: 'A1', order: 1, is_selected: false, score_value: 100 },
-          { prompt_id: 102, question: 'Q2', answer: 'A2', order: 2, is_selected: false, score_value: 200 },
+          { prompt_id: 101, question: 'Q1', order: 1, is_selected: false, score_value: 100 },
+          { prompt_id: 102, question: 'Q2', order: 2, is_selected: false, score_value: 200 },
         ],
       },
     ],

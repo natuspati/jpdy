@@ -99,6 +99,13 @@ class GameService:
             else:
                 player = _find_player(state, user.id)
                 if player is None:
+                    lobby = await uow.lobby_repo.select_lobby(lobby_id=lobby_id)
+                    if lobby is None:
+                        raise NotFoundError(f"Lobby {lobby_id} not found")
+                    if lobby.state != LobbyStateEnum.WAITING_START:
+                        raise ForbiddenError(
+                            "Lobby roster is locked after the game has started",
+                        )
                     state.players.append(
                         GamePlayerState(
                             user_id=user.id,
@@ -240,6 +247,8 @@ class GameService:
             _require_phase(state, GamePhaseEnum.PLAYER_ANSWERING)
             if state.answering_player_id != user_id:
                 raise ForbiddenError("Only the answering player may submit an answer")
+            if state.timer_deadline is None or state.timer_deadline <= datetime.now(UTC):
+                raise BadRequestError("Answer time has expired")
 
             state.last_submitted_answer = payload.text
             state.phase = GamePhaseEnum.HOST_JUDGING_ANSWER
@@ -289,6 +298,7 @@ class GameService:
                     state.timer_deadline = _deadline(BUZZING_TIME_SECONDS)
                 else:
                     _resolve_prompt_no_score(state)
+                    await self._check_end_of_game(uow, state)
 
             await uow.game_state_repo.save_state(state)
         return state
@@ -382,8 +392,10 @@ class GameService:
                     state.timer_deadline = _deadline(BUZZING_TIME_SECONDS)
                 else:
                     _resolve_prompt_no_score(state)
+                    await self._check_end_of_game(uow, state)
             elif state.phase == GamePhaseEnum.BUZZ_OPEN:
                 _resolve_prompt_no_score(state)
+                await self._check_end_of_game(uow, state)
             else:
                 return None
 

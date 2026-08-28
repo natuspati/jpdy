@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field, field_validator
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
@@ -17,17 +19,17 @@ class PromptInDBSchema(BaseSchema):
 
 class PromptCreateSchema(BaseSchema):
     question: str = Field(min_length=1, max_length=256)
-    question_type: QuestionTypeEnum
+    question_type: Literal[QuestionTypeEnum.TEXT]
     answer: str = Field(min_length=1, max_length=256)
-    answer_type: AnswerTypeEnum
+    answer_type: Literal[AnswerTypeEnum.TEXT]
     order: int = Field(ge=1, le=NUM_PROMPTS_IN_CATEGORY)
 
 
 class PromptUpdateSchema(OneFieldSetSchemaMixin):
     question: str | None = Field(default=None, min_length=1, max_length=256)
-    question_type: QuestionTypeEnum | None = None
+    question_type: Literal[QuestionTypeEnum.TEXT] | None = None
     answer: str | None = Field(default=None, min_length=1, max_length=256)
-    answer_type: AnswerTypeEnum | None = None
+    answer_type: Literal[AnswerTypeEnum.TEXT] | None = None
 
     @field_validator(
         "question",

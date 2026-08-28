@@ -86,8 +86,9 @@ async def create_lobby(
         _LOBBY_NOT_FOUND,
         ErrorResponse(
             status.HTTP_400_BAD_REQUEST,
-            "Categories may only be changed while the lobby is in CREATED; "
-            "category ids must be within bounds and refer to existing categories",
+            "REST may only transition CREATED lobbies to WAITING_START. "
+            "Categories may only be changed while CREATED and every attached "
+            "category must contain five uniquely ordered text prompts.",
         ),
         ErrorResponse(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

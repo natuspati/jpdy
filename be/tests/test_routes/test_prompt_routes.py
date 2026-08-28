@@ -223,6 +223,23 @@ async def test_create_prompt_rejects_order_above_max(
     assert response.status_code == 422
 
 
+async def test_create_prompt_rejects_non_text_content_types(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    category_id = await _create_category(http_client, authed_user)
+    payload = PromptCreateSchemaFactory.build(order=1).model_dump()
+    payload["question_type"] = "image"
+
+    response = await http_client.post(
+        f"/api/v1/category/{category_id}/prompts",
+        json=payload,
+        headers=authed_user["headers"],
+    )
+
+    assert response.status_code == 422
+
+
 async def test_create_prompt_in_other_users_category_returns_403(
     http_client: AsyncClient,
     authed_user: AuthedUser,
@@ -284,6 +301,22 @@ async def test_update_prompt_modifies_only_supplied_fields(
     body = response.json()
     assert body["question"] == "What is updated?"
     assert body["order"] == 1  # unchanged
+
+
+async def test_update_prompt_rejects_non_text_content_types(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    category_id = await _create_category(http_client, authed_user)
+    prompt_id = await _create_prompt(http_client, authed_user, category_id, order=1)
+
+    response = await http_client.patch(
+        f"/api/v1/category/{category_id}/prompts/{prompt_id}",
+        json={"answer_type": "audio"},
+        headers=authed_user["headers"],
+    )
+
+    assert response.status_code == 422
 
 
 async def test_update_prompt_empty_body_rejected_by_one_field_set_mixin(

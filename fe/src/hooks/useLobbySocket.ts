@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
-import type { GameLobbyState } from '@/schemas';
+import { queryKeys } from '@/api/queryKeys';
+import type { GameLobbyState, HostJudgingAnswer } from '@/schemas';
 import { createLobbySocket, type LobbySocket } from '@/sockets/client';
 import { emit as emitEvent } from '@/sockets/events';
-import { parseSocketError, parseStateChanged } from '@/sockets/parseIncoming';
+import {
+  parseHostJudgingAnswer,
+  parseSocketError,
+  parseStateChanged,
+} from '@/sockets/parseIncoming';
 import type { ClientEventName, ClientToServerEvents } from '@/sockets/types';
 import { toastError } from '@/store/toastStore';
 
@@ -16,6 +22,7 @@ interface UseLobbySocketArgs {
 
 interface UseLobbySocketResult {
   state: GameLobbyState | null;
+  hostJudgingAnswer: HostJudgingAnswer | null;
   status: SocketStatus;
   emit: <E extends ClientEventName>(
     event: E,
@@ -38,9 +45,11 @@ export function useLobbySocket({
   token,
 }: UseLobbySocketArgs): UseLobbySocketResult {
   const [state, setState] = useState<GameLobbyState | null>(null);
+  const [hostJudgingAnswer, setHostJudgingAnswer] = useState<HostJudgingAnswer | null>(null);
   const [status, setStatus] = useState<SocketStatus>('connecting');
   const [reason, setReason] = useState<string | null>(null);
   const socketRef = useRef<LobbySocket | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (lobbyId === undefined || !token) return;
@@ -49,6 +58,8 @@ export function useLobbySocket({
     socketRef.current = socket;
     setStatus('connecting');
     setReason(null);
+    setState(null);
+    setHostJudgingAnswer(null);
 
     socket.on('connect', () => setStatus('open'));
     socket.on('disconnect', (r) => {
@@ -68,6 +79,24 @@ export function useLobbySocket({
         return;
       }
       setState(parsed.data);
+      if (parsed.data.phase !== 'host_judging_answer') {
+        setHostJudgingAnswer(null);
+      }
+      if (
+        parsed.data.phase === 'host_selecting_starting_player' ||
+        parsed.data.phase === 'player_selecting_prompt' ||
+        parsed.data.phase === 'finished'
+      ) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.lobbies.all() });
+      }
+    });
+    socket.on('host_judging_answer', (raw: unknown) => {
+      const parsed = parseHostJudgingAnswer(raw);
+      if (!parsed.ok || !parsed.data) {
+        toastError('Received invalid host judging data from server');
+        return;
+      }
+      setHostJudgingAnswer(parsed.data);
     });
     socket.on('error', (raw: unknown) => {
       const parsed = parseSocketError(raw);
@@ -85,7 +114,7 @@ export function useLobbySocket({
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [lobbyId, token]);
+  }, [lobbyId, queryClient, token]);
 
   const emit = useCallback<UseLobbySocketResult['emit']>((event, ...args) => {
     const socket = socketRef.current;
@@ -96,5 +125,5 @@ export function useLobbySocket({
     return emitEvent(socket, event, ...args);
   }, []);
 
-  return { state, status, emit, reason };
+  return { state, hostJudgingAnswer, status, emit, reason };
 }

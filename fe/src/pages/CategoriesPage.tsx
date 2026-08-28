@@ -27,7 +27,11 @@ const CategoriesPage = () => {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {data.contents.map((c) => {
-            const complete = c.prompts.length === NUM_PROMPTS_IN_CATEGORY;
+            const promptOrders = c.prompts.map((prompt) => prompt.order);
+            const complete =
+              c.prompts.length === NUM_PROMPTS_IN_CATEGORY &&
+              promptOrders.every((order) => order !== null) &&
+              new Set(promptOrders).size === NUM_PROMPTS_IN_CATEGORY;
             return (
               <Card key={c.id}>
                 <div className="flex items-start justify-between gap-3">

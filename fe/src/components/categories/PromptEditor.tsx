@@ -9,19 +9,11 @@ import {
   useDeletePrompt,
   useUpdatePrompt,
 } from '@/hooks/usePromptCategories';
-import {
-  AnswerTypeEnum,
-  PromptCreate,
-  PromptUpdate,
-  QuestionTypeEnum,
-  type PromptInDB,
-} from '@/schemas';
+import { PromptCreate, type PromptInDB } from '@/schemas';
 
 type SlotValues = {
   question: string;
-  question_type: 'text' | 'image' | 'audio' | 'video';
   answer: string;
-  answer_type: 'text' | 'image' | 'audio' | 'video';
 };
 
 interface Props {
@@ -41,16 +33,10 @@ const PromptEditor = ({ categoryId, order, existing }: Props) => {
     formState: { errors, isDirty },
     reset,
   } = useForm<SlotValues>({
-    resolver: zodResolver(
-      existing
-        ? PromptUpdate.transform((d) => d as SlotValues)
-        : PromptCreate.omit({ order: true }).transform((d) => d as SlotValues),
-    ),
+    resolver: zodResolver(PromptCreate.pick({ question: true, answer: true })),
     defaultValues: {
       question: existing?.question ?? '',
-      question_type: existing?.question_type ?? 'text',
       answer: existing?.answer ?? '',
-      answer_type: existing?.answer_type ?? 'text',
     },
   });
 
@@ -58,7 +44,12 @@ const PromptEditor = ({ categoryId, order, existing }: Props) => {
     if (existing) {
       await update.mutateAsync({ promptId: existing.id, payload: values });
     } else {
-      await create.mutateAsync({ ...values, order });
+      await create.mutateAsync({
+        ...values,
+        question_type: 'text',
+        answer_type: 'text',
+        order,
+      });
     }
     reset(values);
   });
@@ -81,42 +72,6 @@ const PromptEditor = ({ categoryId, order, existing }: Props) => {
       <Field label="Question" htmlFor={`q-${order}`} error={errors.question?.message}>
         <Input id={`q-${order}`} invalid={!!errors.question} {...register('question')} />
       </Field>
-      <div className="grid grid-cols-2 gap-2">
-        <Field
-          label="Q type"
-          htmlFor={`qt-${order}`}
-          error={errors.question_type?.message}
-        >
-          <select
-            id={`qt-${order}`}
-            className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-slate-100"
-            {...register('question_type')}
-          >
-            {QuestionTypeEnum.options.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label="A type"
-          htmlFor={`at-${order}`}
-          error={errors.answer_type?.message}
-        >
-          <select
-            id={`at-${order}`}
-            className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-slate-100"
-            {...register('answer_type')}
-          >
-            {AnswerTypeEnum.options.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
       <Field label="Answer" htmlFor={`a-${order}`} error={errors.answer?.message}>
         <Input id={`a-${order}`} invalid={!!errors.answer} {...register('answer')} />
       </Field>

@@ -26,7 +26,10 @@ const LobbyPage = () => {
   const lobbyIdSafe = lobbyId !== undefined && !Number.isNaN(lobbyId) ? lobbyId : undefined;
   const navigate = useNavigate();
   const { token, userId } = useAuth();
-  const { state, status, emit } = useLobbySocket({ lobbyId: lobbyIdSafe, token });
+  const { state, hostJudgingAnswer, status, emit, reason } = useLobbySocket({
+    lobbyId: lobbyIdSafe,
+    token,
+  });
 
   const view = useMemo(() => {
     if (!state || userId === null) return null;
@@ -46,6 +49,18 @@ const LobbyPage = () => {
     return (
       <Card className="space-y-3 text-center">
         <p className="text-rose-300">Could not connect to lobby.</p>
+        {reason ? <p className="text-sm text-slate-400">{reason}</p> : null}
+        <Button onClick={() => navigate('/')}>Back to lobbies</Button>
+      </Card>
+    );
+  }
+  if (status === 'closed') {
+    return (
+      <Card className="space-y-3 text-center">
+        <p className="text-rose-300">Lobby connection closed.</p>
+        <p className="text-sm text-slate-400">
+          {reason ?? 'You may have been removed from the lobby or the game ended.'}
+        </p>
         <Button onClick={() => navigate('/')}>Back to lobbies</Button>
       </Card>
     );
@@ -64,8 +79,6 @@ const LobbyPage = () => {
   const showPromptStage =
     !!view.currentPrompt &&
     ['player_answering', 'host_judging_answer', 'buzz_open'].includes(state.phase);
-  const showAnswerOnStage = state.phase === 'host_judging_answer';
-
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-[2fr_1fr]">
       <div className="space-y-3">
@@ -81,9 +94,7 @@ const LobbyPage = () => {
         )}
         {showPromptStage && view.currentPrompt ? (
           <PromptStage
-            state={state}
             prompt={view.currentPrompt}
-            showAnswer={showAnswerOnStage}
           />
         ) : null}
       </div>
@@ -108,8 +119,8 @@ const LobbyPage = () => {
 
         {view.role === 'host' && state.phase === 'host_judging_answer' ? (
           <HostJudgePanel
-            submittedAnswer={state.last_submitted_answer}
-            expectedAnswer={view.currentPrompt?.answer}
+            submittedAnswer={hostJudgingAnswer?.submitted_answer ?? state.last_submitted_answer}
+            expectedAnswer={hostJudgingAnswer?.expected_answer}
             onJudge={(correct) => emit('judge_answer', { correct })}
           />
         ) : null}

@@ -21,15 +21,15 @@ export const GamePlayerState = z.object({
 });
 export type GamePlayerState = z.infer<typeof GamePlayerState>;
 
-// Mirrors GamePromptState
+// Mirrors the player-visible PublicGamePromptState. Expected answers are never
+// included in a broadcast state frame.
 export const GamePromptState = z.object({
   prompt_id: z.number().int(),
   question: z.string(),
-  answer: z.string(),
   order: z.number().int(),
   is_selected: z.boolean().default(false),
   score_value: z.number().int(),
-});
+}).strict();
 export type GamePromptState = z.infer<typeof GamePromptState>;
 
 // Mirrors GameCategoryState
@@ -55,3 +55,12 @@ export const GameLobbyState = z.object({
   timer_deadline: z.string().nullable().default(null),
 });
 export type GameLobbyState = z.infer<typeof GameLobbyState>;
+
+// Mirrors the host-only `host_judging_answer` socket event.
+export const HostJudgingAnswer = z.object({
+  lobby_id: z.number().int(),
+  prompt_id: z.number().int(),
+  submitted_answer: z.string(),
+  expected_answer: z.string(),
+}).strict();
+export type HostJudgingAnswer = z.infer<typeof HostJudgingAnswer>;

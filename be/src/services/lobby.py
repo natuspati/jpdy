@@ -2,9 +2,14 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from configs.constants import MAX_CATEGORIES_IN_LOBBY, MIN_CATEGORIES_IN_LOBBY
+from configs.constants import (
+    MAX_CATEGORIES_IN_LOBBY,
+    MIN_CATEGORIES_IN_LOBBY,
+    NUM_PROMPTS_IN_CATEGORY,
+)
 from database import UnitOfWork
 from enums.lobby import LobbyStateEnum
+from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
 from errors.request import (
     BadRequestError,
     ForbiddenError,
@@ -70,15 +75,16 @@ class LobbyService:
                 )
 
             if schema.state is not None:
+                await self._validate_lifecycle_transition(
+                    current_state=lobby.state,
+                    requested_state=schema.state,
+                )
+                await self._validate_lobby_categories_for_start(uow, lobby_id)
                 await uow.lobby_repo.update_lobby_state(
                     lobby_id=lobby_id,
                     state=schema.state,
                 )
-                if (
-                    lobby.state == LobbyStateEnum.CREATED
-                    and schema.state == LobbyStateEnum.WAITING_START
-                ):
-                    await GameService.materialize_state_in_uow(uow, lobby_id)
+                await GameService.materialize_state_in_uow(uow, lobby_id)
 
             updated = await uow.lobby_repo.select_lobby(lobby_id=lobby_id)
         if updated is None:
@@ -158,3 +164,58 @@ class LobbyService:
         if missing:
             raise BadRequestError(f"Prompt categories {missing} do not exist")
         return unique_ids
+
+    @classmethod
+    async def _validate_lifecycle_transition(
+        cls,
+        current_state: LobbyStateEnum,
+        requested_state: LobbyStateEnum,
+    ) -> None:
+        if (
+            current_state != LobbyStateEnum.CREATED
+            or requested_state != LobbyStateEnum.WAITING_START
+        ):
+            raise BadRequestError(
+                "REST may only transition a lobby from CREATED to WAITING_START",
+            )
+
+    @classmethod
+    async def _validate_lobby_categories_for_start(
+        cls,
+        uow: UnitOfWork,
+        lobby_id: int,
+    ) -> None:
+        lobby = await uow.lobby_repo.select_lobby_with_prompts(lobby_id=lobby_id)
+        if lobby is None:
+            raise NotFoundError(f"Lobby {lobby_id} not found")
+
+        category_count = len(lobby.prompt_categories)
+        if not (MIN_CATEGORIES_IN_LOBBY <= category_count <= MAX_CATEGORIES_IN_LOBBY):
+            raise BadRequestError(
+                f"A lobby must have between {MIN_CATEGORIES_IN_LOBBY} and "
+                f"{MAX_CATEGORIES_IN_LOBBY} prompt categories",
+            )
+
+        expected_orders = set(range(1, NUM_PROMPTS_IN_CATEGORY + 1))
+        incomplete_categories: list[int] = []
+        for category in lobby.prompt_categories:
+            prompts = category.prompts
+            orders = [prompt.order for prompt in prompts]
+            has_valid_orders = (
+                len(prompts) == NUM_PROMPTS_IN_CATEGORY
+                and all(order is not None for order in orders)
+                and set(orders) == expected_orders
+            )
+            is_text_only = all(
+                prompt.question_type == QuestionTypeEnum.TEXT
+                and prompt.answer_type == AnswerTypeEnum.TEXT
+                for prompt in prompts
+            )
+            if not has_valid_orders or not is_text_only:
+                incomplete_categories.append(category.id)
+
+        if incomplete_categories:
+            raise BadRequestError(
+                "Every lobby category must contain exactly five uniquely ordered "
+                f"text prompts; invalid categories: {incomplete_categories}",
+            )

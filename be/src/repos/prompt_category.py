@@ -1,8 +1,9 @@
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, distinct, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
+from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
 from errors.request import BadRequestError
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
@@ -34,18 +35,43 @@ class PromptCategoryRepo:
         Issues two queries against the same filtered base query: a ``count(*)``
         over the filter-only subquery for the total, and a paginated select
         with ``selectinload(prompts)`` for the page of rows. ``is_complete``
-        filters on a correlated subquery that counts prompts whose ``order``
-        is in ``1..NUM_PROMPTS_IN_CATEGORY``: equal to that number when
-        ``is_complete=True``, strictly less when ``False``.
+        filters on correlated total-prompt, valid-order, text-prompt, and
+        distinct-order counts. A category is complete only when all four equal
+        ``NUM_PROMPTS_IN_CATEGORY``; otherwise it is incomplete.
 
         :param filters: validated search/pagination payload
         :return: page of categories with prompts plus total count
         """
-        prompt_count_subq = (
+        total_prompt_count_subq = (
+            select(func.count(Prompt.id))
+            .where(Prompt.category_id == PromptCategory.id)
+            .correlate(PromptCategory)
+            .scalar_subquery()
+        )
+        valid_prompt_count_subq = (
             select(func.count(Prompt.id))
             .where(
                 Prompt.category_id == PromptCategory.id,
                 Prompt.order.between(1, NUM_PROMPTS_IN_CATEGORY),
+            )
+            .correlate(PromptCategory)
+            .scalar_subquery()
+        )
+        unique_order_count_subq = (
+            select(func.count(distinct(Prompt.order)))
+            .where(
+                Prompt.category_id == PromptCategory.id,
+                Prompt.order.between(1, NUM_PROMPTS_IN_CATEGORY),
+            )
+            .correlate(PromptCategory)
+            .scalar_subquery()
+        )
+        text_prompt_count_subq = (
+            select(func.count(Prompt.id))
+            .where(
+                Prompt.category_id == PromptCategory.id,
+                Prompt.question_type == QuestionTypeEnum.TEXT,
+                Prompt.answer_type == AnswerTypeEnum.TEXT,
             )
             .correlate(PromptCategory)
             .scalar_subquery()
@@ -64,9 +90,23 @@ class PromptCategoryRepo:
             conditions.append(PromptCategory.updated_at <= filters.updated_at_end)
         if filters.is_complete is not None:
             if filters.is_complete:
-                conditions.append(prompt_count_subq == NUM_PROMPTS_IN_CATEGORY)
+                conditions.extend(
+                    [
+                        total_prompt_count_subq == NUM_PROMPTS_IN_CATEGORY,
+                        valid_prompt_count_subq == NUM_PROMPTS_IN_CATEGORY,
+                        text_prompt_count_subq == NUM_PROMPTS_IN_CATEGORY,
+                        unique_order_count_subq == NUM_PROMPTS_IN_CATEGORY,
+                    ],
+                )
             else:
-                conditions.append(prompt_count_subq < NUM_PROMPTS_IN_CATEGORY)
+                conditions.append(
+                    or_(
+                        total_prompt_count_subq != NUM_PROMPTS_IN_CATEGORY,
+                        valid_prompt_count_subq != NUM_PROMPTS_IN_CATEGORY,
+                        text_prompt_count_subq != NUM_PROMPTS_IN_CATEGORY,
+                        unique_order_count_subq != NUM_PROMPTS_IN_CATEGORY,
+                    ),
+                )
 
         base_query = select(PromptCategory).where(*conditions)
 

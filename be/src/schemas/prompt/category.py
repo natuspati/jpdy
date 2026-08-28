@@ -33,6 +33,6 @@ class PromptCategoryFilterSchema(PaginationSchema):
     ids: list[int] | None = None
     name: str | None = Field(default=None, min_length=1, max_length=256)
     owner_ids: list[int] | None = None
-    is_complete: bool | None = True
+    is_complete: bool | None = None
     updated_at_start: datetime | None = None
     updated_at_end: datetime | None = None
