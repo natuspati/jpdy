@@ -107,9 +107,18 @@ export function useLobbySocket({
       }
     });
 
-    socket.connect();
+    // React Strict Mode deliberately runs effects as setup → cleanup → setup
+    // in development. Connecting immediately opens a WebSocket during the
+    // first setup only for its cleanup to abort it moments later, which makes
+    // Firefox report a spurious failed WebSocket in the console. Deferring
+    // the connection one task lets that probe cleanup cancel the first
+    // connection while the real mounted effect still connects normally.
+    const connectTimer = window.setTimeout(() => {
+      socket.connect();
+    }, 0);
 
     return () => {
+      window.clearTimeout(connectTimer);
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
