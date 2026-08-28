@@ -13,6 +13,6 @@ if (!parsed.success) {
 
 export const env = {
   API_URL: parsed.data.VITE_API_URL,
-  SOCKET_URL: parsed.data.VITE_SOCKET_URL || window.location.origin,
+  SOCKET_URL: parsed.data.VITE_SOCKET_URL || 'http://localhost:8000',
   SOCKET_PATH: parsed.data.VITE_SOCKET_PATH,
 } as const;

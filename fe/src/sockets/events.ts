@@ -39,8 +39,9 @@ export function emit<E extends ClientEventName>(
       return false;
     }
   }
-  // socket.io types are not generic-friendly with the spread; cast at boundary.
-  const emitFn = socket.emit as unknown as (e: string, ...rest: unknown[]) => unknown;
+  // Socket.IO's emit implementation reads instance state through `this`, so
+  // bind it before crossing the generic spread boundary.
+  const emitFn = socket.emit.bind(socket) as unknown as (e: string, ...rest: unknown[]) => unknown;
   emitFn(event, ...args);
   return true;
 }

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # Uvicorn
     host: str = "0.0.0.0"
-    port: int = 8080
+    port: int = 8000
     workers_count: int = 1
     reload: bool = True
 

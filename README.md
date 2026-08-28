@@ -4,81 +4,85 @@ This repository contains a text-only Jeopardy MVP:
 
 - `be/` — FastAPI, SQLite, Redis, Socket.IO
 - `fe/` — React, TypeScript, Vite
-- `deployment/` — local Redis Compose configuration
+- `deployment/` — local Compose configuration and API seed scripts
 
 The existing JWT sign-in is only a lightweight local identity mechanism. This
 setup is for local development, not production deployment.
 
 ## Prerequisites
 
-- Docker Desktop (or Docker Engine with Compose)
+- Docker Engine with Compose (Colima is supported; Docker Desktop is not required)
 - Python 3.14 and uv
 - Bun
 
 ## Start the app
 
-### 1. Start Redis
+### 1. Start the complete local stack
 
 From the repository root:
 
 ```bash
-docker compose -f deployment/docker-compose.local.yml up -d
-docker compose -f deployment/docker-compose.local.yml ps
+docker-compose -f deployment/docker-compose.local.yml up --build -d
+docker-compose -f deployment/docker-compose.local.yml ps
 ```
 
-Redis listens on `localhost:6379`, persists in the named
-`jpdy_redis_data` volume, and reports healthy after `redis-cli ping` works.
+This guide uses the hyphenated `docker-compose` command because it works with
+the local Colima setup. If your Docker CLI has the Compose v2 plugin, use
+`docker compose` in place of `docker-compose`.
 
-### 2. Configure and start the backend
+This starts every local runtime dependency:
+
+- frontend at `http://localhost:8080`
+- backend at `http://localhost:8000`
+- backend health endpoint at `http://localhost:8000/api/health`
+- Redis at `localhost:6379`
+
+The backend waits for Redis, applies Alembic migrations to its named SQLite
+volume, and exposes a health check. The frontend waits for that health check
+and proxies REST `/api` requests to the backend. Socket.IO connects directly
+to `http://localhost:8000` on its `/ws` path, avoiding the Vite development
+server's WebSocket proxy. Redis persists in `jpdy_redis_data`; SQLite persists
+in `jpdy_backend_data`.
+
+### 2. Seed local users and categories
+
+After `docker-compose ... ps` reports the backend as healthy, run the seed
+script through the backend's local uv environment:
 
 ```bash
 cd be
-cp .env.example .env
 uv sync
-uv run src/main.py
+uv run ../deployment/scripts/seed_local.py
 ```
 
-The example `.env` enables `BE_DB_APPLY_MIGRATIONS=true`, so FastAPI applies
-the existing Alembic migration before serving a fresh SQLite database. The API
-is available at `http://localhost:8080`; its health endpoint is
-`http://localhost:8080/api/health`.
+The script calls only the running API; it does not access the database
+directly, and it refuses to run until the API health endpoint responds.
+Re-running it is safe: it keeps the four fixed users and reconciles five
+host-owned categories to their 25 text prompts. It never creates a lobby or
+game.
 
-If you choose not to enable startup migrations, run this from `be/` before
-starting FastAPI:
+Seeded credentials are:
 
-```bash
-uv run alembic upgrade head
-```
+- host: `host` / `host123`
+- players: `alice` / `alice123`, `bob` / `bob123`, and `carol` / `carol123`
 
-### 3. Start the frontend
+The API currently has a six-character password minimum, hence the `123`
+suffixes. It has a single `username` field, so `alice`, `bob`, and `carol`
+are also the display identities shown in the app.
 
-In another terminal:
+### 3. Create and play a local game
 
-```bash
-cd fe
-cp .env.example .env
-bun install
-bun run dev
-```
-
-Open `http://localhost:5173`. Vite proxies REST requests to
-`http://localhost:8080/api/v1` and Socket.IO to `http://localhost:8080/ws`.
-The Socket.IO path is `/ws`; individual games use namespaces such as
-`/lobbies/12`.
-
-## Create and play a local game
-
-1. Open the app and register a **host** account.
-2. Open a separate browser profile or an incognito window and register a
-   **player** account. Each local test user needs its own browser storage,
+1. Open `http://localhost:8080` and sign in as the seeded **host**.
+2. Open three separate browser profiles or incognito windows and sign in as
+   the seeded **players**. Each local test user needs its own browser storage,
    because an account can only have one socket connection to a lobby.
-3. As the host, open **Categories**, create a category, and add exactly five
-   text question/answer prompts. Repeat for every category you want on the
-   board.
-4. Return to **Lobbies**, choose **New lobby**, and select one or more ready
+3. The host already owns five ready categories—**Space**, **Felids**, **World
+   Capitals**, **Science Basics**, and **Classic Literature**—with exactly five
+   text prompts each.
+4. As the host, return to **Lobbies**, choose **New lobby**, and select one or more ready
    categories. Ready categories are visible to any signed-in user, while only
    the category owner can edit them.
-5. In the player window, join the waiting lobby. The host starts the game,
+5. In the player windows, join the waiting lobby. The host starts the game,
    chooses a starting player, and judges submitted answers.
 6. Continue until every clue is selected. The server marks the lobby complete
    and displays the final leaderboard.
@@ -97,18 +101,58 @@ Only the host receives the `host_judging_answer` event containing the expected
 answer during the judging phase. Redis retains the internal game snapshot,
 including answers, for the active game.
 
+## Native development (without Compose)
+
+If you prefer running FastAPI and Vite directly, start Redis only:
+
+```bash
+docker-compose -f deployment/docker-compose.local.yml up -d redis
+```
+
+Then configure and run the backend:
+
+```bash
+cd be
+cp .env.example .env
+uv sync
+uv run src/main.py
+```
+
+In a second terminal, configure and run the frontend:
+
+```bash
+cd fe
+cp .env.example .env
+bun install
+bun run dev
+```
+
+The example backend environment enables startup migrations. The frontend's
+`VITE_PROXY_TARGET` defaults to `http://localhost:8000`, while Compose
+overrides it with the internal backend service address.
+
 ## Reset local data
 
-Stop the backend, then remove the local SQLite database from `be/`:
+To reset all Compose-managed state (SQLite and Redis):
+
+```bash
+docker-compose -f deployment/docker-compose.local.yml down -v
+```
+
+Then use the complete-stack command and seed command above to recreate a clean
+local instance.
+
+For native development, stop the backend and remove the local SQLite database
+from `be/`:
 
 ```bash
 rm -f be/jpdy.db
 ```
 
-To also reset running game state in Redis:
+To also reset native Redis game state:
 
 ```bash
-docker compose -f deployment/docker-compose.local.yml down -v
+docker-compose -f deployment/docker-compose.local.yml down -v
 ```
 
 Start Redis and the backend again; with the example `be/.env`, Alembic will

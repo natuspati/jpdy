@@ -11,5 +11,52 @@ services:
       timeout: 3s
       retries: 10
 
+  backend:
+    build:
+      context: ../be
+    environment:
+      BE_ENVIRONMENT: local
+      BE_SECRET_KEY: local-compose-development-secret
+      BE_RELOAD: "false"
+      BE_PORT: "8000"
+      BE_ALLOWED_HOSTS: '["http://localhost:8080"]'
+      BE_DB_APPLY_MIGRATIONS: "true"
+      BE_DB_DRIVER: sqlite+aiosqlite
+      BE_DB_SYNC_DRIVER: sqlite
+      BE_DB_NAME: /data/jpdy.db
+      BE_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - jpdy_backend_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from urllib.request import urlopen; assert urlopen('http://localhost:8000/api/health').status == 200",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ../fe
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+      VITE_SOCKET_URL: http://localhost:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   jpdy_redis_data:
+  jpdy_backend_data:

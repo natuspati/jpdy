@@ -1,7 +1,8 @@
 # Jeopardy front-end
 
-See the repository [local-play guide](../README.md) for the complete local
-runtime setup, URLs, Socket.IO path, and multi-user browser workflow.
+See the repository [local-play guide](../README.md) for the complete
+Compose-based local runtime, seed data, URLs, Socket.IO path, and multi-user
+browser workflow.
 
 From this directory:
 
@@ -10,5 +11,8 @@ bun install
 bun run dev
 ```
 
-The Vite server runs on `http://localhost:5173` and proxies `/api` and `/ws`
-to the local FastAPI server.
+The Vite server runs on `http://localhost:8080` and proxies REST `/api`
+requests to FastAPI. Socket.IO connects directly to
+`http://localhost:8000/ws`; this avoids Vite's development WebSocket proxy.
+Native development uses `http://localhost:8000` as the backend target;
+Compose sets `VITE_PROXY_TARGET=http://backend:8000`.
