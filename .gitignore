@@ -70,3 +70,6 @@ htmlcov/
 
 # Test files
 *.db
+
+# Agents
+plans/
