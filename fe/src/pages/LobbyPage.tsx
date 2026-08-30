@@ -10,7 +10,6 @@ import PhaseBanner from '@/components/game/PhaseBanner';
 import PromptStage from '@/components/game/PromptStage';
 import ScoreBoard from '@/components/game/ScoreBoard';
 import TimerBar from '@/components/game/TimerBar';
-import GameSoundControls from '@/components/game/GameSoundControls';
 import { useGameAudio } from '@/audio/useGameAudio';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -123,78 +122,106 @@ const LobbyPage = () => {
     if (!player || player.is_banned) return 'Banned players cannot buzz.';
     if (player.connection_status !== 'connected') return 'Reconnect to buzz.';
     if (state.attempted_player_ids.includes(userId)) return 'You already attempted this clue.';
-    return 'You cannot buzz right now.';
+    if (state.phase === 'waiting_for_players') return 'The game has not started.';
+    if (state.phase === 'host_selecting_starting_player') return 'Waiting for the host to choose.';
+    if (state.phase === 'player_selecting_prompt') return 'Wait for a clue to be selected.';
+    if (state.phase === 'player_answering') {
+      return state.answering_player_id === userId
+        ? 'You are answering this clue.'
+        : 'Another player is answering.';
+    }
+    if (state.phase === 'answer_reveal') return 'Waiting for the next clue.';
+    return 'Buzzing is closed.';
   })();
+
+  if (isFinished) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <FinalLeaderboard state={state} />
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-      <div className="space-y-3">
-        {isFinished ? (
-          <FinalLeaderboard state={state} />
-        ) : showBoard ? (
-          <GameBoard
-            state={state}
-            currentUserId={userId}
-            onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
-          />
-        ) : null}
-        {showPromptStage && view.currentPrompt ? (
-          <PromptStage
-            prompt={view.currentPrompt}
-            answer={state.phase === 'answer_reveal' ? state.resolved_answer : null}
-            answerType={state.phase === 'answer_reveal' ? state.resolved_answer_type : null}
-            answerMedia={state.phase === 'answer_reveal' ? state.resolved_answer_media : null}
-            resolution={state.phase === 'answer_reveal' ? state.resolution : null}
-          />
-        ) : null}
+    <div data-testid="active-game-layout" className="space-y-4">
+      <ScoreBoard
+        state={state}
+        currentUserId={userId}
+        onBan={(uid) => emit('ban_player', { user_id: uid })}
+        onUnban={(uid) => emit('unban_player', { user_id: uid })}
+      />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(15rem,1fr)]">
+        <div className="min-w-0">
+          {showBoard ? (
+            <GameBoard
+              state={state}
+              currentUserId={userId}
+              onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
+            />
+          ) : null}
+          {showPromptStage && view.currentPrompt ? (
+            <PromptStage
+              prompt={view.currentPrompt}
+              answer={state.phase === 'answer_reveal' ? state.resolved_answer : null}
+              answerType={state.phase === 'answer_reveal' ? state.resolved_answer_type : null}
+              answerMedia={state.phase === 'answer_reveal' ? state.resolved_answer_media : null}
+              resolution={state.phase === 'answer_reveal' ? state.resolution : null}
+            />
+          ) : null}
+        </div>
+
+        <aside
+          data-testid="side-panel"
+          className="flex flex-col gap-3 lg:sticky lg:top-4 lg:self-start"
+        >
+          <div data-panel-section="countdown">
+            <TimerBar deadline={state.timer_deadline} totalSeconds={totalSecondsForPhase} />
+          </div>
+          <div data-panel-section="game-status" className="space-y-3">
+            <PhaseBanner state={state} role={view.role} />
+            {status === 'connecting' ? (
+              <p className="rounded border border-amber-500/50 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
+                {reason ?? 'Connecting…'}
+              </p>
+            ) : null}
+          </div>
+          <Card data-panel-section="chat-placeholder" className="space-y-1">
+            <h2 className="text-sm font-semibold text-slate-200">Chat</h2>
+            <p className="text-sm text-slate-400">Coming soon.</p>
+          </Card>
+        </aside>
       </div>
 
-      <aside className="flex flex-col gap-3 lg:sticky lg:top-4 lg:self-start">
-        {status === 'connecting' ? (
-          <p className="rounded border border-amber-500/50 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
-            {reason ?? 'Connecting…'}
-          </p>
-        ) : null}
-        <div className="order-2 lg:order-1">
-          <ScoreBoard
-            state={state}
-            currentUserId={userId}
-            onBan={(uid) => emit('ban_player', { user_id: uid })}
-            onUnban={(uid) => emit('unban_player', { user_id: uid })}
-          />
-        </div>
-        <div className="order-3 space-y-3 lg:order-2">
-          <PhaseBanner state={state} role={view.role} />
-          <TimerBar deadline={state.timer_deadline} totalSeconds={totalSecondsForPhase} />
-          <GameSoundControls />
-        </div>
-        <div className="order-1 lg:order-3">
-          {view.role === 'host' ? (
+      <section
+        data-testid="game-actions"
+        className={view.role === 'host' ? 'space-y-3' : 'flex justify-center'}
+      >
+        {view.role === 'host' ? (
+          <>
             <HostControls
               state={state}
               currentUserId={userId}
               onStart={() => emit('start_game')}
               onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
               onAdvanceAnswerReveal={() => emit('advance_answer_reveal')}
-            />
-          ) : null}
-
-          {view.role === 'host' && state.phase === 'player_answering' && answerer ? (
-            <HostJudgePanel
-              answeringPlayerName={answerer.username}
-              expectedAnswer={hostAnswerKey?.expected_answer}
               onJudge={(correct) => emit('judge_answer', { correct })}
             />
-          ) : null}
-
-          {state.phase === 'buzz_open' && view.role !== 'host' ? (
-            <BuzzButton
-              enabled={canBuzz(state, userId)}
-              disabledReason={buzzDisabledReason}
-              onBuzz={() => emit('buzz')}
-            />
-          ) : null}
-        </div>
-      </aside>
+            {state.phase === 'player_answering' && answerer ? (
+              <HostJudgePanel
+                answeringPlayerName={answerer.username}
+                expectedAnswer={hostAnswerKey?.expected_answer}
+              />
+            ) : null}
+          </>
+        ) : (
+          <BuzzButton
+            enabled={canBuzz(state, userId)}
+            disabledReason={buzzDisabledReason}
+            onBuzz={() => emit('buzz')}
+          />
+        )}
+      </section>
     </div>
   );
 };

@@ -4,9 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GameAudioContext, type GameAudioContextValue } from '@/audio/gameAudioContext';
 import PromptMedia from './PromptMedia';
 
-function audioContextValue(
-  overrides: Partial<GameAudioContextValue> = {},
-): GameAudioContextValue {
+function audioContextValue(overrides: Partial<GameAudioContextValue> = {}): GameAudioContextValue {
   return {
     enabled: true,
     volume: 1,

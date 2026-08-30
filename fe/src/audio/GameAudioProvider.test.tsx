@@ -27,12 +27,8 @@ class FakeAudioContext {
 }
 
 const AudioHarness = () => {
-  const {
-    beginPromptMediaPlayback,
-    enableSound,
-    endPromptMediaPlayback,
-    syncGameState,
-  } = useGameAudio();
+  const { beginPromptMediaPlayback, enableSound, endPromptMediaPlayback, syncGameState } =
+    useGameAudio();
   return (
     <>
       <button type="button" onClick={() => void enableSound()}>

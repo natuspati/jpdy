@@ -1,19 +1,18 @@
-import type { GamePromptState, GameResolutionEnum } from '@/schemas';
+import type {
+  GamePromptState,
+  GameResolutionEnum,
+  MediaReference,
+  PromptContentType,
+} from '@/schemas';
 import PromptMedia from './PromptMedia';
 
 interface Props {
   prompt: GamePromptState;
   answer?: string | null;
-  answerType?: import('@/schemas').PromptContentType | null;
-  answerMedia?: import('@/schemas').MediaReference | null;
+  answerType?: PromptContentType | null;
+  answerMedia?: MediaReference | null;
   resolution?: GameResolutionEnum | null;
 }
-
-const resolutionMessage: Record<GameResolutionEnum, string> = {
-  correct: 'Correct response.',
-  unanswered: 'No correct response.',
-  expired: 'Time expired.',
-};
 
 const PromptStage = ({
   prompt,
@@ -21,45 +20,65 @@ const PromptStage = ({
   answerType = null,
   answerMedia = null,
   resolution = null,
-}: Props) => (
-  <section
-    aria-label="Prompt stage"
-    className="flex min-h-[20rem] flex-col items-center justify-center gap-5 rounded-xl border border-slate-700 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/30 sm:min-h-[28rem] sm:p-10"
-  >
-    <div className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">
-      {prompt.score_value} points
-    </div>
-    <p className="text-balance text-center text-[clamp(1.5rem,4.5vw,3.25rem)] font-semibold leading-tight text-slate-50">
-      {prompt.question}
-    </p>
-    <PromptMedia
-      contentType={prompt.question_type ?? 'text'}
-      media={prompt.question_media}
-      alt={prompt.question}
-      playbackId={`${prompt.prompt_id}:question`}
-    />
-    {answer !== null ? (
-      <div className="w-full max-w-2xl space-y-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-center">
-        {resolution ? (
-          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-200">
-            {resolutionMessage[resolution]}
-          </p>
-        ) : null}
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-          Correct answer
+}: Props) => {
+  const isReveal = answer !== null;
+  const text = isReveal ? answer : prompt.question;
+  const contentType = isReveal ? (answerType ?? 'text') : (prompt.question_type ?? 'text');
+  const media = isReveal ? answerMedia : prompt.question_media;
+  const hasMedia = contentType !== 'text' && media !== null && media !== undefined;
+  const resolutionTone =
+    resolution === 'correct'
+      ? 'border-emerald-400/70 bg-emerald-400/10 text-emerald-50'
+      : resolution === 'unanswered' || resolution === 'expired'
+        ? 'border-rose-400/70 bg-rose-400/10 text-rose-50'
+        : 'border-slate-700 bg-slate-900/80 text-slate-50';
+  const scoreTone =
+    resolution === 'correct'
+      ? 'text-emerald-200'
+      : resolution === 'unanswered' || resolution === 'expired'
+        ? 'text-rose-200'
+        : 'text-amber-300';
+
+  return (
+    <section
+      aria-label="Prompt stage"
+      data-resolution={resolution ?? undefined}
+      className={`relative flex min-h-[20rem] overflow-hidden rounded-xl border p-6 shadow-2xl shadow-slate-950/30 sm:min-h-[28rem] sm:p-10 ${resolutionTone}`}
+    >
+      <div
+        aria-label={`${prompt.score_value} points`}
+        className={`absolute right-4 top-4 text-xs font-bold uppercase tracking-[0.2em] sm:right-6 sm:top-6 ${scoreTone}`}
+      >
+        {prompt.score_value}
+      </div>
+      <div
+        data-testid="prompt-stage-content"
+        className={`flex min-h-0 w-full flex-1 flex-col items-center gap-5 ${
+          hasMedia ? 'justify-start pt-8' : 'justify-center'
+        }`}
+      >
+        <p
+          className={`text-balance text-center font-semibold leading-tight ${
+            hasMedia
+              ? 'max-w-4xl text-[clamp(1.25rem,3vw,2.25rem)]'
+              : 'max-w-5xl text-[clamp(1.5rem,4.5vw,3.25rem)]'
+          }`}
+        >
+          {text}
         </p>
-        <p className="text-balance text-xl font-semibold text-white sm:text-2xl">{answer}</p>
-        {answerMedia && answerType ? (
-          <PromptMedia
-            contentType={answerType}
-            media={answerMedia}
-            alt={`Answer: ${answer}`}
-            playbackId={`${prompt.prompt_id}:answer`}
-          />
+        {hasMedia ? (
+          <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+            <PromptMedia
+              contentType={contentType}
+              media={media}
+              alt={isReveal ? `Answer: ${text}` : text}
+              playbackId={`${prompt.prompt_id}:${isReveal ? 'answer' : 'question'}`}
+            />
+          </div>
         ) : null}
       </div>
-    ) : null}
-  </section>
-);
+    </section>
+  );
+};
 
 export default PromptStage;

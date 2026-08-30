@@ -19,7 +19,9 @@ function messageFor(state: GameLobbyState, role: Role): string {
         ? 'Waiting for players. Start the game when ready.'
         : 'Waiting for the host to start the game…';
     case 'host_selecting_starting_player':
-      return role === 'host' ? 'Choose next player.' : 'Host is choosing next player…';
+      return role === 'host'
+        ? 'Choose the starting player.'
+        : 'Host is choosing the starting player…';
     case 'player_selecting_prompt': {
       const who = personFor(state, state.selecting_player_id);
       return role === 'selector' ? 'Your turn — pick a prompt.' : `${who} is picking a prompt…`;

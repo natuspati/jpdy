@@ -9,9 +9,17 @@ interface Props {
   alt: string;
   src?: string | null;
   playbackId?: string;
+  className?: string;
 }
 
-const PromptMedia = ({ contentType, media, alt, src = null, playbackId }: Props) => {
+const PromptMedia = ({
+  contentType,
+  media,
+  alt,
+  src = null,
+  playbackId,
+  className = '',
+}: Props) => {
   const { beginPromptMediaPlayback, enabled, endPromptMediaPlayback } = useContext(
     GameAudioContext,
   ) ?? {
@@ -43,7 +51,7 @@ const PromptMedia = ({ contentType, media, alt, src = null, playbackId }: Props)
       <img
         src={mediaSrc}
         alt={alt}
-        className="max-h-[28rem] w-auto max-w-full rounded-lg object-contain"
+        className={`max-h-full max-w-full rounded-lg object-contain ${className}`}
       />
     );
   }
@@ -55,7 +63,7 @@ const PromptMedia = ({ contentType, media, alt, src = null, playbackId }: Props)
         controls
         autoPlay={playbackId !== undefined && enabled}
         preload="metadata"
-        className="w-full max-w-xl"
+        className={`w-full max-w-xl ${className}`}
         src={mediaSrc}
         onPlay={() => playbackId && beginPromptMediaPlayback?.(playbackId)}
         onPause={() => playbackId && endPromptMediaPlayback?.(playbackId)}
@@ -71,7 +79,7 @@ const PromptMedia = ({ contentType, media, alt, src = null, playbackId }: Props)
       controls
       autoPlay={playbackId !== undefined && enabled}
       preload="metadata"
-      className="max-h-[28rem] w-full max-w-3xl rounded-lg"
+      className={`max-h-full max-w-full rounded-lg object-contain ${className}`}
       src={mediaSrc}
       onPlay={() => playbackId && beginPromptMediaPlayback?.(playbackId)}
       onPause={() => playbackId && endPromptMediaPlayback?.(playbackId)}

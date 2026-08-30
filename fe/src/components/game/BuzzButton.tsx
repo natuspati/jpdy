@@ -11,15 +11,15 @@ const BuzzerIcon = () => (
 );
 
 const BuzzButton = ({ enabled, onBuzz, disabledReason }: Props) => (
-  <div className="space-y-2">
+  <div className="flex flex-col items-center gap-2">
     <button
       type="button"
       disabled={!enabled}
       onClick={onBuzz}
-      className={`flex w-full items-center justify-center gap-3 rounded-xl py-8 text-3xl font-black uppercase tracking-wider transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 ${
+      className={`flex size-36 flex-col items-center justify-center rounded-full border-b-8 text-xl font-black uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 sm:size-40 sm:text-2xl ${
         enabled
-          ? 'bg-rose-500 text-white hover:bg-rose-400 active:bg-rose-600'
-          : 'bg-slate-800 text-slate-500'
+          ? 'border-rose-800 bg-rose-500 text-white shadow-lg shadow-rose-950/30 hover:bg-rose-400 active:translate-y-2 active:border-b-0 active:shadow-none'
+          : 'translate-y-2 border-slate-950 bg-slate-800 text-slate-500 shadow-inner shadow-slate-950/70'
       }`}
     >
       <BuzzerIcon />
