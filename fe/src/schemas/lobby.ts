@@ -28,6 +28,7 @@ export const ActiveLobby = z.object({
   host_username: z.string(),
   player_count: z.number().int().nonnegative(),
   state: z.literal('waiting_start'),
+  created_at: z.string(),
   can_join: z.boolean(),
 });
 export type ActiveLobby = z.infer<typeof ActiveLobby>;

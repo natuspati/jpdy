@@ -660,6 +660,7 @@ async def test_active_lobbies_returns_only_newly_joinable_waiting_lobbies(
     ids = [row["id"] for row in response.json()]
     assert ids == [joinable_id]
     assert response.json()[0]["player_count"] == 1
+    assert "created_at" in response.json()[0]
     assert {owned_id, joined_id, banned_id, created_id, in_progress_id, completed_id}.isdisjoint(
         ids,
     )

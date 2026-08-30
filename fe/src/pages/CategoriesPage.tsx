@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 
 import CreateCategoryModal from '@/components/categories/CreateCategoryModal';
 import Badge from '@/components/ui/Badge';
-import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import NewItemButton from '@/components/ui/NewItemButton';
 import Spinner from '@/components/ui/Spinner';
 import { useMyCategories } from '@/hooks/usePromptCategories';
 import { NUM_PROMPTS_IN_CATEGORY } from '@/schemas';
@@ -15,9 +15,9 @@ const CategoriesPage = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold">My categories</h1>
-        <Button onClick={() => setOpen(true)}>New category</Button>
+        <NewItemButton label="New category" onClick={() => setOpen(true)} />
       </div>
 
       {isLoading ? (

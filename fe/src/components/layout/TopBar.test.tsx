@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { GameAudioContext, type GameAudioContextValue } from '@/audio/gameAudioContext';
@@ -10,8 +10,12 @@ vi.mock('@/hooks/useMe', () => ({
   useMe: () => ({ data: { username: 'alex' } }),
 }));
 
+const { queryClient } = vi.hoisted(() => ({
+  queryClient: { clear: vi.fn() },
+}));
+
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ clear: vi.fn() }),
+  useQueryClient: () => queryClient,
 }));
 
 function audioValue(overrides: Partial<GameAudioContextValue> = {}): GameAudioContextValue {
@@ -31,22 +35,41 @@ function audioValue(overrides: Partial<GameAudioContextValue> = {}): GameAudioCo
   };
 }
 
-const renderTopBar = (audio = audioValue()) =>
+const renderTopBar = (audio = audioValue(), initialEntry = '/') =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <GameAudioContext.Provider value={audio}>
         <TopBar />
       </GameAudioContext.Provider>
     </MemoryRouter>,
   );
 
-describe('TopBar game sound controls', () => {
+function LocationDisplay() {
+  const location = useLocation();
+  return <output>{location.pathname}</output>;
+}
+
+const renderTopBarWithLocation = (initialEntry: string) =>
+  render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <GameAudioContext.Provider value={audioValue()}>
+        <TopBar />
+        <LocationDisplay />
+      </GameAudioContext.Provider>
+    </MemoryRouter>,
+  );
+
+function authenticate() {
+  useAuthStore.setState({
+    token: 'token',
+    userId: 1,
+    expiresAt: Date.now() + 60_000,
+  });
+}
+
+describe('TopBar', () => {
   it('enables sound when inactive and mutes when active', () => {
-    useAuthStore.setState({
-      token: 'token',
-      userId: 1,
-      expiresAt: Date.now() + 60_000,
-    });
+    authenticate();
     const inactive = audioValue();
     const { rerender } = renderTopBar(inactive);
 
@@ -66,11 +89,7 @@ describe('TopBar game sound controls', () => {
   });
 
   it('shows its vertical volume control on hover or focus, keeps it open while moving to it, and converts 0–100 values', () => {
-    useAuthStore.setState({
-      token: 'token',
-      userId: 1,
-      expiresAt: Date.now() + 60_000,
-    });
+    authenticate();
     const audio = audioValue({ enabled: true, volume: 0.42 });
     renderTopBar(audio);
 
@@ -97,5 +116,60 @@ describe('TopBar game sound controls', () => {
     expect(menu).toHaveAttribute('aria-hidden', 'true');
     fireEvent.focus(soundButton);
     expect(menu).toHaveAttribute('aria-hidden', 'false');
+  });
+
+  it('orders lobby and category links after the brand and marks only the matching section active', () => {
+    authenticate();
+    const { unmount } = renderTopBar(audioValue(), '/');
+
+    expect(screen.getByRole('banner').firstElementChild).toHaveClass('max-w-7xl');
+    const links = screen.getAllByRole('link').map((link) => ({
+      name: link.textContent,
+      href: link.getAttribute('href'),
+    }));
+    expect(links).toEqual([
+      { name: 'Jeopardy', href: '/' },
+      { name: 'Lobbies', href: '/' },
+      { name: 'Categories', href: '/categories' },
+    ]);
+    expect(screen.getByRole('link', { name: 'Lobbies' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Categories' })).not.toHaveAttribute('aria-current');
+
+    unmount();
+    renderTopBar(audioValue(), '/categories/8');
+    expect(screen.getByRole('link', { name: 'Lobbies' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: 'Categories' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it('does not mark lobby or category navigation active in a game route', () => {
+    authenticate();
+    renderTopBar(audioValue(), '/lobby/12/details');
+
+    expect(screen.getByRole('link', { name: 'Lobbies' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: 'Categories' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('opens the account menu on hover and signs out through its keyboard-accessible menu item', () => {
+    authenticate();
+    queryClient.clear.mockClear();
+    renderTopBarWithLocation('/categories');
+
+    const accountButton = screen.getByRole('button', { name: 'alex' });
+    const menu = document.getElementById('user-menu');
+    if (!menu) throw new Error('Account menu was not rendered');
+    expect(menu).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.mouseEnter(accountButton);
+    expect(menu).toHaveAttribute('aria-hidden', 'false');
+    const signOut = screen.getByRole('menuitem', { name: 'Sign out' });
+    expect(signOut).toHaveAttribute('tabindex', '0');
+
+    fireEvent.click(signOut);
+    expect(queryClient.clear).toHaveBeenCalledOnce();
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(screen.getByText('/')).toBeInTheDocument();
   });
 });

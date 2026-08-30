@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type FC, type ReactNode, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import Badge from '@/components/ui/Badge';
@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import { useDeleteLobby } from '@/hooks/useLobbies';
 import type { MyLobby } from '@/schemas';
+import { formatLocalDateTime } from '@/utils/formatDateTime';
 import DeleteLobbyModal from './DeleteLobbyModal';
 
 interface Props {
@@ -20,6 +21,27 @@ const stateLabels = {
   in_progress: 'In progress',
   completed: 'Completed',
 } as const;
+
+interface LobbyActionButtonProps {
+  label: string;
+  variant: 'primary' | 'secondary' | 'danger';
+  onClick: () => void;
+  children: ReactNode;
+}
+
+const LobbyActionButton: FC<LobbyActionButtonProps> = ({ label, variant, onClick, children }) => (
+  <div className="group relative">
+    <Button aria-label={label} size="icon" title={label} variant={variant} onClick={onClick}>
+      {children}
+    </Button>
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-700 px-2 py-1 text-xs font-medium text-slate-50 opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+    >
+      {label}
+    </span>
+  </div>
+);
 
 const canJoin = (lobby: MyLobby): boolean =>
   (lobby.is_owner || lobby.is_participant) &&
@@ -50,44 +72,73 @@ const MyLobbyList = ({ lobbies, loading, error }: Props) => {
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
               <tr>
-                <th className="px-3 py-3">Lobby ID</th>
+                <th className="w-20 whitespace-nowrap px-3 py-3">Lobby ID</th>
                 <th className="px-3 py-3">Host</th>
                 <th className="px-3 py-3">Players</th>
-                <th className="px-3 py-3">State</th>
-                <th className="px-3 py-3">Action</th>
+                <th className="whitespace-nowrap px-3 py-3">State</th>
+                <th className="whitespace-nowrap px-3 py-3">Created at</th>
+                <th className="w-28 whitespace-nowrap px-3 py-3">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 bg-slate-950/40">
               {lobbies.map((lobby) => (
                 <tr key={lobby.id}>
-                  <td className="px-3 py-3 font-semibold text-slate-100">#{lobby.id}</td>
+                  <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-100">
+                    #{lobby.id}
+                  </td>
                   <td className="px-3 py-3 text-slate-300">
                     {lobby.host_username ?? '(deleted user)'}
                   </td>
                   <td className="px-3 py-3 text-slate-300">{lobby.player_count}</td>
-                  <td className="px-3 py-3">
-                    <Badge tone={lobby.state === 'in_progress' ? 'warning' : 'info'}>
-                      {stateLabels[lobby.state]}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {canJoin(lobby) ? (
-                        <Button size="sm" onClick={() => navigate(`/lobby/${lobby.id}`)}>
-                          Join
-                        </Button>
+                  <td className="whitespace-nowrap px-3 py-3">
+                    <span
+                      className="group relative inline-flex"
+                      title={
+                        lobby.state === 'waiting_start' ? stateLabels.waiting_start : undefined
+                      }
+                    >
+                      <Badge tone={lobby.state === 'in_progress' ? 'warning' : 'info'}>
+                        {lobby.state === 'waiting_start' ? 'Waiting...' : stateLabels[lobby.state]}
+                      </Badge>
+                      {lobby.state === 'waiting_start' ? (
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-700 px-2 py-1 text-xs font-medium text-slate-50 opacity-0 shadow transition-opacity group-hover:opacity-100"
+                        >
+                          {stateLabels.waiting_start}
+                        </span>
                       ) : null}
-                      <Button
-                        size="sm"
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-300">
+                    {formatLocalDateTime(lobby.created_at)}
+                  </td>
+                  <td className="w-28 whitespace-nowrap px-3 py-3">
+                    <div className="flex flex-nowrap gap-1">
+                      {canJoin(lobby) ? (
+                        <LobbyActionButton
+                          label="Join"
+                          variant="primary"
+                          onClick={() => navigate(`/lobby/${lobby.id}`)}
+                        >
+                          J
+                        </LobbyActionButton>
+                      ) : null}
+                      <LobbyActionButton
+                        label="Show details"
                         variant="secondary"
                         onClick={() => navigate(`/lobby/${lobby.id}/details`)}
                       >
-                        Show details
-                      </Button>
+                        D
+                      </LobbyActionButton>
                       {lobby.is_owner ? (
-                        <Button size="sm" variant="danger" onClick={() => setDeleteTarget(lobby)}>
-                          Delete
-                        </Button>
+                        <LobbyActionButton
+                          label="Delete"
+                          variant="danger"
+                          onClick={() => setDeleteTarget(lobby)}
+                        >
+                          X
+                        </LobbyActionButton>
                       ) : null}
                     </div>
                   </td>

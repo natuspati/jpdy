@@ -5,7 +5,6 @@ import SignInForm from '@/components/auth/SignInForm';
 import ActiveLobbyList from '@/components/lobby/ActiveLobbyList';
 import CreateLobbyModal from '@/components/lobby/CreateLobbyModal';
 import MyLobbyList from '@/components/lobby/MyLobbyList';
-import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { useAuth } from '@/hooks/useAuth';
 import { useActiveLobbies, useMyLobbies } from '@/hooks/useLobbies';
@@ -35,20 +34,12 @@ const HomePage = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Lobbies</h1>
-        <div className="flex gap-2">
-          <Link to="/categories">
-            <Button variant="secondary">Categories</Button>
-          </Link>
-          <Button onClick={() => setCreateOpen(true)}>New lobby</Button>
-        </div>
-      </div>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <ActiveLobbyList
           lobbies={activeLobbies.data ?? []}
           loading={activeLobbies.isLoading}
           error={activeLobbies.isError}
+          onCreateLobby={() => setCreateOpen(true)}
         />
         <MyLobbyList
           lobbies={myLobbies.data ?? []}

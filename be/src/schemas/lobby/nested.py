@@ -14,6 +14,7 @@ class LobbyActiveListItemSchema(BaseSchema):
     host_username: str
     player_count: int
     state: LobbyStateEnum
+    created_at: datetime
     can_join: bool = True
 
 

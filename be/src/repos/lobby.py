@@ -115,6 +115,7 @@ class LobbyRepo:
                 User.username.label("host_username"),
                 player_count.label("player_count"),
                 Lobby.state.label("state"),
+                Lobby.created_at.label("created_at"),
             )
             .join(User, Lobby.owner_id == User.id)
             .where(

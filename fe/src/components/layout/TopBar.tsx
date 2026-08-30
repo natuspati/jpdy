@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { useGameAudio } from '@/audio/useGameAudio';
-import Button from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { useMe } from '@/hooks/useMe';
 
@@ -23,9 +22,11 @@ const TopBar = () => {
   const { isAuthed, signOut } = useAuth();
   const { data: me } = useMe();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { blockedMessage, enableSound, enabled, setVolume, toggleMuted, volume } = useGameAudio();
   const [soundMenuOpen, setSoundMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const handleSignOut = () => {
     signOut();
@@ -39,23 +40,53 @@ const TopBar = () => {
     }
   };
 
+  const handleUserBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setUserMenuOpen(false);
+    }
+  };
+
   const volumePercent = Math.round(volume * 100);
   const soundIsAudible = enabled && volume > 0;
+  const isLobbiesActive = location.pathname === '/';
+  const isCategoriesActive =
+    location.pathname === '/categories' || location.pathname.startsWith('/categories/');
+  const navLinkClass = (isActive: boolean): string =>
+    [
+      'rounded-md px-2 py-1 text-sm font-medium transition-colors',
+      isActive
+        ? 'bg-slate-800 text-amber-300'
+        : 'text-slate-300 hover:bg-slate-800 hover:text-amber-300',
+    ].join(' ');
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link to="/" className="text-lg font-bold text-amber-400">
-          Jeopardy
-        </Link>
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+          <Link to="/" className="shrink-0 text-lg font-bold text-amber-400">
+            Jeopardy
+          </Link>
+          {isAuthed ? (
+            <nav aria-label="Primary navigation" className="flex items-center gap-1">
+              <Link
+                to="/"
+                aria-current={isLobbiesActive ? 'page' : undefined}
+                className={navLinkClass(isLobbiesActive)}
+              >
+                Lobbies
+              </Link>
+              <Link
+                to="/categories"
+                aria-current={isCategoriesActive ? 'page' : undefined}
+                className={navLinkClass(isCategoriesActive)}
+              >
+                Categories
+              </Link>
+            </nav>
+          ) : null}
+        </div>
         {isAuthed ? (
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              to="/categories"
-              className="text-sm font-medium text-slate-300 hover:text-amber-300"
-            >
-              Categories
-            </Link>
             <div
               className="relative"
               onMouseEnter={() => setSoundMenuOpen(true)}
@@ -112,10 +143,44 @@ const TopBar = () => {
                 </div>
               </div>
             </div>
-            <span className="hidden text-sm text-slate-400 sm:inline">{me?.username ?? ''}</span>
-            <Button variant="secondary" size="sm" onClick={handleSignOut}>
-              Sign out
-            </Button>
+            <div
+              className="relative"
+              onMouseEnter={() => setUserMenuOpen(true)}
+              onMouseLeave={() => setUserMenuOpen(false)}
+              onFocusCapture={() => setUserMenuOpen(true)}
+              onBlur={handleUserBlur}
+            >
+              <button
+                type="button"
+                aria-controls="user-menu"
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+                className="inline-flex max-w-32 items-center truncate rounded-md px-2 py-1 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
+                {me?.username ?? 'Account'}
+              </button>
+              <div
+                id="user-menu"
+                role="menu"
+                aria-label="Account menu"
+                aria-hidden={!userMenuOpen}
+                className={`absolute right-0 top-full z-50 min-w-28 pt-2 ${
+                  userMenuOpen ? '' : 'pointer-events-none invisible'
+                }`}
+              >
+                <div className="rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    tabIndex={userMenuOpen ? 0 : -1}
+                    className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800 hover:text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    onClick={handleSignOut}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         ) : null}
       </div>

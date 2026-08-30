@@ -1,7 +1,7 @@
 import { type ButtonHTMLAttributes, forwardRef } from 'react';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
-type Size = 'sm' | 'md' | 'lg';
+type Size = 'icon' | 'compact' | 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -17,6 +17,8 @@ const variantClasses: Record<Variant, string> = {
 };
 
 const sizeClasses: Record<Size, string> = {
+  icon: 'h-7 w-7 p-0 text-sm',
+  compact: 'h-7 px-3 text-sm',
   sm: 'h-9 px-3 text-sm',
   md: 'h-11 px-4 text-base',
   lg: 'h-14 px-6 text-lg',
