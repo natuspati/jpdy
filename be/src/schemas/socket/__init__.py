@@ -4,7 +4,6 @@ from schemas.socket.events import (
     SelectPromptPayload,
     SelectStarterPayload,
     SocketErrorPayload,
-    SubmitAnswerPayload,
     UnbanPlayerPayload,
 )
 
@@ -14,6 +13,5 @@ __all__ = [
     "SelectPromptPayload",
     "SelectStarterPayload",
     "SocketErrorPayload",
-    "SubmitAnswerPayload",
     "UnbanPlayerPayload",
 ]

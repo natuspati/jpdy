@@ -6,9 +6,15 @@ class GamePhaseEnum(StrEnum):
     HOST_SELECTING_STARTING_PLAYER = auto()
     PLAYER_SELECTING_PROMPT = auto()
     PLAYER_ANSWERING = auto()
-    HOST_JUDGING_ANSWER = auto()
     BUZZ_OPEN = auto()
+    ANSWER_REVEAL = auto()
     FINISHED = auto()
+
+
+class GameResolutionEnum(StrEnum):
+    CORRECT = auto()
+    UNANSWERED = auto()
+    EXPIRED = auto()
 
 
 class PlayerConnectionStatusEnum(StrEnum):

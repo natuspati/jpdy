@@ -1,5 +1,3 @@
-from pydantic import Field
-
 from schemas.base import BaseSchema
 
 
@@ -9,10 +7,6 @@ class SelectStarterPayload(BaseSchema):
 
 class SelectPromptPayload(BaseSchema):
     prompt_id: int
-
-
-class SubmitAnswerPayload(BaseSchema):
-    text: str = Field(min_length=1, max_length=500)
 
 
 class JudgeAnswerPayload(BaseSchema):

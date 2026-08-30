@@ -3,9 +3,13 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from configs.constants import ANSWERING_TIME_SECONDS, BUZZING_TIME_SECONDS
+from configs.constants import (
+    ANSWER_REVEAL_TIME_SECONDS,
+    ANSWERING_TIME_SECONDS,
+    BUZZING_TIME_SECONDS,
+)
 from database import UnitOfWork
-from enums.game import GamePhaseEnum, PlayerConnectionStatusEnum
+from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from enums.lobby import LobbyStateEnum
 from errors.request import BadRequestError, ForbiddenError, NotFoundError
 from schemas.lobby.game_state import (
@@ -20,7 +24,6 @@ from schemas.socket.events import (
     JudgeAnswerPayload,
     SelectPromptPayload,
     SelectStarterPayload,
-    SubmitAnswerPayload,
     UnbanPlayerPayload,
 )
 from schemas.user.base import UserPublicSchema
@@ -229,30 +232,13 @@ class GameService:
             state.current_prompt_id = prompt.prompt_id
             state.answering_player_id = state.selecting_player_id
             state.attempted_player_ids = []
-            state.last_submitted_answer = None
+            _clear_selected_flags(state)
+            answerer = _find_player(state, state.answering_player_id)
+            if answerer is not None:
+                answerer.is_selected = True
+            _clear_resolution(state)
             state.phase = GamePhaseEnum.PLAYER_ANSWERING
             state.timer_deadline = _deadline(ANSWERING_TIME_SECONDS)
-
-            await uow.game_state_repo.save_state(state)
-        return state
-
-    async def submit_answer(
-        self,
-        lobby_id: int,
-        user_id: int,
-        payload: SubmitAnswerPayload,
-    ) -> GameLobbyState:
-        async with self._uow as uow:
-            state = await self._load_state(uow, lobby_id)
-            _require_phase(state, GamePhaseEnum.PLAYER_ANSWERING)
-            if state.answering_player_id != user_id:
-                raise ForbiddenError("Only the answering player may submit an answer")
-            if state.timer_deadline is None or state.timer_deadline <= datetime.now(UTC):
-                raise BadRequestError("Answer time has expired")
-
-            state.last_submitted_answer = payload.text
-            state.phase = GamePhaseEnum.HOST_JUDGING_ANSWER
-            state.timer_deadline = None
 
             await uow.game_state_repo.save_state(state)
         return state
@@ -266,9 +252,11 @@ class GameService:
         async with self._uow as uow:
             state = await self._load_state(uow, lobby_id)
             _require_host(state, user_id)
-            _require_phase(state, GamePhaseEnum.HOST_JUDGING_ANSWER)
+            _require_phase(state, GamePhaseEnum.PLAYER_ANSWERING)
             if state.current_prompt_id is None or state.answering_player_id is None:
                 raise BadRequestError("No prompt is currently being judged")
+            if state.timer_deadline is None or state.timer_deadline <= datetime.now(UTC):
+                raise BadRequestError("Answer time has expired")
 
             prompt = _find_prompt(state, state.current_prompt_id)
             answerer = _find_player(state, state.answering_player_id)
@@ -278,27 +266,20 @@ class GameService:
             if payload.correct:
                 answerer.score += prompt.score_value
                 _clear_selected_flags(state)
-                answerer.is_selected = True
                 state.selecting_player_id = answerer.user_id
                 state.answering_player_id = None
-                state.current_prompt_id = None
-                state.attempted_player_ids = []
-                state.last_submitted_answer = None
-                state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
-                state.timer_deadline = None
-                await self._check_end_of_game(uow, state)
+                _enter_answer_reveal(state, GameResolutionEnum.CORRECT)
             else:
                 answerer.score -= prompt.score_value
                 answerer.is_selected = False
-                state.attempted_player_ids.append(answerer.user_id)
+                if answerer.user_id not in state.attempted_player_ids:
+                    state.attempted_player_ids.append(answerer.user_id)
                 state.answering_player_id = None
-                state.last_submitted_answer = None
                 if _eligible_buzzers(state):
                     state.phase = GamePhaseEnum.BUZZ_OPEN
                     state.timer_deadline = _deadline(BUZZING_TIME_SECONDS)
                 else:
-                    _resolve_prompt_no_score(state)
-                    await self._check_end_of_game(uow, state)
+                    _enter_answer_reveal(state, GameResolutionEnum.UNANSWERED)
 
             await uow.game_state_repo.save_state(state)
         return state
@@ -307,6 +288,8 @@ class GameService:
         async with self._uow as uow:
             state = await self._load_state(uow, lobby_id)
             _require_phase(state, GamePhaseEnum.BUZZ_OPEN)
+            if state.timer_deadline is None or state.timer_deadline <= datetime.now(UTC):
+                raise BadRequestError("Buzz time has expired")
 
             player = _find_player(state, user_id)
             if player is None:
@@ -381,21 +364,21 @@ class GameService:
 
             if state.phase == GamePhaseEnum.PLAYER_ANSWERING:
                 if state.answering_player_id is not None:
-                    state.attempted_player_ids.append(state.answering_player_id)
+                    if state.answering_player_id not in state.attempted_player_ids:
+                        state.attempted_player_ids.append(state.answering_player_id)
                     expired = _find_player(state, state.answering_player_id)
                     if expired is not None:
                         expired.is_selected = False
                 state.answering_player_id = None
-                state.last_submitted_answer = None
                 if _eligible_buzzers(state):
                     state.phase = GamePhaseEnum.BUZZ_OPEN
                     state.timer_deadline = _deadline(BUZZING_TIME_SECONDS)
                 else:
-                    _resolve_prompt_no_score(state)
-                    await self._check_end_of_game(uow, state)
+                    _enter_answer_reveal(state, GameResolutionEnum.EXPIRED)
             elif state.phase == GamePhaseEnum.BUZZ_OPEN:
-                _resolve_prompt_no_score(state)
-                await self._check_end_of_game(uow, state)
+                _enter_answer_reveal(state, GameResolutionEnum.EXPIRED)
+            elif state.phase == GamePhaseEnum.ANSWER_REVEAL:
+                await self._advance_after_reveal(uow, state)
             else:
                 return None
 
@@ -414,20 +397,31 @@ class GameService:
         return state
 
     @classmethod
-    async def _check_end_of_game(
+    async def _advance_after_reveal(
         cls,
         uow: UnitOfWork,
         state: GameLobbyState,
     ) -> None:
+        state.current_prompt_id = None
+        state.answering_player_id = None
+        state.attempted_player_ids = []
+        state.timer_deadline = None
+        _clear_resolution(state)
+        _clear_selected_flags(state)
+
         all_used = all(
             prompt.is_selected for category in state.categories for prompt in category.prompts
         )
         if not all_used:
+            state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
+            if state.selecting_player_id is not None:
+                selector = _find_player(state, state.selecting_player_id)
+                if selector is not None:
+                    selector.is_selected = True
             return
+
         state.phase = GamePhaseEnum.FINISHED
         state.selecting_player_id = None
-        state.timer_deadline = None
-        _clear_selected_flags(state)
         await uow.lobby_repo.update_lobby_state(
             lobby_id=state.lobby_id,
             state=LobbyStateEnum.COMPLETED,
@@ -461,22 +455,30 @@ def _eligible_buzzers(state: GameLobbyState) -> list[GamePlayerState]:
     ]
 
 
-def _resolve_prompt_no_score(state: GameLobbyState) -> None:
-    """
-    Close out the current prompt with no score change. Selecting role stays
-    with whoever picked the prompt (``selecting_player_id`` is untouched).
-    """
-    state.current_prompt_id = None
+def _enter_answer_reveal(
+    state: GameLobbyState,
+    resolution: GameResolutionEnum,
+) -> None:
+    """Make a resolved clue public for the server-authoritative reveal window."""
+    if state.current_prompt_id is None:
+        raise BadRequestError("No active prompt to reveal")
+    prompt = _find_prompt(state, state.current_prompt_id)
+    if prompt is None:
+        raise BadRequestError("Active prompt is missing from state")
+
     state.answering_player_id = None
-    state.attempted_player_ids = []
-    state.last_submitted_answer = None
-    state.timer_deadline = None
-    state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
     _clear_selected_flags(state)
-    if state.selecting_player_id is not None:
-        selector = _find_player(state, state.selecting_player_id)
-        if selector is not None:
-            selector.is_selected = True
+    state.phase = GamePhaseEnum.ANSWER_REVEAL
+    state.timer_deadline = _deadline(ANSWER_REVEAL_TIME_SECONDS)
+    state.resolved_prompt_id = prompt.prompt_id
+    state.resolved_answer = prompt.answer
+    state.resolution = resolution
+
+
+def _clear_resolution(state: GameLobbyState) -> None:
+    state.resolved_prompt_id = None
+    state.resolved_answer = None
+    state.resolution = None
 
 
 def _require_host(state: GameLobbyState, user_id: int) -> None:

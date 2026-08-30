@@ -27,13 +27,15 @@ function messageFor(state: GameLobbyState, role: Role): string {
     case 'player_answering': {
       const who = personFor(state, state.answering_player_id);
       return role === 'answerer'
-        ? 'Your turn to answer!'
-        : `${who} is answering…`;
+        ? 'Answer aloud in voice chat. Host will judge.'
+        : role === 'host'
+          ? `Listen to ${who}'s spoken answer and judge it.`
+          : `${who} is answering…`;
     }
-    case 'host_judging_answer':
-      return role === 'host' ? 'Judge the answer.' : 'Host is judging…';
     case 'buzz_open':
       return role === 'buzzer' ? 'Buzz to answer!' : 'Buzz open…';
+    case 'answer_reveal':
+      return 'Answer revealed. Next clue starts soon.';
     case 'finished':
       return 'Game over.';
     default:

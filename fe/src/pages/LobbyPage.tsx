@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import AnswerInput from '@/components/game/AnswerInput';
 import BuzzButton from '@/components/game/BuzzButton';
 import FinalLeaderboard from '@/components/game/FinalLeaderboard';
 import GameBoard from '@/components/game/GameBoard';
@@ -17,7 +16,7 @@ import Spinner from '@/components/ui/Spinner';
 import { useAuth } from '@/hooks/useAuth';
 import { useLobbySocket } from '@/hooks/useLobbySocket';
 import { currentPrompt } from '@/services/game/gameDerivations';
-import { canBuzz, canSubmitAnswer } from '@/services/game/phaseGuards';
+import { canBuzz } from '@/services/game/phaseGuards';
 import { roleFor } from '@/services/game/roleFor';
 
 const LobbyPage = () => {
@@ -26,7 +25,7 @@ const LobbyPage = () => {
   const lobbyIdSafe = lobbyId !== undefined && !Number.isNaN(lobbyId) ? lobbyId : undefined;
   const navigate = useNavigate();
   const { token, userId } = useAuth();
-  const { state, hostJudgingAnswer, status, emit, reason } = useLobbySocket({
+  const { state, hostAnswerKey, status, emit, reason } = useLobbySocket({
     lobbyId: lobbyIdSafe,
     token,
   });
@@ -74,64 +73,88 @@ const LobbyPage = () => {
     );
   }
 
-  const totalSecondsForPhase = state.phase === 'buzz_open' ? 10 : 30;
+  const totalSecondsForPhase =
+    state.phase === 'buzz_open' ? 10 : state.phase === 'answer_reveal' ? 5 : 30;
   const isFinished = state.phase === 'finished';
+  const showBoard = [
+    'waiting_for_players',
+    'host_selecting_starting_player',
+    'player_selecting_prompt',
+  ].includes(state.phase);
   const showPromptStage =
     !!view.currentPrompt &&
-    ['player_answering', 'host_judging_answer', 'buzz_open'].includes(state.phase);
+    ['player_answering', 'buzz_open', 'answer_reveal'].includes(state.phase);
+  const answerer = state.answering_player_id
+    ? state.players.find((player) => player.user_id === state.answering_player_id)
+    : undefined;
+  const buzzDisabledReason = (() => {
+    if (canBuzz(state, userId)) return undefined;
+    const player = state.players.find((item) => item.user_id === userId);
+    if (!player || player.is_banned) return 'Banned players cannot buzz.';
+    if (player.connection_status !== 'connected') return 'Reconnect to buzz.';
+    if (state.attempted_player_ids.includes(userId)) return 'You already attempted this clue.';
+    return 'You cannot buzz right now.';
+  })();
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-[2fr_1fr]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
       <div className="space-y-3">
-        <PhaseBanner state={state} role={view.role} />
         {isFinished ? (
           <FinalLeaderboard state={state} />
-        ) : (
+        ) : showBoard ? (
           <GameBoard
             state={state}
             currentUserId={userId}
             onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
           />
-        )}
+        ) : null}
         {showPromptStage && view.currentPrompt ? (
           <PromptStage
             prompt={view.currentPrompt}
+            answer={state.phase === 'answer_reveal' ? state.resolved_answer : null}
+            resolution={state.phase === 'answer_reveal' ? state.resolution : null}
           />
         ) : null}
       </div>
 
-      <aside className="space-y-3">
-        <ScoreBoard
-          state={state}
-          currentUserId={userId}
-          onBan={(uid) => emit('ban_player', { user_id: uid })}
-          onUnban={(uid) => emit('unban_player', { user_id: uid })}
-        />
-        <TimerBar deadline={state.timer_deadline} totalSeconds={totalSecondsForPhase} />
-
-        {view.role === 'host' ? (
-          <HostControls
+      <aside className="flex flex-col gap-3 lg:sticky lg:top-4 lg:self-start">
+        <div className="order-2 lg:order-1">
+          <ScoreBoard
             state={state}
             currentUserId={userId}
-            onStart={() => emit('start_game')}
-            onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
+            onBan={(uid) => emit('ban_player', { user_id: uid })}
+            onUnban={(uid) => emit('unban_player', { user_id: uid })}
           />
-        ) : null}
+        </div>
+        <div className="order-3 space-y-3 lg:order-2">
+          <PhaseBanner state={state} role={view.role} />
+          <TimerBar deadline={state.timer_deadline} totalSeconds={totalSecondsForPhase} />
+        </div>
+        <div className="order-1 lg:order-3">
+          {view.role === 'host' ? (
+            <HostControls
+              state={state}
+              currentUserId={userId}
+              onStart={() => emit('start_game')}
+              onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
+            />
+          ) : null}
 
-        {view.role === 'host' && state.phase === 'host_judging_answer' ? (
-          <HostJudgePanel
-            submittedAnswer={hostJudgingAnswer?.submitted_answer ?? state.last_submitted_answer}
-            expectedAnswer={hostJudgingAnswer?.expected_answer}
-            onJudge={(correct) => emit('judge_answer', { correct })}
-          />
-        ) : null}
+          {view.role === 'host' && state.phase === 'player_answering' && answerer ? (
+            <HostJudgePanel
+              answeringPlayerName={answerer.username}
+              expectedAnswer={hostAnswerKey?.expected_answer}
+              onJudge={(correct) => emit('judge_answer', { correct })}
+            />
+          ) : null}
 
-        {canSubmitAnswer(state, userId) ? (
-          <AnswerInput onSubmit={(text) => emit('submit_answer', { text })} />
-        ) : null}
-
-        {state.phase === 'buzz_open' && view.role !== 'host' ? (
-          <BuzzButton enabled={canBuzz(state, userId)} onBuzz={() => emit('buzz')} />
-        ) : null}
+          {state.phase === 'buzz_open' && view.role !== 'host' ? (
+            <BuzzButton
+              enabled={canBuzz(state, userId)}
+              disabledReason={buzzDisabledReason}
+              onBuzz={() => emit('buzz')}
+            />
+          ) : null}
+        </div>
       </aside>
     </div>
   );

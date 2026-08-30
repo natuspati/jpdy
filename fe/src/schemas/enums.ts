@@ -10,11 +10,14 @@ export const GamePhaseEnum = z.enum([
   'host_selecting_starting_player',
   'player_selecting_prompt',
   'player_answering',
-  'host_judging_answer',
   'buzz_open',
+  'answer_reveal',
   'finished',
 ]);
 export type GamePhaseEnum = z.infer<typeof GamePhaseEnum>;
+
+export const GameResolutionEnum = z.enum(['correct', 'unanswered', 'expired']);
+export type GameResolutionEnum = z.infer<typeof GameResolutionEnum>;
 
 export const PlayerConnectionStatusEnum = z.enum(['connected', 'disconnected']);
 export type PlayerConnectionStatusEnum = z.infer<typeof PlayerConnectionStatusEnum>;

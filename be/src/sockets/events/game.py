@@ -12,7 +12,6 @@ from schemas.socket.events import (
     JudgeAnswerPayload,
     SelectPromptPayload,
     SelectStarterPayload,
-    SubmitAnswerPayload,
     UnbanPlayerPayload,
 )
 from services.game import GameService
@@ -145,24 +144,6 @@ async def on_select_prompt(namespace: str, sid: str, data: Any = None) -> None:
         )
 
     await _run_event(namespace, sid, data, SelectPromptPayload, _action)
-
-
-@sio.on("submit_answer", namespace="*")
-async def on_submit_answer(namespace: str, sid: str, data: Any = None) -> None:
-    async def _action(
-        service: GameService,
-        lobby_id: int,
-        user_id: int,
-        payload: SubmitAnswerPayload | None,
-    ) -> GameLobbyState:
-        assert payload is not None
-        return await service.submit_answer(
-            lobby_id=lobby_id,
-            user_id=user_id,
-            payload=payload,
-        )
-
-    await _run_event(namespace, sid, data, SubmitAnswerPayload, _action)
 
 
 @sio.on("judge_answer", namespace="*")

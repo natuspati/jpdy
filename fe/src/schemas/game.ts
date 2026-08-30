@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { GamePhaseEnum, PlayerConnectionStatusEnum } from './enums';
+import { GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum } from './enums';
 
 // Mirrors GameHostState
 export const GameHostState = z.object({
@@ -51,16 +51,43 @@ export const GameLobbyState = z.object({
   selecting_player_id: z.number().int().nullable().default(null),
   answering_player_id: z.number().int().nullable().default(null),
   attempted_player_ids: z.array(z.number().int()).default([]),
-  last_submitted_answer: z.string().nullable().default(null),
   timer_deadline: z.string().nullable().default(null),
+  resolved_prompt_id: z.number().int().nullable().default(null),
+  resolved_answer: z.string().nullable().default(null),
+  resolution: GameResolutionEnum.nullable().default(null),
+}).strict().superRefine((state, context) => {
+  const hasResolutionData =
+    state.resolved_prompt_id !== null ||
+    state.resolved_answer !== null ||
+    state.resolution !== null;
+
+  if (state.phase === 'answer_reveal') {
+    if (
+      state.resolved_prompt_id === null ||
+      state.resolved_answer === null ||
+      state.resolution === null
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'answer_reveal requires complete resolution data',
+      });
+    }
+    return;
+  }
+
+  if (hasResolutionData) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'resolution data is only public during answer_reveal',
+    });
+  }
 });
 export type GameLobbyState = z.infer<typeof GameLobbyState>;
 
-// Mirrors the host-only `host_judging_answer` socket event.
-export const HostJudgingAnswer = z.object({
+// Mirrors host-only `host_answer_key`. Never present in public state frames.
+export const HostAnswerKey = z.object({
   lobby_id: z.number().int(),
   prompt_id: z.number().int(),
-  submitted_answer: z.string(),
   expected_answer: z.string(),
 }).strict();
-export type HostJudgingAnswer = z.infer<typeof HostJudgingAnswer>;
+export type HostAnswerKey = z.infer<typeof HostAnswerKey>;

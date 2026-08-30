@@ -5,21 +5,21 @@ import { describe, expect, it, vi } from 'vitest';
 import HostJudgePanel from './HostJudgePanel';
 
 describe('HostJudgePanel', () => {
-  it('shows the submitted answer and expected answer', () => {
+  it('shows spoken-answer copy and expected answer', () => {
     render(
       <HostJudgePanel
-        submittedAnswer="koala"
+        answeringPlayerName="Alex"
         expectedAnswer="kangaroo"
         onJudge={() => undefined}
       />,
     );
-    expect(screen.getByText('koala')).toBeInTheDocument();
+    expect(screen.getByText(/listen to Alex's spoken answer/i)).toBeInTheDocument();
     expect(screen.getByText('kangaroo')).toBeInTheDocument();
   });
 
   it('emits judge with the correct flag', async () => {
     const onJudge = vi.fn();
-    render(<HostJudgePanel submittedAnswer="a" onJudge={onJudge} />);
+    render(<HostJudgePanel answeringPlayerName="Alex" onJudge={onJudge} />);
     await userEvent.click(screen.getByRole('button', { name: /correct/i }));
     expect(onJudge).toHaveBeenCalledWith(true);
     await userEvent.click(screen.getByRole('button', { name: /wrong/i }));
@@ -27,7 +27,7 @@ describe('HostJudgePanel', () => {
   });
 
   it('does not display an expected-answer section without host-private data', () => {
-    render(<HostJudgePanel submittedAnswer="a" onJudge={() => undefined} />);
-    expect(screen.queryByText('Expected')).not.toBeInTheDocument();
+    render(<HostJudgePanel answeringPlayerName="Alex" onJudge={() => undefined} />);
+    expect(screen.queryByText('Answer key')).not.toBeInTheDocument();
   });
 });

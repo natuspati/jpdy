@@ -7,8 +7,9 @@ import BuzzButton from './BuzzButton';
 describe('BuzzButton', () => {
   it('is disabled when not enabled', () => {
     const onBuzz = vi.fn();
-    render(<BuzzButton enabled={false} onBuzz={onBuzz} />);
+    render(<BuzzButton enabled={false} disabledReason="Already attempted." onBuzz={onBuzz} />);
     expect(screen.getByRole('button', { name: /buzz/i })).toBeDisabled();
+    expect(screen.getByText('Already attempted.')).toBeInTheDocument();
   });
 
   it('fires onBuzz when enabled', async () => {

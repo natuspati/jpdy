@@ -31,11 +31,8 @@ export const canSelectPrompt = (
   return !!prompt && !prompt.is_selected;
 };
 
-export const canSubmitAnswer = (state: GameLobbyState, userId: number): boolean =>
-  state.phase === 'player_answering' && state.answering_player_id === userId;
-
 export const canJudge = (state: GameLobbyState, userId: number): boolean =>
-  isHost(state, userId) && state.phase === 'host_judging_answer';
+  isHost(state, userId) && state.phase === 'player_answering';
 
 export const canBuzz = (state: GameLobbyState, userId: number): boolean => {
   if (state.phase !== 'buzz_open') return false;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildGameState } from '@/test/fixtures/gameState';
 import {
-  parseHostJudgingAnswer,
+  parseHostAnswerKey,
   parseSocketError,
   parseStateChanged,
 } from './parseIncoming';
@@ -36,14 +36,37 @@ describe('parseStateChanged', () => {
 
     expect(parseStateChanged(state).ok).toBe(false);
   });
+
+  it('accepts resolved answer only during answer reveal', () => {
+    const state = buildGameState({
+      phase: 'answer_reveal',
+      currentPromptId: 101,
+      resolvedPromptId: 101,
+      resolvedAnswer: 'answer',
+      resolution: 'expired',
+    });
+
+    expect(parseStateChanged(state).ok).toBe(true);
+  });
+
+  it('rejects an answer leaked before answer reveal', () => {
+    const state = buildGameState({
+      phase: 'player_answering',
+      currentPromptId: 101,
+      resolvedPromptId: 101,
+      resolvedAnswer: 'secret',
+      resolution: 'correct',
+    });
+
+    expect(parseStateChanged(state).ok).toBe(false);
+  });
 });
 
-describe('parseHostJudgingAnswer', () => {
+describe('parseHostAnswerKey', () => {
   it('accepts host-only expected-answer data', () => {
-    const result = parseHostJudgingAnswer({
+    const result = parseHostAnswerKey({
       lobby_id: 100,
       prompt_id: 101,
-      submitted_answer: 'guess',
       expected_answer: 'answer',
     });
 
@@ -53,10 +76,9 @@ describe('parseHostJudgingAnswer', () => {
 
   it('rejects unexpected host judging fields', () => {
     expect(
-      parseHostJudgingAnswer({
+      parseHostAnswerKey({
         lobby_id: 100,
         prompt_id: 101,
-        submitted_answer: 'guess',
         expected_answer: 'answer',
         unexpected: true,
       }).ok,

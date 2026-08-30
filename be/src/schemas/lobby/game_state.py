@@ -4,7 +4,7 @@ from functools import cached_property
 from pydantic import Field, computed_field
 
 from configs.constants import SCORE_MULTIPLIER
-from enums.game import GamePhaseEnum, PlayerConnectionStatusEnum
+from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from schemas.base import BaseSchema
 
 
@@ -78,16 +78,17 @@ class PublicGameLobbyState(BaseSchema):
     selecting_player_id: int | None = None
     answering_player_id: int | None = None
     attempted_player_ids: list[int] = Field(default_factory=list)
-    last_submitted_answer: str | None = None
     timer_deadline: datetime | None = None
+    resolved_prompt_id: int | None = None
+    resolved_answer: str | None = None
+    resolution: GameResolutionEnum | None = None
 
 
-class HostJudgingAnswer(BaseSchema):
-    """Private host-only data emitted while an answer is waiting for judgment."""
+class HostAnswerKey(BaseSchema):
+    """Private answer key emitted only to the host during spoken answers."""
 
     lobby_id: int
     prompt_id: int
-    submitted_answer: str
     expected_answer: str
 
 
@@ -105,10 +106,12 @@ class GameLobbyState(BaseSchema):
     # Players who already tried (and failed) on the currently open prompt;
     # cleared whenever a new prompt becomes current.
     attempted_player_ids: list[int] = Field(default_factory=list)
-    # Verbatim text submitted by the answering player; populated while phase
-    # is host_judging_answer, cleared once the host judges.
-    last_submitted_answer: str | None = None
     timer_deadline: datetime | None = None
+    # Resolution data stays private until public_state projects it during
+    # answer_reveal, then is cleared before the next clue or final leaderboard.
+    resolved_prompt_id: int | None = None
+    resolved_answer: str | None = None
+    resolution: GameResolutionEnum | None = None
 
     @classmethod
     def redis_key(cls, lobby_id: int) -> str:
@@ -120,6 +123,7 @@ class GameLobbyState(BaseSchema):
 
     def public_state(self) -> PublicGameLobbyState:
         """Return a safe player-visible projection of this internal state."""
+        is_revealing_answer = self.phase == GamePhaseEnum.ANSWER_REVEAL
         return PublicGameLobbyState(
             lobby_id=self.lobby_id,
             host=self.host,
@@ -145,6 +149,8 @@ class GameLobbyState(BaseSchema):
             selecting_player_id=self.selecting_player_id,
             answering_player_id=self.answering_player_id,
             attempted_player_ids=self.attempted_player_ids,
-            last_submitted_answer=self.last_submitted_answer,
             timer_deadline=self.timer_deadline,
+            resolved_prompt_id=(self.resolved_prompt_id if is_revealing_answer else None),
+            resolved_answer=self.resolved_answer if is_revealing_answer else None,
+            resolution=self.resolution if is_revealing_answer else None,
         )

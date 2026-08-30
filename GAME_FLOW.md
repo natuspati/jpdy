@@ -91,8 +91,7 @@ phase = answer_reveal
 ```text
 correct
 unanswered
-answer_timeout
-buzz_timeout
+expired
 ```
 
 It is display information only; scoring and transitions remain
@@ -230,7 +229,7 @@ If the answering deadline expires before the host judges:
 2. Do not change that player's score.
 3. Clear `answering_player_id`.
 4. Open buzz if an eligible player remains.
-5. Otherwise enter `answer_reveal` with `resolution=answer_timeout`.
+5. Otherwise enter `answer_reveal` with `resolution=expired`.
 
 ### 5. Buzz
 
@@ -258,7 +257,7 @@ If the buzz deadline expires before an eligible player buzzes:
 
 1. Keep scores unchanged.
 2. Clear current answer/buzz state.
-3. Enter `answer_reveal` with `resolution=buzz_timeout`.
+3. Enter `answer_reveal` with `resolution=expired`.
 
 ## Answer reveal and game completion
 

@@ -34,4 +34,23 @@ describe('GameBoard', () => {
     render(<GameBoard state={state} currentUserId={2} onSelect={() => undefined} />);
     expect(screen.getByRole('button', { name: '—' })).toBeInTheDocument();
   });
+
+  it('gives short and long category titles equal header regions', () => {
+    const state = buildGameState({ phase: 'player_selecting_prompt', selectingPlayerId: 2 });
+    state.categories.push({
+      category_id: 11,
+      name: 'A category title long enough to wrap onto another line',
+      prompts: [
+        { prompt_id: 103, question: 'Q3', order: 1, is_selected: false, score_value: 100 },
+        { prompt_id: 104, question: 'Q4', order: 2, is_selected: false, score_value: 200 },
+      ],
+    });
+
+    const { container } = render(
+      <GameBoard state={state} currentUserId={2} onSelect={() => undefined} />,
+    );
+
+    expect(container.querySelectorAll('.grid-rows-\\[4\\.5rem_auto\\]')).toHaveLength(2);
+    expect(screen.getByText(/long enough/i)).toHaveClass('line-clamp-2');
+  });
 });

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { GameLobbyState, HostJudgingAnswer, SocketErrorPayload } from '@/schemas';
+import { GameLobbyState, HostAnswerKey, SocketErrorPayload } from '@/schemas';
 
 interface ParseResult<T> {
   ok: boolean;
@@ -26,10 +26,10 @@ export function parseSocketError(raw: unknown): ParseResult<SocketErrorPayload> 
   return { ok: true, data: parsed.data };
 }
 
-export function parseHostJudgingAnswer(raw: unknown): ParseResult<HostJudgingAnswer> {
-  const parsed = HostJudgingAnswer.safeParse(raw);
+export function parseHostAnswerKey(raw: unknown): ParseResult<HostAnswerKey> {
+  const parsed = HostAnswerKey.safeParse(raw);
   if (!parsed.success) {
-    console.error('[socket] invalid host_judging_answer payload', parsed.error.issues);
+    console.error('[socket] invalid host_answer_key payload', parsed.error.issues);
     return { ok: false, issues: parsed.error.issues };
   }
   return { ok: true, data: parsed.data };

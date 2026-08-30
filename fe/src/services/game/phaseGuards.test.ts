@@ -8,7 +8,6 @@ import {
   canSelectPrompt,
   canSelectStarter,
   canStartGame,
-  canSubmitAnswer,
   isHost,
 } from './phaseGuards';
 
@@ -47,14 +46,8 @@ describe('phaseGuards', () => {
     expect(canSelectPrompt(ok, 2, 999)).toBe(false);
   });
 
-  it('canSubmitAnswer requires answerer match and answering phase', () => {
+  it('canJudge only for host while a player is answering', () => {
     const ok = buildGameState({ phase: 'player_answering', answeringPlayerId: 2 });
-    expect(canSubmitAnswer(ok, 2)).toBe(true);
-    expect(canSubmitAnswer(ok, 3)).toBe(false);
-  });
-
-  it('canJudge only for host in judging phase', () => {
-    const ok = buildGameState({ phase: 'host_judging_answer' });
     expect(canJudge(ok, 1)).toBe(true);
     expect(canJudge(ok, 2)).toBe(false);
   });

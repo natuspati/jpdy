@@ -16,8 +16,10 @@ interface BuildArgs {
   answeringPlayerId?: number | null;
   attemptedPlayerIds?: number[];
   currentPromptId?: number | null;
-  lastSubmittedAnswer?: string | null;
   timerDeadline?: string | null;
+  resolvedPromptId?: number | null;
+  resolvedAnswer?: string | null;
+  resolution?: 'correct' | 'unanswered' | 'expired' | null;
 }
 
 export function buildGameState(args: BuildArgs = {}): GameLobbyState {
@@ -33,8 +35,10 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
     answeringPlayerId = null,
     attemptedPlayerIds = [],
     currentPromptId = null,
-    lastSubmittedAnswer = null,
     timerDeadline = null,
+    resolvedPromptId = null,
+    resolvedAnswer = null,
+    resolution = null,
   } = args;
   return {
     lobby_id: 100,
@@ -66,7 +70,9 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
     selecting_player_id: selectingPlayerId,
     answering_player_id: answeringPlayerId,
     attempted_player_ids: attemptedPlayerIds,
-    last_submitted_answer: lastSubmittedAnswer,
     timer_deadline: timerDeadline,
+    resolved_prompt_id: resolvedPromptId,
+    resolved_answer: resolvedAnswer,
+    resolution,
   };
 }

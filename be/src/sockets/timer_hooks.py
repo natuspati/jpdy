@@ -9,7 +9,11 @@ from sockets.uow import build_uow
 
 _logger = logging.getLogger(__name__)
 
-_TIMED_PHASES = {GamePhaseEnum.PLAYER_ANSWERING, GamePhaseEnum.BUZZ_OPEN}
+_TIMED_PHASES = {
+    GamePhaseEnum.PLAYER_ANSWERING,
+    GamePhaseEnum.BUZZ_OPEN,
+    GamePhaseEnum.ANSWER_REVEAL,
+}
 
 
 def arm_timer_if_needed(lobby_id: int, state: GameLobbyState) -> None:

@@ -5,7 +5,6 @@ import {
   JudgeAnswerPayload,
   SelectPromptPayload,
   SelectStarterPayload,
-  SubmitAnswerPayload,
   UnbanPlayerPayload,
 } from '@/schemas';
 import { toastError } from '@/store/toastStore';
@@ -15,7 +14,6 @@ import type { ClientEventName, ClientToServerEvents } from './types';
 const payloadSchemas: Partial<Record<ClientEventName, z.ZodTypeAny>> = {
   select_starter: SelectStarterPayload,
   select_prompt: SelectPromptPayload,
-  submit_answer: SubmitAnswerPayload,
   judge_answer: JudgeAnswerPayload,
   ban_player: BanPlayerPayload,
   unban_player: UnbanPlayerPayload,

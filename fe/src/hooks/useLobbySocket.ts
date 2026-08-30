@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '@/api/queryKeys';
-import type { GameLobbyState, HostJudgingAnswer } from '@/schemas';
+import type { GameLobbyState, HostAnswerKey } from '@/schemas';
 import { createLobbySocket, type LobbySocket } from '@/sockets/client';
 import { emit as emitEvent } from '@/sockets/events';
 import {
-  parseHostJudgingAnswer,
+  parseHostAnswerKey,
   parseSocketError,
   parseStateChanged,
 } from '@/sockets/parseIncoming';
@@ -22,7 +22,7 @@ interface UseLobbySocketArgs {
 
 interface UseLobbySocketResult {
   state: GameLobbyState | null;
-  hostJudgingAnswer: HostJudgingAnswer | null;
+  hostAnswerKey: HostAnswerKey | null;
   status: SocketStatus;
   emit: <E extends ClientEventName>(
     event: E,
@@ -45,7 +45,7 @@ export function useLobbySocket({
   token,
 }: UseLobbySocketArgs): UseLobbySocketResult {
   const [state, setState] = useState<GameLobbyState | null>(null);
-  const [hostJudgingAnswer, setHostJudgingAnswer] = useState<HostJudgingAnswer | null>(null);
+  const [hostAnswerKey, setHostAnswerKey] = useState<HostAnswerKey | null>(null);
   const [status, setStatus] = useState<SocketStatus>('connecting');
   const [reason, setReason] = useState<string | null>(null);
   const socketRef = useRef<LobbySocket | null>(null);
@@ -59,7 +59,7 @@ export function useLobbySocket({
     setStatus('connecting');
     setReason(null);
     setState(null);
-    setHostJudgingAnswer(null);
+    setHostAnswerKey(null);
 
     socket.on('connect', () => setStatus('open'));
     socket.on('disconnect', (r) => {
@@ -79,8 +79,8 @@ export function useLobbySocket({
         return;
       }
       setState(parsed.data);
-      if (parsed.data.phase !== 'host_judging_answer') {
-        setHostJudgingAnswer(null);
+      if (parsed.data.phase !== 'player_answering') {
+        setHostAnswerKey(null);
       }
       if (
         parsed.data.phase === 'host_selecting_starting_player' ||
@@ -90,13 +90,13 @@ export function useLobbySocket({
         queryClient.invalidateQueries({ queryKey: queryKeys.lobbies.all() });
       }
     });
-    socket.on('host_judging_answer', (raw: unknown) => {
-      const parsed = parseHostJudgingAnswer(raw);
+    socket.on('host_answer_key', (raw: unknown) => {
+      const parsed = parseHostAnswerKey(raw);
       if (!parsed.ok || !parsed.data) {
-        toastError('Received invalid host judging data from server');
+        toastError('Received invalid host answer key from server');
         return;
       }
-      setHostJudgingAnswer(parsed.data);
+      setHostAnswerKey(parsed.data);
     });
     socket.on('error', (raw: unknown) => {
       const parsed = parseSocketError(raw);
@@ -134,5 +134,5 @@ export function useLobbySocket({
     return emitEvent(socket, event, ...args);
   }, []);
 
-  return { state, hostJudgingAnswer, status, emit, reason };
+  return { state, hostAnswerKey, status, emit, reason };
 }

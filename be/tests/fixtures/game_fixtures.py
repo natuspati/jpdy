@@ -249,7 +249,7 @@ async def connect_socket(
         client = make_socket_client()
         events: dict[str, asyncio.Queue] = {
             "state_changed": asyncio.Queue(),
-            "host_judging_answer": asyncio.Queue(),
+            "host_answer_key": asyncio.Queue(),
             "error": asyncio.Queue(),
         }
 
@@ -257,9 +257,9 @@ async def connect_socket(
         async def _on_state_changed(data: dict) -> None:
             await events["state_changed"].put(data)
 
-        @client.on("host_judging_answer", namespace=f"/lobbies/{lobby_id}")
-        async def _on_host_judging_answer(data: dict) -> None:
-            await events["host_judging_answer"].put(data)
+        @client.on("host_answer_key", namespace=f"/lobbies/{lobby_id}")
+        async def _on_host_answer_key(data: dict) -> None:
+            await events["host_answer_key"].put(data)
 
         @client.on("error", namespace=f"/lobbies/{lobby_id}")
         async def _on_error(data: dict) -> None:
