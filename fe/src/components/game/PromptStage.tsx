@@ -36,6 +36,7 @@ const PromptStage = ({
       contentType={prompt.question_type ?? 'text'}
       media={prompt.question_media}
       alt={prompt.question}
+      playbackId={`${prompt.prompt_id}:question`}
     />
     {answer !== null ? (
       <div className="w-full max-w-2xl space-y-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-center">
@@ -49,7 +50,12 @@ const PromptStage = ({
         </p>
         <p className="text-balance text-xl font-semibold text-white sm:text-2xl">{answer}</p>
         {answerMedia && answerType ? (
-          <PromptMedia contentType={answerType} media={answerMedia} alt={`Answer: ${answer}`} />
+          <PromptMedia
+            contentType={answerType}
+            media={answerMedia}
+            alt={`Answer: ${answer}`}
+            playbackId={`${prompt.prompt_id}:answer`}
+          />
         ) : null}
       </div>
     ) : null}

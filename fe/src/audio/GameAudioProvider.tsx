@@ -47,6 +47,7 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
   const volumeRef = useRef(initial.volume);
   const desiredBackgroundRef = useRef<BackgroundTrack>(null);
   const activeBackgroundRef = useRef<BackgroundTrack>(null);
+  const activePromptMediaKeysRef = useRef<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
   const loopsRef = useRef<Record<Exclude<BackgroundTrack, null>, HTMLAudioElement>>({
     boardLoop: audioFor('boardLoop', true),
@@ -69,6 +70,13 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  const pauseActiveBackground = useCallback(() => {
+    const activeTrack = activeBackgroundRef.current;
+    if (!activeTrack) return;
+    loopsRef.current[activeTrack].pause();
+    activeBackgroundRef.current = null;
+  }, []);
+
   const stopAll = useCallback(() => {
     if (delayedEffectTimerRef.current !== null) {
       window.clearTimeout(delayedEffectTimerRef.current);
@@ -89,6 +97,10 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
   const startBackground = useCallback(
     async (track: BackgroundTrack) => {
       desiredBackgroundRef.current = track;
+      if (activePromptMediaKeysRef.current.size > 0) {
+        pauseActiveBackground();
+        return;
+      }
       if (!enabledRef.current) return;
       if (track === activeBackgroundRef.current) return;
       Object.entries(loopsRef.current).forEach(([name, audio]) => {
@@ -103,13 +115,50 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
       applyLoopVolume();
       try {
         await audio.play();
+        if (
+          activePromptMediaKeysRef.current.size > 0 ||
+          !enabledRef.current ||
+          desiredBackgroundRef.current !== track
+        ) {
+          audio.pause();
+          return;
+        }
         activeBackgroundRef.current = track;
         setBlockedMessage(null);
       } catch {
         setBlockedMessage('Browser blocked sound. Select Enable sound and try again.');
       }
     },
-    [applyLoopVolume],
+    [applyLoopVolume, pauseActiveBackground],
+  );
+
+  const beginPromptMediaPlayback = useCallback(
+    (playbackId: string) => {
+      const alreadyPlayingPromptMedia = activePromptMediaKeysRef.current.size > 0;
+      activePromptMediaKeysRef.current.add(playbackId);
+      if (!alreadyPlayingPromptMedia) {
+        pauseActiveBackground();
+      }
+    },
+    [pauseActiveBackground],
+  );
+
+  const endPromptMediaPlayback = useCallback(
+    (playbackId: string) => {
+      if (!activePromptMediaKeysRef.current.delete(playbackId)) return;
+      if (activePromptMediaKeysRef.current.size > 0) return;
+
+      // Let a replacing media element report its `play` event before a
+      // background loop is restored. This avoids an audible restart between
+      // rapid media replacements while still restoring music after a real end,
+      // pause, error, or unmount.
+      void Promise.resolve().then(() => {
+        if (activePromptMediaKeysRef.current.size === 0) {
+          void startBackground(desiredBackgroundRef.current);
+        }
+      });
+    },
+    [startBackground],
   );
 
   const playEffect = useCallback(
@@ -253,8 +302,10 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
   );
 
   useEffect(() => {
+    const activePromptMediaKeys = activePromptMediaKeysRef.current;
     return () => {
       stopAll();
+      activePromptMediaKeys.clear();
       void audioContextRef.current?.close();
     };
   }, [stopAll]);
@@ -269,10 +320,14 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
       setVolume,
       syncGameState,
       playCue,
+      beginPromptMediaPlayback,
+      endPromptMediaPlayback,
       stopAll,
     }),
     [
+      beginPromptMediaPlayback,
       blockedMessage,
+      endPromptMediaPlayback,
       enableSound,
       enabled,
       playCue,

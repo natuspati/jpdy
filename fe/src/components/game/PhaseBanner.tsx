@@ -35,7 +35,9 @@ function messageFor(state: GameLobbyState, role: Role): string {
     case 'buzz_open':
       return role === 'buzzer' ? 'Buzz to answer!' : 'Buzz open…';
     case 'answer_reveal':
-      return 'Answer revealed. Next clue starts soon.';
+      return role === 'host'
+        ? 'Answer revealed. Advance to the next prompt whenever you are ready.'
+        : 'Answer revealed. Waiting for the host to advance…';
     case 'finished':
       return 'Game over.';
     default:

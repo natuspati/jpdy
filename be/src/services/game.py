@@ -342,6 +342,27 @@ class GameService:
             await uow.game_state_repo.save_state(state)
         return state
 
+    async def advance_answer_reveal(
+        self,
+        lobby_id: int,
+        user_id: int,
+    ) -> GameLobbyState:
+        """
+        Let the host end an answer reveal before its server-side deadline.
+
+        The timer remains a fallback, while this action shares the normal
+        reveal-expiry transition so selector ownership and final-score
+        snapshots stay identical regardless of how the reveal ends.
+        """
+        async with self._uow as uow:
+            state = await self._load_state(uow, lobby_id)
+            _require_host(state, user_id)
+            _require_phase(state, GamePhaseEnum.ANSWER_REVEAL)
+
+            await self._advance_after_reveal(uow, state)
+            await uow.game_state_repo.save_state(state)
+        return state
+
     async def ban_player(
         self,
         lobby_id: int,

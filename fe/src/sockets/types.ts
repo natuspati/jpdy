@@ -25,6 +25,7 @@ export interface ClientToServerEvents {
   select_prompt: (p: SelectPromptPayload) => void;
   judge_answer: (p: JudgeAnswerPayload) => void;
   buzz: () => void;
+  advance_answer_reveal: () => void;
   ban_player: (p: BanPlayerPayload) => void;
   unban_player: (p: UnbanPlayerPayload) => void;
 }

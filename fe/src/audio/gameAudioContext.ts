@@ -11,6 +11,8 @@ export interface GameAudioContextValue {
   setVolume: (value: number) => void;
   syncGameState: (state: GameLobbyState | null) => void;
   playCue: (cue: GameSoundCuePayload) => void;
+  beginPromptMediaPlayback: (playbackId: string) => void;
+  endPromptMediaPlayback: (playbackId: string) => void;
   stopAll: () => void;
 }
 

@@ -1,16 +1,27 @@
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import type { GameLobbyState } from '@/schemas';
-import { canSelectStarter, canStartGame } from '@/services/game/phaseGuards';
+import {
+  canAdvanceAnswerReveal,
+  canSelectStarter,
+  canStartGame,
+} from '@/services/game/phaseGuards';
 
 interface Props {
   state: GameLobbyState;
   currentUserId: number;
   onStart: () => void;
   onSelectStarter: (userId: number) => void;
+  onAdvanceAnswerReveal: () => void;
 }
 
-const HostControls = ({ state, currentUserId, onStart, onSelectStarter }: Props) => {
+const HostControls = ({
+  state,
+  currentUserId,
+  onStart,
+  onSelectStarter,
+  onAdvanceAnswerReveal,
+}: Props) => {
   if (state.phase === 'waiting_for_players') {
     const eligible = state.players.filter(
       (p) => !p.is_banned && p.connection_status === 'connected',
@@ -55,6 +66,18 @@ const HostControls = ({ state, currentUserId, onStart, onSelectStarter }: Props)
             ))}
           </ul>
         )}
+      </Card>
+    );
+  }
+  if (canAdvanceAnswerReveal(state, currentUserId)) {
+    return (
+      <Card className="space-y-3">
+        <p className="text-sm text-slate-300">
+          The answer is visible. Advance whenever everyone is ready.
+        </p>
+        <Button fullWidth size="lg" onClick={onAdvanceAnswerReveal}>
+          Next prompt
+        </Button>
       </Card>
     );
   }

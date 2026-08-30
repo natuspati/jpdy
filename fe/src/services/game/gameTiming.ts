@@ -2,7 +2,7 @@ import type { GamePhaseEnum } from '@/schemas';
 
 export const ANSWERING_TIME_SECONDS = 30;
 export const BUZZING_TIME_SECONDS = 10;
-export const ANSWER_REVEAL_TIME_SECONDS = 5;
+export const ANSWER_REVEAL_TIME_SECONDS = 30;
 
 export function timerSecondsForPhase(phase: GamePhaseEnum): number {
   switch (phase) {

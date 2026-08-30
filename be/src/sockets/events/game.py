@@ -224,6 +224,31 @@ async def on_buzz(namespace: str, sid: str, _data: Any = None) -> None:
     )
 
 
+@sio.on("advance_answer_reveal", namespace="*")
+async def on_advance_answer_reveal(namespace: str, sid: str, _data: Any = None) -> None:
+    async def _action(
+        service: GameService,
+        lobby_id: int,
+        user_id: int,
+        _payload: pydantic.BaseModel | None,
+    ) -> GameLobbyState:
+        return await service.advance_answer_reveal(
+            lobby_id=lobby_id,
+            user_id=user_id,
+        )
+
+    await _run_event(
+        namespace,
+        sid,
+        None,
+        None,
+        _action,
+        lambda state, _payload: (
+            [GameSoundCueName.GAME_COMPLETED] if state.phase.value == "finished" else []
+        ),
+    )
+
+
 @sio.on("ban_player", namespace="*")
 async def on_ban_player(namespace: str, sid: str, data: Any = None) -> None:
     async def _action(

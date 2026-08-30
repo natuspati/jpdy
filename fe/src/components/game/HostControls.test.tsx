@@ -21,6 +21,7 @@ describe('HostControls', () => {
         currentUserId={state.host.user_id}
         onStart={vi.fn()}
         onSelectStarter={onSelectStarter}
+        onAdvanceAnswerReveal={vi.fn()}
       />,
     );
 
@@ -42,11 +43,56 @@ describe('HostControls', () => {
         currentUserId={state.host.user_id}
         onStart={vi.fn()}
         onSelectStarter={vi.fn()}
+        onAdvanceAnswerReveal={vi.fn()}
       />,
     );
 
     expect(
       screen.getByText(/waiting for a player to reconnect or be unbanned/i),
     ).toBeInTheDocument();
+  });
+
+  it('shows Next prompt only for the host during answer reveal', () => {
+    const onAdvanceAnswerReveal = vi.fn();
+    const state = buildGameState({
+      phase: 'answer_reveal',
+      currentPromptId: 101,
+      resolvedPromptId: 101,
+      resolvedAnswer: 'Category 1 A1',
+      resolution: 'correct',
+    });
+    render(
+      <HostControls
+        state={state}
+        currentUserId={state.host.user_id}
+        onStart={vi.fn()}
+        onSelectStarter={vi.fn()}
+        onAdvanceAnswerReveal={onAdvanceAnswerReveal}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next prompt' }));
+    expect(onAdvanceAnswerReveal).toHaveBeenCalledOnce();
+  });
+
+  it('does not show Next prompt to a non-host during answer reveal', () => {
+    const state = buildGameState({
+      phase: 'answer_reveal',
+      currentPromptId: 101,
+      resolvedPromptId: 101,
+      resolvedAnswer: 'Category 1 A1',
+      resolution: 'correct',
+    });
+    render(
+      <HostControls
+        state={state}
+        currentUserId={2}
+        onStart={vi.fn()}
+        onSelectStarter={vi.fn()}
+        onAdvanceAnswerReveal={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Next prompt' })).not.toBeInTheDocument();
   });
 });

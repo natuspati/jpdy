@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildGameState } from '@/test/fixtures/gameState';
 import {
+  canAdvanceAnswerReveal,
   canBan,
   canBuzz,
   canJudge,
@@ -50,6 +51,18 @@ describe('phaseGuards', () => {
     const ok = buildGameState({ phase: 'player_answering', answeringPlayerId: 2 });
     expect(canJudge(ok, 1)).toBe(true);
     expect(canJudge(ok, 2)).toBe(false);
+  });
+
+  it('canAdvanceAnswerReveal only for host during answer reveal', () => {
+    const ok = buildGameState({
+      phase: 'answer_reveal',
+      currentPromptId: 101,
+      resolvedPromptId: 101,
+      resolvedAnswer: 'Q1 answer',
+      resolution: 'correct',
+    });
+    expect(canAdvanceAnswerReveal(ok, 1)).toBe(true);
+    expect(canAdvanceAnswerReveal(ok, 2)).toBe(false);
   });
 
   it('canBuzz: only eligible, non-host, non-attempted in buzz_open', () => {

@@ -14,6 +14,6 @@ describe('timerSecondsForPhase', () => {
     expect(timerSecondsForPhase('player_answering')).toBe(ANSWERING_TIME_SECONDS);
     expect(ANSWERING_TIME_SECONDS).toBe(30);
     expect(timerSecondsForPhase('answer_reveal')).toBe(ANSWER_REVEAL_TIME_SECONDS);
-    expect(ANSWER_REVEAL_TIME_SECONDS).toBe(5);
+    expect(ANSWER_REVEAL_TIME_SECONDS).toBe(30);
   });
 });

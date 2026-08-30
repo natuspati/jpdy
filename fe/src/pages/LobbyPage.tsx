@@ -174,6 +174,7 @@ const LobbyPage = () => {
               currentUserId={userId}
               onStart={() => emit('start_game')}
               onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
+              onAdvanceAnswerReveal={() => emit('advance_answer_reveal')}
             />
           ) : null}
 

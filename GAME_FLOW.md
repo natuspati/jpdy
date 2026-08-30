@@ -84,8 +84,10 @@ created → waiting_start → in_progress → completed
   - video: browser-compatible H.264/AAC MP4, maximum 100 MB.
 - Nginx is browser-facing media server at `/media/{storage_key}`. Prompt data
   contains generated same-origin reference, never arbitrary external URL.
-- Native browser image, audio, and video controls render media. Audio and
-  video never autoplay.
+- Native browser image, audio, and video controls render media. During an
+  active game, question and answer audio/video each autoplay once when first
+  shown if that browser has enabled game sound; native controls remain the
+  manual fallback when sound is disabled or autoplay is blocked.
 
 ## State visibility
 
@@ -333,16 +335,17 @@ answer_reveal
 - The board stays hidden.
 - Full prompt stage shows question text/media and public canonical answer
   text plus optional answer media.
-- The server starts a short reveal timer; the initial local value is five
-  seconds.
+- The server starts a 30-second maximum reveal timer.
+- The host sees a **Next prompt** control and may end the reveal early with
+  `advance_answer_reveal`; other clients wait for the host or the deadline.
 - The client may show a resolution message, such as “Correct”, “No correct
   response”, or “Time expired”.
 
 The correct answer is visible to all clients only in this phase.
 
-### After the reveal timer
+### After the reveal ends
 
-After the reveal timer expires:
+When the host advances or the reveal timer expires:
 
 - if unselected prompts remain:
   - clear `resolved_prompt_id`, `resolved_answer`, and `resolution`;
@@ -368,7 +371,8 @@ Banning always updates both Redis game state and persistent
   and timer, then enter `host_selecting_starting_player`.
 - Ban active answerer in `player_answering`: leave selected clue spent, do not
   score or deduct it, clear ownership, then reveal it as `unanswered` for
-  normal five seconds. Reveal expiry enters host player selection.
+  the normal 30-second maximum. Reveal completion enters host player
+  selection.
 - Ban next selector while clue is in `answer_reveal` or `buzz_open`: clear
   selector ID. Existing eligible buzzers remain able to buzz. After reveal,
   host chooses next player rather than returning control to banned selector.
@@ -382,7 +386,7 @@ Initial local timing values are:
 ```text
 answering timer:     30 seconds
 buzz timer:          10 seconds
-answer reveal timer:  5 seconds
+answer reveal timer: 30 seconds maximum
 ```
 
 The server is authoritative:
@@ -402,6 +406,7 @@ The server is authoritative:
 | `select_prompt` | current selector | `player_selecting_prompt` |
 | `judge_answer` | host | `player_answering` |
 | `buzz` | eligible non-host player | `buzz_open` |
+| `advance_answer_reveal` | host | `answer_reveal` |
 | `ban_player` / `unban_player` | host | no phase restriction while host has active lobby socket |
 
 The desired flow removes these old typed-answer concepts:
@@ -431,7 +436,10 @@ must not optimistically mutate game state.
   - `buzz_open`;
   - `answer_reveal`.
 - Current prompt provides its text, type, and optional media only while prompt
-  is active. Media controls are native and never autoplay.
+  is active. Question and answer audio/video use stable per-prompt playback
+  identities, so ordinary parent renders do not restart them. Each game-media
+  item autoplays once only when game sound is enabled; media controls remain
+  native and manually usable.
 - Canonical answer text and optional answer media remain hidden until
   `answer_reveal`.
 
@@ -465,6 +473,10 @@ must not optimistically mutate game state.
 - Sound is opt-in for every browser page load. Browser storage records the
   previous setting and volume, but playback never begins without a new user
   gesture. Sound failure remains presentation-only.
+- While prompt audio/video is playing, the active board or answering
+  background loop pauses without resetting. It resumes only after all active
+  prompt media has ended, paused, errored, or unmounted, provided the current
+  game phase still calls for that loop.
 
 ## Presentation-only sound cues
 

@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from configs.constants import ANSWER_REVEAL_TIME_SECONDS
 from database import UnitOfWork
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from enums.lobby import LobbyStateEnum
@@ -147,10 +148,69 @@ async def test_correct_judgment_enters_public_answer_reveal(
     assert host_state["resolved_answer"] == "Category 1 A1"
     assert host_state["resolution"] == GameResolutionEnum.CORRECT.value
     assert host_state["current_prompt_id"] == seeded.prompt_ids[0]
+    deadline = datetime.fromisoformat(host_state["timer_deadline"])
+    assert 29 <= (deadline - datetime.now(UTC)).total_seconds() <= ANSWER_REVEAL_TIME_SECONDS
     assert any(
         player["user_id"] == seeded.players[0].id and player["score"] == 100
         for player in host_state["players"]
     )
+
+
+async def test_host_can_advance_answer_reveal_early_and_clear_timer(
+    seed_lobby: Callable[..., Awaitable[SeededLobby]],
+    connect_socket: Callable[[int, str], Awaitable[SocketClient]],
+):
+    seeded = await seed_lobby(player_count=1, prompts_per_category=2)
+    host, players = await _connect_all(seeded, connect_socket, player_count=1)
+    await _start_on_first_prompt(seeded, host, players)
+    await _drain(host, 1)
+    await _drain(players[0], 1)
+
+    namespace = f"/lobbies/{seeded.lobby_id}"
+    await host.client.emit("judge_answer", {"correct": True}, namespace=namespace)
+    await host.expect("state_changed")
+    await players[0].expect("state_changed")
+
+    await host.client.emit("advance_answer_reveal", namespace=namespace)
+    host_state = await host.expect("state_changed")
+    player_state = await players[0].expect("state_changed")
+
+    assert host_state == player_state
+    assert host_state["phase"] == GamePhaseEnum.PLAYER_SELECTING_PROMPT.value
+    assert host_state["selecting_player_id"] == seeded.players[0].id
+    assert host_state["current_prompt_id"] is None
+    assert host_state["timer_deadline"] is None
+    assert seeded.lobby_id not in game_timers._timers
+
+
+async def test_advance_answer_reveal_rejects_non_host_and_wrong_phase(
+    seed_lobby: Callable[..., Awaitable[SeededLobby]],
+    db_session: AsyncSession,
+    redis_client,
+):
+    seeded = await seed_lobby(player_count=1)
+    player = seeded.players[0]
+    state = seeded.state
+    state.players = [
+        GamePlayerState(
+            user_id=player.id,
+            username=player.username,
+            connection_status=PlayerConnectionStatusEnum.CONNECTED,
+        ),
+    ]
+    await redis_client.set(state.key, state.model_dump_json())
+    service = GameService(UnitOfWork(db_session, redis_client))
+
+    with pytest.raises(Exception, match="Only the host"):
+        await service.advance_answer_reveal(
+            lobby_id=seeded.lobby_id,
+            user_id=player.id,
+        )
+    with pytest.raises(Exception, match="Action not allowed during phase"):
+        await service.advance_answer_reveal(
+            lobby_id=seeded.lobby_id,
+            user_id=seeded.host.id,
+        )
 
 
 async def test_wrong_judgment_opens_buzz_when_player_remains_eligible(
@@ -417,7 +477,7 @@ async def test_ban_active_answerer_reveals_without_score_change_then_recovers(
     assert revealed.answering_player_id is None
     assert revealed.selecting_player_id is None
     assert revealed.timer_deadline is not None
-    assert 4 <= (revealed.timer_deadline - datetime.now(UTC)).total_seconds() <= 5
+    assert 29 <= (revealed.timer_deadline - datetime.now(UTC)).total_seconds() <= 30
 
     revealed.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
     await redis_client.set(revealed.key, revealed.model_dump_json())
