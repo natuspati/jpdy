@@ -105,8 +105,13 @@ unbanned.
   during an active clue and becomes public during answer reveal.
 - Uploaded bytes are validated before storage. Supported formats: JPEG/PNG/WebP
   images up to 10 MB; MP3/M4A/AAC/Ogg audio up to 20 MB; MP4 video up to 100 MB.
-- Nginx serves immutable assets at same-origin `/media/{key}` URLs. Do not put
-  uploaded files in the database or link arbitrary external URLs.
+- Nginx serves immutable public assets at same-origin `/media/{key}` URLs.
+  Supported stored media requests are anonymous and must return `200`; media
+  elements cannot attach API bearer headers. Do not put uploaded files in the
+  database or link arbitrary external URLs.
+- Backend and Nginx share `jpdy_media_data`: backend mounts it read/write at `/media`; Nginx
+  mounts same volume read-only at `/srv/jpdy-media`. New files are mode `0644`, so Nginx can read
+  them but cannot modify them.
 - Game sound starts disabled for every page load. Each browser user enables it
   independently, then has one **Game volume** control.
 
@@ -153,7 +158,9 @@ bun run dev
 
 The example backend environment enables startup migrations. Native Vite
 development uses `VITE_SOCKET_URL=http://localhost:8000`; Compose leaves it
-empty so clients use same-origin Nginx.
+empty so clients use same-origin Nginx. Native Vite does not serve FastAPI's
+`BE_MEDIA_ROOT`, so test uploaded media through Compose/Nginx unless you add a
+dedicated Vite media-serving configuration.
 
 ## Reset local data
 

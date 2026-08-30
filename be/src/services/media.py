@@ -16,6 +16,7 @@ from schemas.media import MediaAssetInDBSchema
 from schemas.user.base import UserPublicSchema
 
 _UPLOAD_CHUNK_SIZE = 64 * 1024
+_PUBLISHED_MEDIA_MODE = 0o644
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,7 @@ class MediaService:
                     mime_type=detected.mime_type,
                     byte_size=byte_size,
                 )
+                os.chmod(temporary_path, _PUBLISHED_MEDIA_MODE)
                 os.replace(temporary_path, final_path)
                 temporary_path = None
             return asset
