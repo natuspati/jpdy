@@ -62,6 +62,10 @@ created → waiting_start → in_progress → completed
   - banned users cannot reconnect until unbanned;
   - one account cannot play simultaneously from multiple devices.
 - The host may reconnect and resume judging/control duties.
+- Lobby discovery lists a waiting lobby as active only for users who are not
+  its host or participant. **My lobbies** offers **Join** to the host and
+  non-banned participants while the lobby is `waiting_start` or
+  `in_progress`, so either role can return after disconnecting.
 - At completion, final player scores and ban status are snapshotted to
   `LobbyParticipant`. Host and non-banned participants can read lobby details
   and final ranking without opening a game socket.

@@ -21,6 +21,10 @@ const stateLabels = {
   completed: 'Completed',
 } as const;
 
+const canJoin = (lobby: MyLobby): boolean =>
+  (lobby.is_owner || lobby.is_participant) &&
+  (lobby.state === 'waiting_start' || lobby.state === 'in_progress');
+
 const MyLobbyList = ({ lobbies, loading, error }: Props) => {
   const navigate = useNavigate();
   const remove = useDeleteLobby();
@@ -68,6 +72,11 @@ const MyLobbyList = ({ lobbies, loading, error }: Props) => {
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap gap-2">
+                      {canJoin(lobby) ? (
+                        <Button size="sm" onClick={() => navigate(`/lobby/${lobby.id}`)}>
+                          Join
+                        </Button>
+                      ) : null}
                       <Button
                         size="sm"
                         variant="secondary"

@@ -10,6 +10,7 @@ from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import sockets.uow as sockets_uow
+from database.session import configure_sqlite_foreign_keys
 from enums.lobby import LobbyStateEnum
 from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
 from models.lobby import Lobby, LobbyPromptCategory
@@ -65,6 +66,7 @@ async def socket_session_overrides(
 
     async def _db_factory() -> AsyncGenerator[AsyncSession]:
         engine = create_async_engine(db_url, future=True)
+        configure_sqlite_foreign_keys(engine)
         try:
             async with AsyncSession(engine, expire_on_commit=False) as session:
                 yield session

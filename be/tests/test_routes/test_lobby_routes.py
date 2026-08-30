@@ -483,6 +483,46 @@ async def test_delete_lobby_in_created_returns_204(
     assert after.status_code == 404
 
 
+async def test_delete_lobby_removes_participants_before_sqlite_reuses_its_id(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    another_authed_user: AuthedUser,
+    db_session,
+):
+    deleted_lobby_id = await _prepare_lobby(http_client, authed_user)
+    await db_session.execute(
+        insert(LobbyParticipant).values(
+            lobby_id=deleted_lobby_id,
+            user_id=another_authed_user["user_id"],
+            username_snapshot=another_authed_user["username"],
+        ),
+    )
+    await db_session.commit()
+
+    delete = await http_client.delete(
+        f"/api/v1/lobby/{deleted_lobby_id}",
+        headers=authed_user["headers"],
+    )
+    assert delete.status_code == 204, delete.text
+
+    replacement_lobby_id = await _prepare_lobby(http_client, authed_user)
+    assert replacement_lobby_id == deleted_lobby_id
+
+    my_lobbies = await http_client.get(
+        "/api/v1/lobby/mine",
+        headers=another_authed_user["headers"],
+    )
+    active_lobbies = await http_client.get(
+        "/api/v1/lobby/active",
+        headers=another_authed_user["headers"],
+    )
+
+    assert my_lobbies.status_code == 200, my_lobbies.text
+    assert active_lobbies.status_code == 200, active_lobbies.text
+    assert my_lobbies.json() == []
+    assert [lobby["id"] for lobby in active_lobbies.json()] == [replacement_lobby_id]
+
+
 async def test_delete_waiting_lobby_returns_204(
     http_client: AsyncClient,
     authed_user: AuthedUser,

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from configs.settings import settings
+from database.session import configure_sqlite_foreign_keys
 
 
 @contextmanager
@@ -62,6 +63,7 @@ async def test_engine(
         f"sqlite+aiosqlite:///{db_path}",
         future=True,
     )
+    configure_sqlite_foreign_keys(engine)
     try:
         yield engine
     finally:

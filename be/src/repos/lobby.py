@@ -343,12 +343,22 @@ class LobbyRepo:
 
     async def delete_lobby(self, lobby_id: int) -> bool:
         """
-        Delete a lobby by id. Rows in ``lobby_prompt_category`` are cascaded by
-        the ``ON DELETE CASCADE`` constraint on ``lobby_id``.
+        Delete a lobby and its dependent rows.
+
+        Explicit child deletes make cleanup safe even for legacy SQLite
+        connections that were opened before foreign-key enforcement was
+        configured. The database constraints still provide a second line of
+        defense for every properly configured connection.
 
         :param lobby_id: lobby primary key
         :return: ``True`` if a row was deleted, ``False`` if no lobby matched
         """
+        await self._session.execute(
+            delete(LobbyParticipant).where(LobbyParticipant.lobby_id == lobby_id),
+        )
+        await self._session.execute(
+            delete(LobbyPromptCategory).where(LobbyPromptCategory.lobby_id == lobby_id),
+        )
         stmt = delete(Lobby).where(Lobby.id == lobby_id)
         result = await self._session.execute(stmt)
         return result.rowcount > 0

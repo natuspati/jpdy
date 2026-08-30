@@ -77,5 +77,41 @@ describe('lobby lists', () => {
 
     expect(screen.getAllByRole('button', { name: 'Show details' })).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Join' })).not.toBeInTheDocument();
+  });
+
+  it('renders join actions for current hosts and participants in active lobbies', () => {
+    renderList(
+      <MyLobbyList
+        loading={false}
+        error={false}
+        lobbies={[
+          {
+            id: 6,
+            owner_id: 1,
+            host_username: 'host',
+            player_count: 1,
+            state: 'waiting_start',
+            created_at: '2026-08-30T00:00:00Z',
+            updated_at: '2026-08-30T00:00:00Z',
+            is_owner: true,
+            is_participant: false,
+          },
+          {
+            id: 7,
+            owner_id: 2,
+            host_username: 'other-host',
+            player_count: 2,
+            state: 'in_progress',
+            created_at: '2026-08-30T00:00:00Z',
+            updated_at: '2026-08-30T00:00:00Z',
+            is_owner: false,
+            is_participant: true,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole('button', { name: 'Join' })).toHaveLength(2);
   });
 });
