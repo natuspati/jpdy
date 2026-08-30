@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import BuzzButton from '@/components/game/BuzzButton';
@@ -10,6 +10,8 @@ import PhaseBanner from '@/components/game/PhaseBanner';
 import PromptStage from '@/components/game/PromptStage';
 import ScoreBoard from '@/components/game/ScoreBoard';
 import TimerBar from '@/components/game/TimerBar';
+import GameSoundControls from '@/components/game/GameSoundControls';
+import { useGameAudio } from '@/audio/useGameAudio';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Spinner from '@/components/ui/Spinner';
@@ -18,6 +20,8 @@ import { useLobbySocket } from '@/hooks/useLobbySocket';
 import { currentPrompt } from '@/services/game/gameDerivations';
 import { canBuzz } from '@/services/game/phaseGuards';
 import { roleFor } from '@/services/game/roleFor';
+import { timerSecondsForPhase } from '@/services/game/gameTiming';
+import { toastSuccess } from '@/store/toastStore';
 
 const LobbyPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,10 +29,27 @@ const LobbyPage = () => {
   const lobbyIdSafe = lobbyId !== undefined && !Number.isNaN(lobbyId) ? lobbyId : undefined;
   const navigate = useNavigate();
   const { token, userId } = useAuth();
-  const { state, hostAnswerKey, status, emit, reason } = useLobbySocket({
-    lobbyId: lobbyIdSafe,
-    token,
-  });
+  const { syncGameState, playCue, stopAll } = useGameAudio();
+  const { state, hostAnswerKey, soundCue, lobbyDeleted, status, emit, reconnect, reason } =
+    useLobbySocket({
+      lobbyId: lobbyIdSafe,
+      token,
+    });
+
+  useEffect(() => {
+    syncGameState(state);
+  }, [state, syncGameState]);
+
+  useEffect(() => {
+    if (soundCue) playCue(soundCue);
+  }, [playCue, soundCue]);
+
+  useEffect(() => {
+    if (!lobbyDeleted) return;
+    stopAll();
+    toastSuccess('Lobby deleted by host');
+    navigate('/', { replace: true });
+  }, [lobbyDeleted, navigate, stopAll]);
 
   const view = useMemo(() => {
     if (!state || userId === null) return null;
@@ -49,7 +70,12 @@ const LobbyPage = () => {
       <Card className="space-y-3 text-center">
         <p className="text-rose-300">Could not connect to lobby.</p>
         {reason ? <p className="text-sm text-slate-400">{reason}</p> : null}
-        <Button onClick={() => navigate('/')}>Back to lobbies</Button>
+        <div className="flex justify-center gap-2">
+          <Button onClick={reconnect}>Reconnect</Button>
+          <Button variant="secondary" onClick={() => navigate('/')}>
+            Back to lobbies
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -60,7 +86,12 @@ const LobbyPage = () => {
         <p className="text-sm text-slate-400">
           {reason ?? 'You may have been removed from the lobby or the game ended.'}
         </p>
-        <Button onClick={() => navigate('/')}>Back to lobbies</Button>
+        <div className="flex justify-center gap-2">
+          <Button onClick={reconnect}>Reconnect</Button>
+          <Button variant="secondary" onClick={() => navigate('/')}>
+            Back to lobbies
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -73,8 +104,7 @@ const LobbyPage = () => {
     );
   }
 
-  const totalSecondsForPhase =
-    state.phase === 'buzz_open' ? 10 : state.phase === 'answer_reveal' ? 5 : 30;
+  const totalSecondsForPhase = timerSecondsForPhase(state.phase);
   const isFinished = state.phase === 'finished';
   const showBoard = [
     'waiting_for_players',
@@ -111,12 +141,19 @@ const LobbyPage = () => {
           <PromptStage
             prompt={view.currentPrompt}
             answer={state.phase === 'answer_reveal' ? state.resolved_answer : null}
+            answerType={state.phase === 'answer_reveal' ? state.resolved_answer_type : null}
+            answerMedia={state.phase === 'answer_reveal' ? state.resolved_answer_media : null}
             resolution={state.phase === 'answer_reveal' ? state.resolution : null}
           />
         ) : null}
       </div>
 
       <aside className="flex flex-col gap-3 lg:sticky lg:top-4 lg:self-start">
+        {status === 'connecting' ? (
+          <p className="rounded border border-amber-500/50 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
+            {reason ?? 'Connecting…'}
+          </p>
+        ) : null}
         <div className="order-2 lg:order-1">
           <ScoreBoard
             state={state}
@@ -128,6 +165,7 @@ const LobbyPage = () => {
         <div className="order-3 space-y-3 lg:order-2">
           <PhaseBanner state={state} role={view.role} />
           <TimerBar deadline={state.timer_deadline} totalSeconds={totalSecondsForPhase} />
+          <GameSoundControls />
         </div>
         <div className="order-1 lg:order-3">
           {view.role === 'host' ? (

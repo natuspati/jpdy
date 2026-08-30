@@ -62,8 +62,7 @@ export function useCreateCategory() {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
       toastSuccess('Category created');
     },
-    onError: (e) =>
-      toastError(e instanceof ApiError ? e.detail : 'Failed to create category'),
+    onError: (e) => toastError(e instanceof ApiError ? e.detail : 'Failed to create category'),
   });
 }
 
@@ -74,8 +73,7 @@ export function useUpdateCategory(id: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
     },
-    onError: (e) =>
-      toastError(e instanceof ApiError ? e.detail : 'Failed to update category'),
+    onError: (e) => toastError(e instanceof ApiError ? e.detail : 'Failed to update category'),
   });
 }
 
@@ -87,8 +85,7 @@ export function useDeleteCategory() {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
       toastSuccess('Category deleted');
     },
-    onError: (e) =>
-      toastError(e instanceof ApiError ? e.detail : 'Failed to delete category'),
+    onError: (e) => toastError(e instanceof ApiError ? e.detail : 'Failed to delete category'),
   });
 }
 
@@ -99,8 +96,7 @@ export function useCreatePrompt(categoryId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
     },
-    onError: (e) =>
-      toastError(e instanceof ApiError ? e.detail : 'Failed to create prompt'),
+    onError: (e) => toastError(e instanceof ApiError ? e.detail : 'Failed to create prompt'),
   });
 }
 
@@ -112,8 +108,7 @@ export function useUpdatePrompt(categoryId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
     },
-    onError: (e) =>
-      toastError(e instanceof ApiError ? e.detail : 'Failed to update prompt'),
+    onError: (e) => toastError(e instanceof ApiError ? e.detail : 'Failed to update prompt'),
   });
 }
 
@@ -124,7 +119,6 @@ export function useDeletePrompt(categoryId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.categories.all() });
     },
-    onError: (e) =>
-      toastError(e instanceof ApiError ? e.detail : 'Failed to delete prompt'),
+    onError: (e) => toastError(e instanceof ApiError ? e.detail : 'Failed to delete prompt'),
   });
 }

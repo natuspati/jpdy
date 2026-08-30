@@ -2,6 +2,7 @@ export * from './enums';
 export * from './error';
 export * from './game';
 export * from './lobby';
+export * from './media';
 export * from './me';
 export * from './pagination';
 export * from './prompt';

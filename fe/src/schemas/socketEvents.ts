@@ -22,3 +22,27 @@ export const SocketErrorPayload = z.object({
   detail: z.string(),
 });
 export type SocketErrorPayload = z.infer<typeof SocketErrorPayload>;
+
+export const GameSoundCuePayload = z
+  .object({
+    cue_id: z.number().int().positive(),
+    cue: z.enum([
+      'game_started',
+      'clue_selected',
+      'buzz_accepted',
+      'answer_correct',
+      'answer_wrong',
+      'answer_expired',
+      'answer_revealed',
+      'game_completed',
+    ]),
+  })
+  .strict();
+export type GameSoundCuePayload = z.infer<typeof GameSoundCuePayload>;
+
+export const LobbyDeletedPayload = z
+  .object({
+    lobby_id: z.number().int().positive(),
+  })
+  .strict();
+export type LobbyDeletedPayload = z.infer<typeof LobbyDeletedPayload>;

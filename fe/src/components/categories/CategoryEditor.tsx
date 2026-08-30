@@ -4,11 +4,7 @@ import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Field from '@/components/ui/Field';
 import Input from '@/components/ui/Input';
-import {
-  useCategory,
-  useDeleteCategory,
-  useUpdateCategory,
-} from '@/hooks/usePromptCategories';
+import { useCategory, useDeleteCategory, useUpdateCategory } from '@/hooks/usePromptCategories';
 import { NUM_PROMPTS_IN_CATEGORY } from '@/schemas';
 import PromptEditor from './PromptEditor';
 
@@ -25,7 +21,9 @@ const CategoryEditor = ({ categoryId, onDeleted }: Props) => {
 
   if (isLoading || !data) return <p className="text-slate-400">Loading…</p>;
 
-  const slotsByOrder = new Map(data.prompts.filter((p) => p.order !== null).map((p) => [p.order!, p]));
+  const slotsByOrder = new Map(
+    data.prompts.filter((p) => p.order !== null).map((p) => [p.order!, p]),
+  );
 
   const handleRename = async () => {
     if (!name || name === data.name) return;

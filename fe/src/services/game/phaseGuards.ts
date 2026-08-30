@@ -11,9 +11,7 @@ export const isHost = (state: GameLobbyState, userId: number): boolean =>
 export const canStartGame = (state: GameLobbyState, userId: number): boolean =>
   isHost(state, userId) &&
   state.phase === 'waiting_for_players' &&
-  state.players.some(
-    (p) => !p.is_banned && p.connection_status === 'connected',
-  );
+  state.players.some((p) => !p.is_banned && p.connection_status === 'connected');
 
 export const canSelectStarter = (state: GameLobbyState, userId: number): boolean =>
   isHost(state, userId) && state.phase === 'host_selecting_starting_player';
@@ -25,9 +23,7 @@ export const canSelectPrompt = (
 ): boolean => {
   if (state.phase !== 'player_selecting_prompt') return false;
   if (state.selecting_player_id !== userId) return false;
-  const prompt = state.categories
-    .flatMap((c) => c.prompts)
-    .find((p) => p.prompt_id === promptId);
+  const prompt = state.categories.flatMap((c) => c.prompts).find((p) => p.prompt_id === promptId);
   return !!prompt && !prompt.is_selected;
 };
 
@@ -41,5 +37,4 @@ export const canBuzz = (state: GameLobbyState, userId: number): boolean => {
   return isConnectedPlayer(state, userId);
 };
 
-export const canBan = (state: GameLobbyState, userId: number): boolean =>
-  isHost(state, userId);
+export const canBan = (state: GameLobbyState, userId: number): boolean => isHost(state, userId);

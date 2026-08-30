@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 
 import App from '@/App';
+import { GameAudioProvider } from '@/audio/GameAudioProvider';
 import './styles/index.css';
 
 const queryClient = new QueryClient({
@@ -25,14 +26,16 @@ if (!rootEl) throw new Error('Missing #root element');
 createRoot(rootEl).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true,
-        }}
-      >
-        <App />
-      </BrowserRouter>
+      <GameAudioProvider>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <App />
+        </BrowserRouter>
+      </GameAudioProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

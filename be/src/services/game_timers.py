@@ -13,8 +13,15 @@ _timers: dict[int, asyncio.Task] = {}
 
 
 async def _sleep_until(deadline: datetime) -> None:
-    remaining = (deadline - datetime.now(UTC)).total_seconds()
-    if remaining > 0:
+    # Event loops may run a scheduled callback a few clock-resolution ticks
+    # before its requested delay. ``expire_timer`` correctly ignores a state
+    # whose deadline has not arrived yet, but a one-shot timer would then be
+    # lost until another socket event re-armed it. Recheck wall-clock time
+    # after every sleep so callbacks never run early.
+    while True:
+        remaining = (deadline - datetime.now(UTC)).total_seconds()
+        if remaining <= 0:
+            return
         await asyncio.sleep(remaining)
 
 
@@ -38,12 +45,20 @@ def arm(
         except Exception:
             _logger.exception("Timer callback failed for lobby %s", lobby_id)
         finally:
-            _timers.pop(lobby_id, None)
+            # ``on_expire`` can transition into another timed phase. In that
+            # case it arms a replacement timer before this runner finishes;
+            # never remove that newer task from the registry.
+            if _timers.get(lobby_id) is asyncio.current_task():
+                _timers.pop(lobby_id, None)
 
     _timers[lobby_id] = asyncio.create_task(_runner())
 
 
 def cancel(lobby_id: int) -> None:
     task = _timers.pop(lobby_id, None)
-    if task is not None and not task.done():
+    # Timer-expiry callbacks re-arm the next phase timer themselves. Do not
+    # cancel the task currently running that callback, or its next await
+    # raises ``CancelledError`` and prevents the newly armed timer from
+    # completing its transition.
+    if task is not None and task is not asyncio.current_task() and not task.done():
         task.cancel()

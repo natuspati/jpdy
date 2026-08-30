@@ -22,8 +22,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DEFAULT_API_URL: Final = "http://localhost:8000/api/v1"
-DEFAULT_HEALTH_URL: Final = "http://localhost:8000/api/health"
+DEFAULT_API_URL: Final = "http://localhost:8080/api/v1"
+DEFAULT_HEALTH_URL: Final = "http://localhost:8080/api/health"
 REQUEST_TIMEOUT_SECONDS: Final = 10
 
 

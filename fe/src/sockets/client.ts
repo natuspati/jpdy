@@ -11,5 +11,9 @@ export function createLobbySocket(lobbyId: number, token: string): LobbySocket {
     transports: ['websocket'],
     query: { token },
     autoConnect: false,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 2_000,
   });
 }

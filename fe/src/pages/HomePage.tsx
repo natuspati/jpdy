@@ -2,15 +2,19 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import SignInForm from '@/components/auth/SignInForm';
+import ActiveLobbyList from '@/components/lobby/ActiveLobbyList';
 import CreateLobbyModal from '@/components/lobby/CreateLobbyModal';
-import LobbyList from '@/components/lobby/LobbyList';
+import MyLobbyList from '@/components/lobby/MyLobbyList';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { useAuth } from '@/hooks/useAuth';
+import { useActiveLobbies, useMyLobbies } from '@/hooks/useLobbies';
 
 const HomePage = () => {
   const { isAuthed } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
+  const activeLobbies = useActiveLobbies();
+  const myLobbies = useMyLobbies();
 
   if (!isAuthed) {
     return (
@@ -40,7 +44,18 @@ const HomePage = () => {
           <Button onClick={() => setCreateOpen(true)}>New lobby</Button>
         </div>
       </div>
-      <LobbyList />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <ActiveLobbyList
+          lobbies={activeLobbies.data ?? []}
+          loading={activeLobbies.isLoading}
+          error={activeLobbies.isError}
+        />
+        <MyLobbyList
+          lobbies={myLobbies.data ?? []}
+          loading={myLobbies.isLoading}
+          error={myLobbies.isError}
+        />
+      </div>
       <CreateLobbyModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );

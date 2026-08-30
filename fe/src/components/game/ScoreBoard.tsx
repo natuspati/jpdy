@@ -19,9 +19,7 @@ const ScoreBoard = ({ state, currentUserId, onBan, onUnban }: Props) => {
     state.phase === 'player_answering';
   return (
     <Card className="p-3">
-      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
-        Players
-      </h3>
+      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Players</h3>
       <ul className="space-y-1">
         <li
           className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm ${
@@ -67,7 +65,9 @@ const ScoreBoard = ({ state, currentUserId, onBan, onUnban }: Props) => {
             >
               <span className="flex min-w-0 items-center gap-2">
                 <ConnectionPill status={p.connection_status} />
-                <span className={`truncate font-medium ${p.is_banned ? 'line-through text-slate-500' : ''}`}>
+                <span
+                  className={`truncate font-medium ${p.is_banned ? 'line-through text-slate-500' : ''}`}
+                >
                   {p.username}
                 </span>
                 {labels.length ? (

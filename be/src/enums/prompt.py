@@ -13,3 +13,9 @@ class AnswerTypeEnum(StrEnum):
     IMAGE = auto()
     AUDIO = auto()
     VIDEO = auto()
+
+
+class MediaKindEnum(StrEnum):
+    IMAGE = auto()
+    AUDIO = auto()
+    VIDEO = auto()

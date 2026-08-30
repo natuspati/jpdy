@@ -1,8 +1,6 @@
 services:
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - jpdy_redis_data:/data
     healthcheck:
@@ -25,10 +23,12 @@ services:
       BE_DB_SYNC_DRIVER: sqlite
       BE_DB_NAME: /data/jpdy.db
       BE_REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
+      BE_MEDIA_ROOT: /media
+    expose:
+      - "8000"
     volumes:
       - jpdy_backend_data:/data
+      - jpdy_media_data:/media
     depends_on:
       redis:
         condition: service_healthy
@@ -45,18 +45,33 @@ services:
       retries: 20
       start_period: 10s
 
-  frontend:
+  nginx:
     build:
-      context: ../fe
-    environment:
-      VITE_PROXY_TARGET: http://backend:8000
-      VITE_SOCKET_URL: http://localhost:8000
+      context: ..
+      dockerfile: deployment/nginx/Dockerfile.local
+      args:
+        VITE_API_URL: /api/v1
+        VITE_SOCKET_URL: ""
+        VITE_SOCKET_PATH: /ws
     ports:
-      - "8080:8080"
+      - "8080:80"
+    volumes:
+      - jpdy_media_data:/srv/jpdy-media:ro
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost/api/health | grep -q '\"status\":\"healthy\"'",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
 volumes:
   jpdy_redis_data:
   jpdy_backend_data:
+  jpdy_media_data:

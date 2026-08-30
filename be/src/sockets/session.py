@@ -49,3 +49,29 @@ async def find_sid_for_user(namespace: str, user_id: int) -> str | None:
         if session and session["user_id"] == user_id:
             return sid
     return None
+
+
+async def connected_socket_sessions(
+    namespace: str,
+) -> list[tuple[str, SocketSession]]:
+    """Return valid live sessions in a namespace, skipping stale participants."""
+    sessions: list[tuple[str, SocketSession]] = []
+    for sid, _ in list(sio.manager.get_participants(namespace, None)):
+        session = await get_socket_session(sid, namespace)
+        if session is not None:
+            sessions.append((sid, session))
+    return sessions
+
+
+async def has_other_sid_for_user(
+    namespace: str,
+    user_id: int,
+    excluded_sid: str,
+) -> bool:
+    """Return whether ``user_id`` has another live socket in ``namespace``."""
+    for sid, session in await connected_socket_sessions(namespace):
+        if sid == excluded_sid:
+            continue
+        if session["user_id"] == user_id:
+            return True
+    return False

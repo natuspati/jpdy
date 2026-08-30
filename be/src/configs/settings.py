@@ -1,5 +1,6 @@
 import secrets
 from functools import cached_property
+from pathlib import Path
 from typing import Literal
 
 import sqlalchemy
@@ -51,6 +52,11 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
+
+    # Uploaded prompt media. Browser delivery is always through Nginx at
+    # ``/media/``; FastAPI only validates and writes files in this directory.
+    media_root: Path = Path("media")
+    media_url_prefix: str = "/media"
 
     @cached_property
     def db_url(self) -> sqlalchemy.URL:

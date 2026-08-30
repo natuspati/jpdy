@@ -52,24 +52,27 @@ _FORBIDDEN_CATEGORY = ErrorResponse(
 )
 async def search_prompt_categories(
     filters: Annotated[PromptCategoryFilterSchema, Query()],
+    current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[PromptService, Depends()],
 ) -> PaginatedPromptCategoryWithPromptsInDBSchema:
-    return await service.search_prompt_category(filters=filters)
+    return await service.search_prompt_category(filters=filters, user=current_user)
 
 
 @router.get(
     "/{category_id}",
     responses=generate_responses(
         _UNAUTHORIZED,
+        _FORBIDDEN_CATEGORY,
         _CATEGORY_NOT_FOUND,
     ),
     dependencies=[Depends(get_current_user)],
 )
 async def get_prompt_category(
     category_id: int,
+    current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[PromptService, Depends()],
 ) -> PromptCategoryWithPromptsInDBSchema:
-    return await service.get_prompt_category(category_id)
+    return await service.get_prompt_category(category_id, current_user)
 
 
 @router.post(

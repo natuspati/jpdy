@@ -1,8 +1,8 @@
-# Desired Jeopardy game flow
+# Jeopardy game flow
 
-This is the normative game contract for the local Jeopardy application. The
-server owns all game state and timers; clients render the latest Socket.IO
-state snapshot and do not maintain a parallel game-state machine.
+This is the normative game contract for the local Jeopardy application.
+The server owns game state and timers; clients render the latest Socket.IO
+snapshot and do not maintain a parallel game-state machine.
 
 This document describes the intended **voice-answer** game. Players answer
 through external voice software such as Discord. They do not type answers into
@@ -12,11 +12,13 @@ the application and do not press an answer-submission button.
 
 - The lobby owner is a distinct, non-scoring **host/judge**.
 - Only non-host players select clues and receive scores.
-- Prompt questions and answers are text-only for this MVP.
+- A prompt question and answer reveal can independently be text, image, audio,
+  or video. Every prompt still has canonical text question and answer fields.
 - A player answers verbally after selecting a clue or winning a buzz.
 - The host accepts or rejects the spoken answer directly.
-- The correct answer is private to the host while a clue is active, then is
-  revealed publicly after that clue resolves.
+- Canonical expected answer text is private to host while clue is active, then
+  canonical answer text and optional answer media are revealed publicly after
+  clue resolves.
 - The board is visible only while a player is choosing a clue. An active clue
   replaces the board with a full prompt stage.
 
@@ -36,38 +38,69 @@ created → waiting_start → in_progress → completed
 
 ### Category requirements
 
-- The MVP accepts only `question_type=text` and `answer_type=text`.
+- A lobby must have between one and ten attached categories.
 - A lobby may move from `created` to `waiting_start` only after categories are
   attached.
 - Every attached category must contain exactly five valid prompts with unique
   orders `1..5`.
+- Each prompt has independent `question_type` and `answer_type` values:
+  `text`, `image`, `audio`, or `video`.
+- Text content has no media asset. Non-text content must reference an uploaded
+  media asset owned by the category editor and of matching kind. Canonical
+  question and answer text remain required for every content type.
 - On transition to `waiting_start`, selected categories and prompts are
   snapshotted for the game. Later category edits do not change the lobby.
 
 ### Roster rules
 
-- Before the game starts, authenticated users may join the lobby.
+- Before the game starts, authenticated players join by connecting to the
+  lobby Socket.IO namespace. This creates or refreshes a persistent
+  `LobbyParticipant` record.
 - When a lobby becomes `in_progress`, its player roster is locked:
   - existing players may reconnect and retain their score;
   - new users cannot join;
   - banned users cannot reconnect until unbanned;
   - one account cannot play simultaneously from multiple devices.
 - The host may reconnect and resume judging/control duties.
+- At completion, final player scores and ban status are snapshotted to
+  `LobbyParticipant`. Host and non-banned participants can read lobby details
+  and final ranking without opening a game socket.
+- Host may delete its lobby in any lifecycle state. Server removes persistent
+  lobby data and Redis game state, cancels timer, emits `lobby_deleted`, then
+  disconnects lobby sockets.
+
+### Prompt media
+
+- Category editors upload prompt media through authenticated REST API. FastAPI
+  validates bytes and stores file under generated immutable key; it does not
+  serve file bytes.
+- Supported media:
+  - image: JPEG, PNG, WebP, maximum 10 MB;
+  - audio: MP3, M4A/AAC, Ogg, maximum 20 MB;
+  - video: browser-compatible H.264/AAC MP4, maximum 100 MB.
+- Nginx is browser-facing media server at `/media/{storage_key}`. Prompt data
+  contains generated same-origin reference, never arbitrary external URL.
+- Native browser image, audio, and video controls render media. Audio and
+  video never autoplay.
 
 ## State visibility
 
 ### Public `state_changed`
 
-Every connected client receives a public `GameLobbyState` snapshot:
+Every connected client receives a recipient-specific public `GameLobbyState`
+snapshot:
 
 ```text
-GameLobbyState
+PublicGameLobbyState
 ├─ lobby_id
 ├─ host { user_id, username, connection_status }
 ├─ players[]
 │  └─ { user_id, username, score, connection_status, is_selected, is_banned }
 ├─ categories[]
-│  └─ prompts[] { prompt_id, question, order, is_selected, score_value }
+│  └─ prompts[] {
+│       prompt_id, question, question_type, question_media,
+│       order, is_selected, score_value
+│     }
 ├─ phase
 ├─ current_prompt_id
 ├─ selecting_player_id
@@ -76,11 +109,22 @@ GameLobbyState
 ├─ timer_deadline
 ├─ resolved_prompt_id             # set only in answer_reveal
 ├─ resolved_answer                # set only in answer_reveal
-└─ resolution                     # set only in answer_reveal
+├─ resolved_answer_type           # set only in answer_reveal
+├─ resolved_answer_media          # set only in answer_reveal
+├─ resolution                     # set only in answer_reveal
+└─ latest_sound_cue_id
 ```
 
-Public prompt data never contains an expected `answer` field. The only time
-the correct answer is public is while:
+The host receives the full player roster, including banned rows, so it can
+moderate and unban them. Non-host snapshots omit banned players entirely,
+including their scores, connection state, and active labels. The server never
+broadcasts a broad state frame before these recipient-specific frames.
+
+Public prompt data never contains expected-answer field. `question`,
+`question_type`, and `question_media` are populated only for current active
+prompt; other board prompts expose only their identity, order, spent state,
+and value. Canonical correct answer text and optional answer media are public
+only while:
 
 ```text
 phase = answer_reveal
@@ -118,8 +162,8 @@ field because spoken answers are not transmitted through the application.
 
 ### Internal Redis state
 
-The persisted state contains full prompt data, including expected answers. It
-is never emitted directly to clients.
+Persisted state contains full prompt data: canonical answers, content types,
+and media references. It is never emitted directly to clients.
 
 ## Game phases
 
@@ -151,7 +195,7 @@ waiting_for_players
 - Players wait for the host.
 - The host is the active actor in the UI.
 
-### 2. Choose the starting player
+### 2. Choose next player
 
 Phase:
 
@@ -162,6 +206,10 @@ host_selecting_starting_player
 - The host chooses a connected, non-banned player.
 - That player becomes `selecting_player_id`.
 - The game transitions to `player_selecting_prompt`.
+
+This phase occurs at game start and whenever ban recovery needs the host to
+choose a replacement selector. If no player is currently eligible, it remains
+visible until somebody reconnects or the host unbans somebody.
 
 ### 3. Select a clue
 
@@ -179,6 +227,9 @@ player_selecting_prompt
   - `attempted_player_ids` to an empty list.
 - Transition to `player_answering`.
 - Start the answering timer.
+
+Prompt stage shows canonical question text, which can be an instruction or
+caption for image, audio, or video clue, plus optional question media.
 
 ### 4. Answer by voice; host judges directly
 
@@ -218,6 +269,9 @@ When the host marks the spoken answer wrong:
 4. If another connected, non-banned, unattempted player exists, open buzz.
 5. Otherwise enter `answer_reveal` with `resolution=unanswered`.
 
+The buzz window is ten seconds total. A player who wins it receives a separate
+30-second spoken-answer timer.
+
 The player who originally selected the clue remains the next selector when no
 one answers that clue correctly.
 
@@ -230,6 +284,9 @@ If the answering deadline expires before the host judges:
 3. Clear `answering_player_id`.
 4. Open buzz if an eligible player remains.
 5. Otherwise enter `answer_reveal` with `resolution=expired`.
+
+The resulting buzz window is ten seconds total; it is distinct from the
+30-second answer-attempt timer after a winning buzz.
 
 ### 5. Buzz
 
@@ -270,7 +327,8 @@ answer_reveal
 ```
 
 - The board stays hidden.
-- The full prompt stage shows the question and public correct answer.
+- Full prompt stage shows question text/media and public canonical answer
+  text plus optional answer media.
 - The server starts a short reveal timer; the initial local value is five
   seconds.
 - The client may show a resolution message, such as “Correct”, “No correct
@@ -284,15 +342,34 @@ After the reveal timer expires:
 
 - if unselected prompts remain:
   - clear `resolved_prompt_id`, `resolved_answer`, and `resolution`;
-  - transition to `player_selecting_prompt`;
-  - return the board to the player who should select next;
+  - transition to `player_selecting_prompt` only when saved next selector is
+    connected and non-banned;
+  - otherwise transition to `host_selecting_starting_player` so host chooses
+    next player;
 - if every prompt has been selected:
   - transition to `finished`;
   - clear timers and active IDs;
-  - update the database lobby state to `completed`.
+  - update database lobby state to `completed`;
+  - snapshot final player score, username, and ban status for final ranking.
 
 The final clue always receives its answer-reveal period before the final
 leaderboard appears.
+
+## Ban recovery
+
+Banning always updates both Redis game state and persistent
+`LobbyParticipant.is_banned`, then disconnects target socket.
+
+- Ban current selector in `player_selecting_prompt`: clear active ownership
+  and timer, then enter `host_selecting_starting_player`.
+- Ban active answerer in `player_answering`: leave selected clue spent, do not
+  score or deduct it, clear ownership, then reveal it as `unanswered` for
+  normal five seconds. Reveal expiry enters host player selection.
+- Ban next selector while clue is in `answer_reveal` or `buzz_open`: clear
+  selector ID. Existing eligible buzzers remain able to buzz. After reveal,
+  host chooses next player rather than returning control to banned selector.
+- If banning leaves no eligible buzzer in `buzz_open`, reveal clue immediately
+  as `unanswered`.
 
 ## Timers and deadline enforcement
 
@@ -321,7 +398,7 @@ The server is authoritative:
 | `select_prompt` | current selector | `player_selecting_prompt` |
 | `judge_answer` | host | `player_answering` |
 | `buzz` | eligible non-host player | `buzz_open` |
-| `ban_player` / `unban_player` | host | any non-finished live lobby phase |
+| `ban_player` / `unban_player` | host | no phase restriction while host has active lobby socket |
 
 The desired flow removes these old typed-answer concepts:
 
@@ -345,12 +422,14 @@ must not optimistically mutate game state.
   - `player_selecting_prompt`.
 - Give every category header the same vertical space so prompt rows align
   despite title length.
-- Replace the board with the full text prompt stage in:
+- Replace board with full prompt stage in:
   - `player_answering`;
   - `buzz_open`;
   - `answer_reveal`.
-- Future work may extend the stage to image, audio, and video prompts. The
-  current contract remains text-only.
+- Current prompt provides its text, type, and optional media only while prompt
+  is active. Media controls are native and never autoplay.
+- Canonical answer text and optional answer media remain hidden until
+  `answer_reveal`.
 
 ### Participant and control panel
 
@@ -360,7 +439,7 @@ must not optimistically mutate game state.
 - Highlight the current selector with `SELECTING`.
 - Highlight the host during host action:
   - starting the game;
-  - choosing the starter;
+  - choosing the next player;
   - judging an active spoken answer.
 - Use labels as well as color so the active state is accessible.
 - During `buzz_open`, all non-host players see a large Buzz control in either
@@ -379,3 +458,21 @@ must not optimistically mutate game state.
   `waiting_start`, reaches `finished`, or is otherwise changed through REST.
 - Treat connection, roster-lock, ban, late-join, and invalid-action errors as
   explicit user-facing states.
+- Sound is opt-in for every browser page load. Browser storage records the
+  previous setting and volume, but playback never begins without a new user
+  gesture. Sound failure remains presentation-only.
+
+## Presentation-only sound cues
+
+For qualifying gameplay transitions, the server emits `game_sound_cue` after
+the successful state broadcast. Payload:
+
+```text
+{ cue_id: increasing integer, cue: game_started | clue_selected |
+  buzz_accepted | answer_correct | answer_wrong | answer_expired |
+  answer_revealed | game_completed }
+```
+
+Clients deduplicate `cue_id` values and may miss cues without consequence.
+Sound never changes timers, scores, eligibility, phase transitions, or Socket.IO
+permissions. Audio preferences are local browser presentation settings only.

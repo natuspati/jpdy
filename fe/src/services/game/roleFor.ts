@@ -28,10 +28,7 @@ export function roleFor(state: GameLobbyState, userId: number): Role {
   ) {
     return 'buzzer';
   }
-  if (
-    state.phase === 'player_selecting_prompt' &&
-    state.selecting_player_id === userId
-  ) {
+  if (state.phase === 'player_selecting_prompt' && state.selecting_player_id === userId) {
     return 'selector';
   }
   return 'spectator';

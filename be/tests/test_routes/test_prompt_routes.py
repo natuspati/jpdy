@@ -303,7 +303,7 @@ async def test_update_prompt_modifies_only_supplied_fields(
     assert body["order"] == 1  # unchanged
 
 
-async def test_update_prompt_rejects_non_text_content_types(
+async def test_update_prompt_rejects_media_type_without_asset(
     http_client: AsyncClient,
     authed_user: AuthedUser,
 ):
@@ -316,7 +316,7 @@ async def test_update_prompt_rejects_non_text_content_types(
         headers=authed_user["headers"],
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 async def test_update_prompt_empty_body_rejected_by_one_field_set_mixin(

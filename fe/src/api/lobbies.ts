@@ -1,10 +1,13 @@
 import { z } from 'zod';
 
 import {
+  ActiveLobby,
+  LobbyDetails,
   LobbyFilter,
   LobbyInDB,
   LobbyUpdate,
   LobbyWithCategories,
+  MyLobby,
   PaginatedLobbies,
 } from '@/schemas';
 import { request } from './http';
@@ -14,7 +17,15 @@ export async function searchLobbies(filters: Partial<LobbyFilter>) {
 }
 
 export async function getLobby(id: number) {
-  return request(`/lobby/${id}`, LobbyWithCategories);
+  return request(`/lobby/${id}`, LobbyDetails);
+}
+
+export async function getActiveLobbies() {
+  return request('/lobby/active', z.array(ActiveLobby));
+}
+
+export async function getMyLobbies() {
+  return request('/lobby/mine', z.array(MyLobby));
 }
 
 export async function createLobby() {

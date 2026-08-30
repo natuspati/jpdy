@@ -1,17 +1,21 @@
 import type {
   BanPlayerPayload,
+  GameSoundCuePayload,
   GameLobbyState,
   HostAnswerKey,
   JudgeAnswerPayload,
   SelectPromptPayload,
   SelectStarterPayload,
   SocketErrorPayload,
+  LobbyDeletedPayload,
   UnbanPlayerPayload,
 } from '@/schemas';
 
 export interface ServerToClientEvents {
   state_changed: (state: GameLobbyState) => void;
   host_answer_key: (payload: HostAnswerKey) => void;
+  game_sound_cue: (payload: GameSoundCuePayload) => void;
+  lobby_deleted: (payload: LobbyDeletedPayload) => void;
   error: (payload: SocketErrorPayload) => void;
 }
 

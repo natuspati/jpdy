@@ -6,7 +6,14 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.session import get_db_session, get_redis_session
-from repos import GameStateRepo, LobbyRepo, PromptCategoryRepo, PromptRepo, UserRepo
+from repos import (
+    GameStateRepo,
+    LobbyRepo,
+    MediaAssetRepo,
+    PromptCategoryRepo,
+    PromptRepo,
+    UserRepo,
+)
 
 
 class UnitOfWork:
@@ -25,6 +32,10 @@ class UnitOfWork:
     @cached_property
     def prompt_repo(self) -> PromptRepo:
         return PromptRepo(self._session)
+
+    @cached_property
+    def media_asset_repo(self) -> MediaAssetRepo:
+        return MediaAssetRepo(self._session)
 
     @cached_property
     def prompt_category_repo(self) -> PromptCategoryRepo:

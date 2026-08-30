@@ -1,23 +1,30 @@
 from enums.game import GamePhaseEnum
 from schemas.lobby.game_state import GameLobbyState, HostAnswerKey
-from schemas.socket.events import SocketErrorPayload
+from schemas.socket.events import GameSoundCuePayload, SocketErrorPayload
 from sockets.app import sio
 from sockets.namespace import lobby_namespace
-from sockets.session import find_sid_for_user
+from sockets.session import connected_socket_sessions, find_sid_for_user
 
 STATE_CHANGED_EVENT = "state_changed"
 HOST_ANSWER_KEY_EVENT = "host_answer_key"
 ERROR_EVENT = "error"
+GAME_SOUND_CUE_EVENT = "game_sound_cue"
+LOBBY_DELETED_EVENT = "lobby_deleted"
 
 
 async def broadcast_state(lobby_id: int, state: GameLobbyState) -> None:
-    """Emit a safe state snapshot and the active clue's host-private key."""
+    """Emit a recipient-specific safe snapshot and host-private answer key."""
     namespace = lobby_namespace(lobby_id)
-    await sio.emit(
-        STATE_CHANGED_EVENT,
-        state.public_state().model_dump(mode="json"),
-        namespace=namespace,
-    )
+    player_payload = state.public_state().model_dump(mode="json")
+    host_payload = state.public_state(include_banned_players=True).model_dump(mode="json")
+    for sid, session in await connected_socket_sessions(namespace):
+        payload = host_payload if session["user_id"] == state.host.user_id else player_payload
+        await sio.emit(
+            STATE_CHANGED_EVENT,
+            payload,
+            to=sid,
+            namespace=namespace,
+        )
     await _emit_host_answer_key(namespace, state)
 
 
@@ -67,4 +74,23 @@ async def emit_error(
         payload.model_dump(mode="json"),
         to=sid,
         namespace=namespace,
+    )
+
+
+async def broadcast_sound_cue(
+    lobby_id: int,
+    payload: GameSoundCuePayload,
+) -> None:
+    await sio.emit(
+        GAME_SOUND_CUE_EVENT,
+        payload.model_dump(mode="json"),
+        namespace=lobby_namespace(lobby_id),
+    )
+
+
+async def broadcast_lobby_deleted(lobby_id: int) -> None:
+    await sio.emit(
+        LOBBY_DELETED_EVENT,
+        {"lobby_id": lobby_id},
+        namespace=lobby_namespace(lobby_id),
     )

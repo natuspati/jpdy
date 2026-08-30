@@ -46,9 +46,6 @@ ruff check --fix src tests
 
 Run both commands in this exact order before considering any task complete.
 
-**DO NOT** run pytest suite. There are only integration tests and they take considerable time. I will run tests
-myself.
-
 ### Database compatibility (SQLite + PostgreSQL)
 
 All queries and models **must work on both** SQLite (local) and PostgreSQL (cloud). Follow these rules at all times:
@@ -62,16 +59,16 @@ All queries and models **must work on both** SQLite (local) and PostgreSQL (clou
 - **Booleans:** Use SQLAlchemy `Boolean` type — SQLite stores as 0/1, Postgres as native bool; SQLAlchemy handles the
   mapping.
 - **Migrations:** Use Alembic. Always generate migrations with `--autogenerate` and review them before applying.
-- **Connection strings:** Injected via environment with defaults specified in `be/src/configs/settings.py`.
-  The app must detect the dialect at runtime - do not hardcode either dialect.
+- **Connection strings:** Injected via environment with defaults specified in `be/src/configs/settings.py`. The app must
+  detect the dialect at runtime - do not hardcode either dialect.
 
 ### Code conventions
 
 - Use `async`/`await` throughout (async SQLAlchemy sessions, async FastAPI routes).
 - Pydantic v2 for all request/response schemas.
 - Keep route handlers thin — business logic goes in a `services/` layer.
-- Keep query logic in a `repos/` layer, separate from business logic, preferably return
-  validated Pydantic models (schemas) defined in `schemas/` rather than raw SQLAlchemy models.
+- Keep query logic in a `repos/` layer, separate from business logic, preferably return validated Pydantic models
+  (schemas) defined in `schemas/` rather than raw SQLAlchemy models.
 - Use Unit of Work convention to make operations with database and redis atomic in `datbases/own.py`.
 
 ---

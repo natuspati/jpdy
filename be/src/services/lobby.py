@@ -9,7 +9,6 @@ from configs.constants import (
 )
 from database import UnitOfWork
 from enums.lobby import LobbyStateEnum
-from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
 from errors.request import (
     BadRequestError,
     ForbiddenError,
@@ -21,11 +20,20 @@ from schemas.lobby.base import (
     LobbyUpdateSchema,
 )
 from schemas.lobby.nested import (
+    LobbyActiveListItemSchema,
+    LobbyDetailsSchema,
+    LobbyFinalRankingSchema,
+    LobbyMineListItemSchema,
     LobbyWithCategoriesInDBSchema,
     PaginatedLobbyWithCategoriesInDBSchema,
 )
+from schemas.lobby.participant import LobbyParticipantInDBSchema
 from schemas.user.base import UserPublicSchema
+from services import game_timers
 from services.game import GameService
+from sockets.app import sio
+from sockets.broadcast import broadcast_lobby_deleted
+from sockets.namespace import lobby_namespace
 
 
 class LobbyService:
@@ -35,16 +43,62 @@ class LobbyService:
     async def search_lobbies(
         self,
         filters: LobbyFilterSchema,
+        user: UserPublicSchema,
     ) -> PaginatedLobbyWithCategoriesInDBSchema:
         async with self._uow as uow:
-            return await uow.lobby_repo.search_lobbies(filters=filters)
+            result = await uow.lobby_repo.search_lobbies(filters=filters, user_id=user.id)
+            contents: list[LobbyWithCategoriesInDBSchema] = []
+            for lobby in result.contents:
+                player_count = await self._get_player_count(uow, lobby.id, lobby.state)
+                contents.append(lobby.model_copy(update={"player_count": player_count}))
+            return result.model_copy(update={"contents": contents})
 
-    async def get_lobby(self, lobby_id: int) -> LobbyWithCategoriesInDBSchema:
+    async def get_active_lobbies(self, user: UserPublicSchema) -> list[LobbyActiveListItemSchema]:
+        async with self._uow as uow:
+            return await uow.lobby_repo.select_active_lobbies(user_id=user.id)
+
+    async def get_my_lobbies(self, user: UserPublicSchema) -> list[LobbyMineListItemSchema]:
+        async with self._uow as uow:
+            return await uow.lobby_repo.select_my_lobbies(user_id=user.id)
+
+    async def get_lobby(
+        self,
+        lobby_id: int,
+        user: UserPublicSchema,
+    ) -> LobbyDetailsSchema:
         async with self._uow as uow:
             lobby = await uow.lobby_repo.select_lobby(lobby_id=lobby_id)
-        if lobby is None:
-            raise NotFoundError(f"Lobby {lobby_id} not found")
-        return lobby
+            if lobby is None:
+                raise NotFoundError(f"Lobby {lobby_id} not found")
+
+            is_owner = lobby.owner_id == user.id
+            participant = await uow.lobby_repo.select_participant(
+                lobby_id=lobby_id,
+                user_id=user.id,
+            )
+            is_participant = participant is not None and not participant.is_banned
+
+            if lobby.state == LobbyStateEnum.CREATED and not is_owner:
+                raise NotFoundError(f"Lobby {lobby_id} not found")
+            if lobby.state == LobbyStateEnum.COMPLETED and not (is_owner or is_participant):
+                raise NotFoundError(f"Lobby {lobby_id} not found")
+
+            player_count = await self._get_player_count(uow, lobby.id, lobby.state)
+            final_rankings = None
+            if lobby.state == LobbyStateEnum.COMPLETED:
+                final_rankings = self._rank_final_scores(
+                    await uow.lobby_repo.select_final_rankings(lobby_id),
+                )
+
+        return LobbyDetailsSchema.model_validate(
+            lobby.model_dump()
+            | {
+                "player_count": player_count,
+                "is_owner": is_owner,
+                "is_participant": is_participant,
+                "final_rankings": final_rankings,
+            },
+        )
 
     async def create_lobby(self, owner_id: int) -> LobbyInDBSchema:
         async with self._uow as uow:
@@ -97,12 +151,12 @@ class LobbyService:
         user: UserPublicSchema,
     ) -> None:
         async with self._uow as uow:
-            lobby = await self._ensure_owned_lobby(uow, lobby_id, user)
-            if lobby.state != LobbyStateEnum.CREATED:
-                raise BadRequestError(
-                    "Only lobbies in the CREATED state can be deleted",
-                )
+            await self._ensure_owned_lobby(uow, lobby_id, user)
             await uow.lobby_repo.delete_lobby(lobby_id=lobby_id)
+            await uow.game_state_repo.delete_state(lobby_id)
+        game_timers.cancel(lobby_id)
+        await broadcast_lobby_deleted(lobby_id)
+        await _disconnect_lobby_sockets(lobby_id)
 
     @classmethod
     async def _ensure_owned_lobby(
@@ -206,16 +260,52 @@ class LobbyService:
                 and all(order is not None for order in orders)
                 and set(orders) == expected_orders
             )
-            is_text_only = all(
-                prompt.question_type == QuestionTypeEnum.TEXT
-                and prompt.answer_type == AnswerTypeEnum.TEXT
-                for prompt in prompts
-            )
-            if not has_valid_orders or not is_text_only:
+            if not has_valid_orders:
                 incomplete_categories.append(category.id)
 
         if incomplete_categories:
             raise BadRequestError(
                 "Every lobby category must contain exactly five uniquely ordered "
-                f"text prompts; invalid categories: {incomplete_categories}",
+                f"prompts; invalid categories: {incomplete_categories}",
             )
+
+    @classmethod
+    async def _get_player_count(
+        cls,
+        uow: UnitOfWork,
+        lobby_id: int,
+        lobby_state: LobbyStateEnum,
+    ) -> int:
+        if lobby_state == LobbyStateEnum.CREATED:
+            return 0
+        return await uow.lobby_repo.select_eligible_player_count(lobby_id)
+
+    @classmethod
+    def _rank_final_scores(
+        cls,
+        participants: list[LobbyParticipantInDBSchema],
+    ) -> list[LobbyFinalRankingSchema]:
+        rankings: list[LobbyFinalRankingSchema] = []
+        previous_score: int | None = None
+        rank = 0
+        for index, participant in enumerate(participants, start=1):
+            assert participant.final_score is not None
+            if participant.final_score != previous_score:
+                rank = index
+                previous_score = participant.final_score
+            rankings.append(
+                LobbyFinalRankingSchema(
+                    user_id=participant.user_id,
+                    username=participant.username_snapshot,
+                    final_score=participant.final_score,
+                    is_banned=participant.is_banned,
+                    rank=rank,
+                ),
+            )
+        return rankings
+
+
+async def _disconnect_lobby_sockets(lobby_id: int) -> None:
+    namespace = lobby_namespace(lobby_id)
+    for sid, _ in list(sio.manager.get_participants(namespace, None)):
+        await sio.disconnect(sid, namespace=namespace)

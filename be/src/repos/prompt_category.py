@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
-from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
 from errors.request import BadRequestError
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
@@ -66,16 +65,6 @@ class PromptCategoryRepo:
             .correlate(PromptCategory)
             .scalar_subquery()
         )
-        text_prompt_count_subq = (
-            select(func.count(Prompt.id))
-            .where(
-                Prompt.category_id == PromptCategory.id,
-                Prompt.question_type == QuestionTypeEnum.TEXT,
-                Prompt.answer_type == AnswerTypeEnum.TEXT,
-            )
-            .correlate(PromptCategory)
-            .scalar_subquery()
-        )
 
         conditions = []
         if filters.ids is not None:
@@ -94,7 +83,6 @@ class PromptCategoryRepo:
                     [
                         total_prompt_count_subq == NUM_PROMPTS_IN_CATEGORY,
                         valid_prompt_count_subq == NUM_PROMPTS_IN_CATEGORY,
-                        text_prompt_count_subq == NUM_PROMPTS_IN_CATEGORY,
                         unique_order_count_subq == NUM_PROMPTS_IN_CATEGORY,
                     ],
                 )
@@ -103,7 +91,6 @@ class PromptCategoryRepo:
                     or_(
                         total_prompt_count_subq != NUM_PROMPTS_IN_CATEGORY,
                         valid_prompt_count_subq != NUM_PROMPTS_IN_CATEGORY,
-                        text_prompt_count_subq != NUM_PROMPTS_IN_CATEGORY,
                         unique_order_count_subq != NUM_PROMPTS_IN_CATEGORY,
                     ),
                 )
@@ -114,7 +101,10 @@ class PromptCategoryRepo:
         total = (await self._session.execute(total_query)).scalar_one()
 
         paginated_query = (
-            base_query.options(selectinload(PromptCategory.prompts))
+            base_query.options(
+                selectinload(PromptCategory.prompts).selectinload(Prompt.question_media_asset),
+                selectinload(PromptCategory.prompts).selectinload(Prompt.answer_media_asset),
+            )
             .order_by(PromptCategory.updated_at.desc(), PromptCategory.id.desc())
             .limit(filters.limit)
             .offset(filters.offset)
@@ -142,7 +132,10 @@ class PromptCategoryRepo:
         query = (
             select(PromptCategory)
             .where(PromptCategory.id == category_id)
-            .options(selectinload(PromptCategory.prompts))
+            .options(
+                selectinload(PromptCategory.prompts).selectinload(Prompt.question_media_asset),
+                selectinload(PromptCategory.prompts).selectinload(Prompt.answer_media_asset),
+            )
         )
         category = (await self._session.execute(query)).scalar_one_or_none()
         return validate_model(category, PromptCategoryWithPromptsInDBSchema)

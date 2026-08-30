@@ -19,7 +19,12 @@ def _get_free_port() -> int:
 
 @pytest.fixture(scope="session")
 def socket_server_url(app) -> Generator[str]:
-    port = _get_free_port()
+    try:
+        port = _get_free_port()
+    except PermissionError as error:
+        pytest.skip(
+            f"Socket.IO integration server requires loopback bind permission: {error}",
+        )
     config = uvicorn.Config(
         app=app,
         host="127.0.0.1",

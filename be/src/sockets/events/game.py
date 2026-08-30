@@ -9,6 +9,7 @@ from errors.request import BadRequestError, ForbiddenError, NotFoundError
 from schemas.lobby.game_state import GameLobbyState
 from schemas.socket.events import (
     BanPlayerPayload,
+    GameSoundCueName,
     JudgeAnswerPayload,
     SelectPromptPayload,
     SelectStarterPayload,
@@ -16,7 +17,7 @@ from schemas.socket.events import (
 )
 from services.game import GameService
 from sockets.app import sio
-from sockets.broadcast import broadcast_state, emit_error
+from sockets.broadcast import broadcast_sound_cue, broadcast_state, emit_error
 from sockets.namespace import parse_lobby_namespace
 from sockets.session import find_sid_for_user, get_socket_session
 from sockets.timer_hooks import arm_timer_if_needed
@@ -58,6 +59,7 @@ async def _run_event[T: pydantic.BaseModel](
     payload: Any,
     payload_schema: type[T] | None,
     action: Callable[[GameService, int, int, T | None], Awaitable[GameLobbyState]],
+    sound_cues: Callable[[GameLobbyState, T | None], list[GameSoundCueName]] | None = None,
 ) -> bool:
     """
     Validate the payload, run ``action`` inside a fresh UoW, broadcast the
@@ -94,7 +96,19 @@ async def _run_event[T: pydantic.BaseModel](
 
     await broadcast_state(lobby_id, state)
     arm_timer_if_needed(lobby_id, state)
+    if sound_cues is not None:
+        for cue in sound_cues(state, validated):
+            await _emit_sound_cue(lobby_id, cue)
     return True
+
+
+async def _emit_sound_cue(lobby_id: int, cue: GameSoundCueName) -> None:
+    try:
+        async with build_uow() as uow:
+            payload = await GameService(uow).issue_sound_cue(lobby_id, cue)
+        await broadcast_sound_cue(lobby_id, payload)
+    except Exception:
+        _logger.exception("Failed to emit %s sound cue for lobby %s", cue, lobby_id)
 
 
 @sio.on("start_game", namespace="*")
@@ -107,7 +121,14 @@ async def on_start_game(namespace: str, sid: str, _data: Any = None) -> None:
     ) -> GameLobbyState:
         return await service.start_game(lobby_id=lobby_id, user_id=user_id)
 
-    await _run_event(namespace, sid, None, None, _action)
+    await _run_event(
+        namespace,
+        sid,
+        None,
+        None,
+        _action,
+        lambda _state, _payload: [GameSoundCueName.GAME_STARTED],
+    )
 
 
 @sio.on("select_starter", namespace="*")
@@ -143,7 +164,14 @@ async def on_select_prompt(namespace: str, sid: str, data: Any = None) -> None:
             payload=payload,
         )
 
-    await _run_event(namespace, sid, data, SelectPromptPayload, _action)
+    await _run_event(
+        namespace,
+        sid,
+        data,
+        SelectPromptPayload,
+        _action,
+        lambda _state, _payload: [GameSoundCueName.CLUE_SELECTED],
+    )
 
 
 @sio.on("judge_answer", namespace="*")
@@ -161,7 +189,19 @@ async def on_judge_answer(namespace: str, sid: str, data: Any = None) -> None:
             payload=payload,
         )
 
-    await _run_event(namespace, sid, data, JudgeAnswerPayload, _action)
+    def _cues(
+        state: GameLobbyState,
+        payload: JudgeAnswerPayload | None,
+    ) -> list[GameSoundCueName]:
+        assert payload is not None
+        result = [
+            GameSoundCueName.ANSWER_CORRECT if payload.correct else GameSoundCueName.ANSWER_WRONG,
+        ]
+        if state.phase.value == "answer_reveal":
+            result.append(GameSoundCueName.ANSWER_REVEALED)
+        return result
+
+    await _run_event(namespace, sid, data, JudgeAnswerPayload, _action, _cues)
 
 
 @sio.on("buzz", namespace="*")
@@ -174,7 +214,14 @@ async def on_buzz(namespace: str, sid: str, _data: Any = None) -> None:
     ) -> GameLobbyState:
         return await service.buzz(lobby_id=lobby_id, user_id=user_id)
 
-    await _run_event(namespace, sid, None, None, _action)
+    await _run_event(
+        namespace,
+        sid,
+        None,
+        None,
+        _action,
+        lambda _state, _payload: [GameSoundCueName.BUZZ_ACCEPTED],
+    )
 
 
 @sio.on("ban_player", namespace="*")

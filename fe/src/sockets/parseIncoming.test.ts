@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildGameState } from '@/test/fixtures/gameState';
-import {
-  parseHostAnswerKey,
-  parseSocketError,
-  parseStateChanged,
-} from './parseIncoming';
+import { parseHostAnswerKey, parseSocketError, parseStateChanged } from './parseIncoming';
 
 describe('parseStateChanged', () => {
   it('accepts a valid GameLobbyState', () => {
@@ -29,7 +25,8 @@ describe('parseStateChanged', () => {
 
   it('rejects a player frame that leaks an expected answer', () => {
     const state = buildGameState();
-    const prompt = state.categories[0].prompts[0] as typeof state.categories[0]['prompts'][number] & {
+    const prompt = state.categories[0]
+      .prompts[0] as (typeof state.categories)[0]['prompts'][number] & {
       answer: string;
     };
     prompt.answer = 'secret';

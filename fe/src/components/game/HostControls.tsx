@@ -39,18 +39,16 @@ const HostControls = ({ state, currentUserId, onStart, onSelectStarter }: Props)
     );
     return (
       <Card className="space-y-2">
-        <p className="text-sm font-semibold text-slate-300">Pick a starter</p>
+        <p className="text-sm font-semibold text-slate-300">Choose next player</p>
         {eligible.length === 0 ? (
-          <p className="text-sm text-slate-400">No eligible players.</p>
+          <p className="text-sm text-slate-400">
+            Waiting for a player to reconnect or be unbanned.
+          </p>
         ) : (
           <ul className="space-y-1">
             {eligible.map((p) => (
               <li key={p.user_id}>
-                <Button
-                  fullWidth
-                  variant="secondary"
-                  onClick={() => onSelectStarter(p.user_id)}
-                >
+                <Button fullWidth variant="secondary" onClick={() => onSelectStarter(p.user_id)}>
                   {p.username}
                 </Button>
               </li>

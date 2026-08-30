@@ -34,9 +34,7 @@ describe('useLobbySocket', () => {
   it('does not open the Strict Mode probe socket', () => {
     const probeSocket = createSocket();
     const liveSocket = createSocket();
-    vi.mocked(createLobbySocket)
-      .mockReturnValueOnce(probeSocket)
-      .mockReturnValueOnce(liveSocket);
+    vi.mocked(createLobbySocket).mockReturnValueOnce(probeSocket).mockReturnValueOnce(liveSocket);
 
     const queryClient = new QueryClient();
     const Wrapper = ({ children }: PropsWithChildren) => (
@@ -45,10 +43,9 @@ describe('useLobbySocket', () => {
       </StrictMode>
     );
 
-    const { unmount } = renderHook(
-      () => useLobbySocket({ lobbyId: 7, token: 'test-token' }),
-      { wrapper: Wrapper },
-    );
+    const { unmount } = renderHook(() => useLobbySocket({ lobbyId: 7, token: 'test-token' }), {
+      wrapper: Wrapper,
+    });
 
     expect(createLobbySocket).toHaveBeenCalledTimes(2);
     expect(probeSocket.disconnect).toHaveBeenCalledOnce();

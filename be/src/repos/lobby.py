@@ -1,17 +1,23 @@
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import and_, case, delete, exists, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.selectable import ScalarSelect
 
 from enums.lobby import LobbyStateEnum
-from models.lobby import Lobby, LobbyPromptCategory
+from models.lobby import Lobby, LobbyParticipant, LobbyPromptCategory
+from models.prompt import Prompt
 from models.prompt_category import PromptCategory
 from models.user import User
 from schemas.lobby.base import LobbyFilterSchema, LobbyInDBSchema
 from schemas.lobby.nested import (
+    LobbyActiveListItemSchema,
+    LobbyMineListItemSchema,
     LobbyWithCategoriesInDBSchema,
     LobbyWithCategoryPromptsInDBSchema,
     PaginatedLobbyWithCategoriesInDBSchema,
 )
+from schemas.lobby.participant import LobbyParticipantInDBSchema
+from schemas.user.base import UserPublicSchema
 from utils.model_validation import validate_model
 
 
@@ -22,6 +28,7 @@ class LobbyRepo:
     async def search_lobbies(
         self,
         filters: LobbyFilterSchema,
+        user_id: int,
     ) -> PaginatedLobbyWithCategoriesInDBSchema:
         """
         Search lobbies with pagination, returning each lobby with its joined
@@ -31,6 +38,9 @@ class LobbyRepo:
         :return: page of lobbies with categories plus total count
         """
         conditions = []
+        conditions.append(
+            (Lobby.state != LobbyStateEnum.CREATED) | (Lobby.owner_id == user_id),
+        )
         if filters.ids is not None:
             conditions.append(Lobby.id.in_(filters.ids))
         if filters.owner_ids is not None:
@@ -91,6 +101,184 @@ class LobbyRepo:
         lobby = (await self._session.execute(query)).scalar_one_or_none()
         return validate_model(lobby, LobbyWithCategoriesInDBSchema)
 
+    async def select_active_lobbies(self, user_id: int) -> list[LobbyActiveListItemSchema]:
+        player_count = _eligible_player_count_query()
+        participant_exists = exists(
+            select(LobbyParticipant.id).where(
+                LobbyParticipant.lobby_id == Lobby.id,
+                LobbyParticipant.user_id == user_id,
+            ),
+        )
+        query = (
+            select(
+                Lobby.id.label("id"),
+                User.username.label("host_username"),
+                player_count.label("player_count"),
+                Lobby.state.label("state"),
+            )
+            .join(User, Lobby.owner_id == User.id)
+            .where(
+                Lobby.state == LobbyStateEnum.WAITING_START,
+                Lobby.owner_id != user_id,
+                ~participant_exists,
+            )
+            .order_by(Lobby.updated_at.desc(), Lobby.id.desc())
+        )
+        rows = (await self._session.execute(query)).all()
+        return validate_model(rows, LobbyActiveListItemSchema)
+
+    async def select_my_lobbies(self, user_id: int) -> list[LobbyMineListItemSchema]:
+        participant = LobbyParticipant
+        player_count = _eligible_player_count_query()
+        is_owner = case((Lobby.owner_id == user_id, True), else_=False)
+        is_participant = case(
+            (
+                and_(
+                    participant.user_id.is_not(None),
+                    participant.is_banned.is_(False),
+                ),
+                True,
+            ),
+            else_=False,
+        )
+        query = (
+            select(
+                Lobby.id.label("id"),
+                Lobby.owner_id.label("owner_id"),
+                User.username.label("host_username"),
+                player_count.label("player_count"),
+                Lobby.state.label("state"),
+                Lobby.created_at.label("created_at"),
+                Lobby.updated_at.label("updated_at"),
+                is_owner.label("is_owner"),
+                is_participant.label("is_participant"),
+            )
+            .outerjoin(User, Lobby.owner_id == User.id)
+            .outerjoin(
+                participant,
+                and_(
+                    participant.lobby_id == Lobby.id,
+                    participant.user_id == user_id,
+                ),
+            )
+            .where(
+                or_(
+                    Lobby.owner_id == user_id,
+                    and_(
+                        participant.user_id.is_not(None),
+                        participant.is_banned.is_(False),
+                    ),
+                ),
+            )
+            .order_by(Lobby.updated_at.desc(), Lobby.id.desc())
+        )
+        rows = (await self._session.execute(query)).all()
+        return validate_model(rows, LobbyMineListItemSchema)
+
+    async def select_eligible_player_count(self, lobby_id: int) -> int:
+        query = select(func.count(LobbyParticipant.id)).where(
+            LobbyParticipant.lobby_id == lobby_id,
+            LobbyParticipant.is_banned.is_(False),
+        )
+        return (await self._session.execute(query)).scalar_one()
+
+    async def select_participant(
+        self,
+        lobby_id: int,
+        user_id: int,
+    ) -> LobbyParticipantInDBSchema | None:
+        query = select(LobbyParticipant).where(
+            LobbyParticipant.lobby_id == lobby_id,
+            LobbyParticipant.user_id == user_id,
+        )
+        participant = (await self._session.execute(query)).scalar_one_or_none()
+        return validate_model(participant, LobbyParticipantInDBSchema)
+
+    async def ensure_participant(
+        self,
+        lobby_id: int,
+        user: UserPublicSchema,
+    ) -> LobbyParticipantInDBSchema:
+        participant = await self.select_participant(lobby_id=lobby_id, user_id=user.id)
+        if participant is not None:
+            if participant.username_snapshot != user.username:
+                await self._session.execute(
+                    update(LobbyParticipant)
+                    .where(LobbyParticipant.id == participant.id)
+                    .values(username_snapshot=user.username),
+                )
+                return participant.model_copy(update={"username_snapshot": user.username})
+            return participant
+
+        stmt = (
+            insert(LobbyParticipant)
+            .values(
+                lobby_id=lobby_id,
+                user_id=user.id,
+                username_snapshot=user.username,
+            )
+            .returning(LobbyParticipant)
+        )
+        inserted = (await self._session.execute(stmt)).scalar_one()
+        return validate_model(inserted, LobbyParticipantInDBSchema)
+
+    async def update_participant_ban(
+        self,
+        lobby_id: int,
+        user_id: int,
+        is_banned: bool,
+    ) -> bool:
+        result = await self._session.execute(
+            update(LobbyParticipant)
+            .where(
+                LobbyParticipant.lobby_id == lobby_id,
+                LobbyParticipant.user_id == user_id,
+            )
+            .values(is_banned=is_banned),
+        )
+        return result.rowcount > 0
+
+    async def snapshot_final_results(
+        self,
+        lobby_id: int,
+        players: list[tuple[int, str, int, bool]],
+    ) -> None:
+        for user_id, username, score, is_banned in players:
+            participant = await self.select_participant(lobby_id=lobby_id, user_id=user_id)
+            if participant is None:
+                participant = await self.ensure_participant(
+                    lobby_id=lobby_id,
+                    user=UserPublicSchema(id=user_id, username=username),
+                )
+            await self._session.execute(
+                update(LobbyParticipant)
+                .where(LobbyParticipant.id == participant.id)
+                .values(
+                    username_snapshot=username,
+                    is_banned=is_banned,
+                    final_score=score,
+                ),
+            )
+
+    async def select_final_rankings(
+        self,
+        lobby_id: int,
+    ) -> list[LobbyParticipantInDBSchema]:
+        query = (
+            select(LobbyParticipant)
+            .where(
+                LobbyParticipant.lobby_id == lobby_id,
+                LobbyParticipant.final_score.is_not(None),
+            )
+            .order_by(
+                LobbyParticipant.final_score.desc(),
+                LobbyParticipant.username_snapshot.asc(),
+                LobbyParticipant.id.asc(),
+            )
+        )
+        rows = (await self._session.execute(query)).scalars().all()
+        return validate_model(rows, LobbyParticipantInDBSchema)
+
     async def select_lobby_with_prompts(
         self,
         lobby_id: int,
@@ -109,9 +297,16 @@ class LobbyRepo:
             .where(Lobby.id == lobby_id)
             .options(
                 selectinload(Lobby.owner),
-                selectinload(Lobby.prompt_categories).selectinload(
+                selectinload(Lobby.prompt_categories)
+                .selectinload(
                     PromptCategory.prompts,
-                ),
+                )
+                .selectinload(Prompt.question_media_asset),
+                selectinload(Lobby.prompt_categories)
+                .selectinload(
+                    PromptCategory.prompts,
+                )
+                .selectinload(Prompt.answer_media_asset),
             )
         )
         lobby = (await self._session.execute(query)).scalar_one_or_none()
@@ -197,3 +392,15 @@ class LobbyRepo:
                 insert(LobbyPromptCategory),
                 [{"lobby_id": lobby_id, "prompt_category_id": cid} for cid in category_ids],
             )
+
+
+def _eligible_player_count_query() -> ScalarSelect[int]:
+    return (
+        select(func.count(LobbyParticipant.id))
+        .where(
+            LobbyParticipant.lobby_id == Lobby.id,
+            LobbyParticipant.is_banned.is_(False),
+        )
+        .correlate(Lobby)
+        .scalar_subquery()
+    )

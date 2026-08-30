@@ -27,6 +27,20 @@ describe('FinalLeaderboard', () => {
     expect(screen.getByText(state.host.username)).toBeInTheDocument();
   });
 
+  it('uses live roster ordering for banned rows', () => {
+    const state = buildGameState({
+      players: [
+        { user_id: 2, username: 'banned', score: 1_000, is_banned: true },
+        { user_id: 3, username: 'active', score: 100 },
+      ],
+    });
+    render(<FinalLeaderboard state={state} />);
+
+    const items = screen.getAllByRole('listitem').map((item) => item.textContent ?? '');
+    expect(items[0]).toContain('active');
+    expect(items[1]).toContain('banned');
+  });
+
   it('explains an empty completed board', () => {
     const state = buildGameState({ players: [] });
     render(<FinalLeaderboard state={state} />);

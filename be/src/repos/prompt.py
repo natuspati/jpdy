@@ -1,5 +1,6 @@
-from sqlalchemy import delete, insert, update
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from models.prompt import Prompt
 from schemas.prompt.prompt import (
@@ -29,10 +30,14 @@ class PromptRepo:
         :return: the inserted prompt as ``PromptInDBSchema``
         """
         stmt = (
-            insert(Prompt).values(category_id=category_id, **schema.model_dump()).returning(Prompt)
+            insert(Prompt)
+            .values(category_id=category_id, **schema.model_dump())
+            .returning(Prompt.id)
         )
-        prompt = (await self._session.execute(stmt)).scalar_one()
-        return validate_model(prompt, PromptInDBSchema)
+        prompt_id = (await self._session.execute(stmt)).scalar_one()
+        prompt = await self.select_prompt(prompt_id)
+        assert prompt is not None
+        return prompt
 
     async def update_prompt(
         self,
@@ -50,7 +55,21 @@ class PromptRepo:
         :return: the updated prompt, or ``None`` if no prompt matches
         """
         values = schema.model_dump(exclude_unset=True)
-        stmt = update(Prompt).where(Prompt.id == prompt_id).values(**values).returning(Prompt)
+        stmt = update(Prompt).where(Prompt.id == prompt_id).values(**values).returning(Prompt.id)
+        updated_id = (await self._session.execute(stmt)).scalar_one_or_none()
+        if updated_id is None:
+            return None
+        return await self.select_prompt(updated_id)
+
+    async def select_prompt(self, prompt_id: int) -> PromptInDBSchema | None:
+        stmt = (
+            select(Prompt)
+            .where(Prompt.id == prompt_id)
+            .options(
+                selectinload(Prompt.question_media_asset),
+                selectinload(Prompt.answer_media_asset),
+            )
+        )
         prompt = (await self._session.execute(stmt)).scalar_one_or_none()
         return validate_model(prompt, PromptInDBSchema)
 

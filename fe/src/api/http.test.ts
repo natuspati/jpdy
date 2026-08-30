@@ -39,11 +39,12 @@ describe('api/http request()', () => {
   });
 
   it('throws ApiError on non-2xx and parses the BE error body', async () => {
-    mockFetch(async () =>
-      new Response(JSON.stringify({ detail: 'nope' }), {
-        status: 403,
-        headers: { 'content-type': 'application/json' },
-      }),
+    mockFetch(
+      async () =>
+        new Response(JSON.stringify({ detail: 'nope' }), {
+          status: 403,
+          headers: { 'content-type': 'application/json' },
+        }),
     );
     await expect(request('/x', SampleSchema)).rejects.toBeInstanceOf(ApiError);
     try {
@@ -57,11 +58,12 @@ describe('api/http request()', () => {
   });
 
   it('throws invalid_response when the body does not match the schema', async () => {
-    mockFetch(async () =>
-      new Response(JSON.stringify({ ok: 'not-a-bool' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
+    mockFetch(
+      async () =>
+        new Response(JSON.stringify({ ok: 'not-a-bool' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
     );
     try {
       await request('/x', SampleSchema);
@@ -78,11 +80,12 @@ describe('api/http request()', () => {
       userId: 1,
       expiresAt: Date.now() + 100_000,
     });
-    mockFetch(async () =>
-      new Response(JSON.stringify({ detail: 'expired' }), {
-        status: 401,
-        headers: { 'content-type': 'application/json' },
-      }),
+    mockFetch(
+      async () =>
+        new Response(JSON.stringify({ detail: 'expired' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        }),
     );
     await expect(request('/x', SampleSchema)).rejects.toBeInstanceOf(ApiError);
     expect(useAuthStore.getState().token).toBeNull();

@@ -1,6 +1,7 @@
 # Jeopardy local-play guide
 
-This repository contains a text-only Jeopardy MVP:
+This repository contains a Jeopardy web app with text, image, audio, and
+video prompts:
 
 - `be/` — FastAPI, SQLite, Redis, Socket.IO
 - `fe/` — React, TypeScript, Vite
@@ -38,17 +39,14 @@ the local Colima setup. If your Docker CLI has the Compose v2 plugin, use
 
 This starts every local runtime dependency:
 
-- frontend at `http://localhost:8080`
-- backend at `http://localhost:8000`
-- backend health endpoint at `http://localhost:8000/api/health`
-- Redis at `localhost:6379`
+- app, REST API, Socket.IO, built assets, and uploaded media at `http://localhost:8080`
+- backend, Redis, SQLite, and media storage remain private Compose services
 
-The backend waits for Redis, applies Alembic migrations to its named SQLite
-volume, and exposes a health check. The frontend waits for that health check
-and proxies REST `/api` requests to the backend. Socket.IO connects directly
-to `http://localhost:8000` on its `/ws` path, avoiding the Vite development
-server's WebSocket proxy. Redis persists in `jpdy_redis_data`; SQLite persists
-in `jpdy_backend_data`.
+Nginx is sole browser entry point. It serves built React `/assets/`, immutable
+uploaded `/media/` files, SPA routes, and proxies `/api/` plus Socket.IO
+`/ws/` to FastAPI. FastAPI validates uploads but does not serve media bytes.
+Redis persists in `jpdy_redis_data`, SQLite in `jpdy_backend_data`, and
+uploaded prompt media in `jpdy_media_data`.
 
 ### 2. Seed local users and categories
 
@@ -99,6 +97,19 @@ points. Once the host starts play, the roster locks: existing players may
 reconnect, but new users cannot join. Banned users cannot reconnect until
 unbanned.
 
+## Prompt media and sound
+
+- Category owners can set question and answer-reveal types independently:
+  text, image, audio, or video.
+- Every prompt still requires canonical answer text. It remains host-private
+  during an active clue and becomes public during answer reveal.
+- Uploaded bytes are validated before storage. Supported formats: JPEG/PNG/WebP
+  images up to 10 MB; MP3/M4A/AAC/Ogg audio up to 20 MB; MP4 video up to 100 MB.
+- Nginx serves immutable assets at same-origin `/media/{key}` URLs. Do not put
+  uploaded files in the database or link arbitrary external URLs.
+- Game sound starts disabled for every page load. Each browser user enables it
+  independently, then has one **Game volume** control.
+
 ## State and answer visibility
 
 Gameplay state is server-authoritative and replaced wholesale after each
@@ -140,9 +151,9 @@ bun install
 bun run dev
 ```
 
-The example backend environment enables startup migrations. The frontend's
-`VITE_PROXY_TARGET` defaults to `http://localhost:8000`, while Compose
-overrides it with the internal backend service address.
+The example backend environment enables startup migrations. Native Vite
+development uses `VITE_SOCKET_URL=http://localhost:8000`; Compose leaves it
+empty so clients use same-origin Nginx.
 
 ## Reset local data
 
@@ -172,10 +183,10 @@ Start Redis and the backend again; with the example `be/.env`, Alembic will
 recreate the SQLite schema automatically. Deleting the database also removes
 registered local accounts and authored categories.
 
-## MVP scope
+## Current scope
 
-Prompts are text-only for this version. The underlying content-type columns
-remain in the database for a future media extension, but the API accepts only
-`question_type=text` and `answer_type=text`, and the UI exposes only text
-inputs for prompt authoring. Future prompt-stage support may add image, audio,
-and video content; it is out of scope for the current MVP.
+Prompt questions and answer reveals each support text, image, audio, or video.
+Every prompt still requires canonical question and expected-answer text for
+instructions, host judgment, and the public reveal. See
+[`GAME_FLOW.md`](GAME_FLOW.md) for gameplay, visibility, media, timer, and
+sound-cue contracts.

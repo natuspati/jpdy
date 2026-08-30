@@ -1,30 +1,36 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { createLobby, deleteLobby, getLobby, searchLobbies, updateLobby } from '@/api/lobbies';
+import {
+  createLobby,
+  deleteLobby,
+  getActiveLobbies,
+  getLobby,
+  getMyLobbies,
+  updateLobby,
+} from '@/api/lobbies';
 import { ApiError } from '@/api/errors';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuth } from '@/hooks/useAuth';
-import type { LobbyFilter, LobbyUpdate } from '@/schemas';
+import type { LobbyUpdate } from '@/schemas';
 import { toastError, toastSuccess } from '@/store/toastStore';
 
-export function useJoinableLobbies(filters: Partial<LobbyFilter> = {}) {
+export function useActiveLobbies() {
   const { isAuthed } = useAuth();
-  const merged: Partial<LobbyFilter> = { states: ['waiting_start'], size: 50, ...filters };
   return useQuery({
-    queryKey: queryKeys.lobbies.list(merged),
-    queryFn: () => searchLobbies(merged),
+    queryKey: queryKeys.lobbies.active(),
+    queryFn: getActiveLobbies,
     enabled: isAuthed,
     refetchInterval: 10_000,
   });
 }
 
 export function useMyLobbies() {
-  const { userId, isAuthed } = useAuth();
-  const filters: Partial<LobbyFilter> = userId ? { owner_ids: [userId], size: 50 } : {};
+  const { isAuthed } = useAuth();
   return useQuery({
-    queryKey: queryKeys.lobbies.list({ ...filters, scope: 'mine' } as Partial<LobbyFilter>),
-    queryFn: () => searchLobbies(filters),
-    enabled: isAuthed && userId !== null,
+    queryKey: queryKeys.lobbies.mine(),
+    queryFn: getMyLobbies,
+    enabled: isAuthed,
+    refetchInterval: 10_000,
   });
 }
 
@@ -50,8 +56,7 @@ export function useCreateLobby() {
 export function useUpdateLobby() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: LobbyUpdate }) =>
-      updateLobby(id, payload),
+    mutationFn: ({ id, payload }: { id: number; payload: LobbyUpdate }) => updateLobby(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.lobbies.all() });
     },

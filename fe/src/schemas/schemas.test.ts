@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildGameState } from '@/test/fixtures/gameState';
 import {
   GameLobbyState,
+  LobbyDetails,
   LobbyInDB,
   PromptInDB,
   TokenResponse,
@@ -16,9 +17,7 @@ describe('schemas (round-trip)', () => {
   });
 
   it('TokenResponse requires access_token + token_type', () => {
-    expect(
-      TokenResponse.safeParse({ access_token: 't', token_type: 'bearer' }).success,
-    ).toBe(true);
+    expect(TokenResponse.safeParse({ access_token: 't', token_type: 'bearer' }).success).toBe(true);
     expect(TokenResponse.safeParse({ access_token: 't' }).success).toBe(false);
   });
 
@@ -31,6 +30,32 @@ describe('schemas (round-trip)', () => {
       updated_at: '2026-01-01T00:00:00Z',
     });
     expect(ok.success).toBe(true);
+  });
+
+  it('LobbyDetails accepts completed rankings', () => {
+    expect(
+      LobbyDetails.safeParse({
+        id: 1,
+        owner_id: 2,
+        state: 'completed',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+        owner: { id: 2, username: 'host' },
+        prompt_categories: [],
+        player_count: 2,
+        is_owner: false,
+        is_participant: true,
+        final_rankings: [
+          {
+            user_id: 3,
+            username: 'player',
+            final_score: 500,
+            is_banned: false,
+            rank: 1,
+          },
+        ],
+      }).success,
+    ).toBe(true);
   });
 
   it('PromptInDB requires question_type enum', () => {
@@ -55,7 +80,8 @@ describe('schemas (round-trip)', () => {
 
   it('rejects an expected answer in a player-visible game state', () => {
     const frame = buildGameState();
-    const prompt = frame.categories[0].prompts[0] as typeof frame.categories[0]['prompts'][number] & {
+    const prompt = frame.categories[0]
+      .prompts[0] as (typeof frame.categories)[0]['prompts'][number] & {
       answer: string;
     };
     prompt.answer = 'secret';

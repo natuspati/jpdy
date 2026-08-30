@@ -18,3 +18,11 @@ class User(Base):
         back_populates="owner",
         passive_deletes=True,
     )
+    lobby_participants: Mapped[list[LobbyParticipant]] = relationship(
+        back_populates="user",
+        passive_deletes=True,
+    )
+    media_assets: Mapped[list[MediaAsset]] = relationship(
+        back_populates="owner",
+        passive_deletes=True,
+    )

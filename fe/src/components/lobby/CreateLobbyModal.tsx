@@ -60,8 +60,7 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
     <Modal open={open} onClose={onClose} title="New lobby">
       <div className="space-y-3">
         <p className="text-sm text-slate-400">
-          Pick the categories you want to play. Only categories with all prompts filled are
-          shown.
+          Pick the categories you want to play. Only categories with all prompts filled are shown.
         </p>
         {isLoading ? (
           <Spinner />

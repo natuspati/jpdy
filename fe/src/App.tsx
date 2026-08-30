@@ -7,6 +7,7 @@ import RegisterPage from '@/pages/RegisterPage';
 import CategoriesPage from '@/pages/CategoriesPage';
 import CategoryEditPage from '@/pages/CategoryEditPage';
 import LobbyPage from '@/pages/LobbyPage';
+import LobbyDetailsPage from '@/pages/LobbyDetailsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 const App = () => (
@@ -35,6 +36,14 @@ const App = () => (
         element={
           <RequireAuth>
             <LobbyPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/lobby/:id/details"
+        element={
+          <RequireAuth>
+            <LobbyDetailsPage />
           </RequireAuth>
         }
       />

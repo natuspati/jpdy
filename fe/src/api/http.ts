@@ -9,6 +9,7 @@ type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
 interface RequestOptions<TBody = unknown> {
   method?: Method;
   body?: TBody;
+  multipartBody?: FormData;
   formBody?: URLSearchParams;
   search?: Record<string, string | number | boolean | Array<string | number> | undefined | null>;
   signal?: AbortSignal;
@@ -53,6 +54,8 @@ export async function request<TSchema extends z.ZodTypeAny>(
   if (options.formBody) {
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
     body = options.formBody;
+  } else if (options.multipartBody) {
+    body = options.multipartBody;
   } else if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
     body = JSON.stringify(options.body);

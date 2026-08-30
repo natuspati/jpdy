@@ -19,8 +19,11 @@ from schemas.lobby.game_state import (
     GamePlayerState,
     GamePromptState,
 )
+from schemas.media import MediaReferenceSchema
 from schemas.socket.events import (
     BanPlayerPayload,
+    GameSoundCueName,
+    GameSoundCuePayload,
     JudgeAnswerPayload,
     SelectPromptPayload,
     SelectStarterPayload,
@@ -74,6 +77,18 @@ class GameService:
                             prompt_id=prompt.id,
                             question=prompt.question,
                             answer=prompt.answer,
+                            question_type=prompt.question_type,
+                            answer_type=prompt.answer_type,
+                            question_media=(
+                                MediaReferenceSchema.from_asset(prompt.question_media_asset)
+                                if prompt.question_media_asset is not None
+                                else None
+                            ),
+                            answer_media=(
+                                MediaReferenceSchema.from_asset(prompt.answer_media_asset)
+                                if prompt.answer_media_asset is not None
+                                else None
+                            ),
                             order=prompt.order or 0,
                         )
                         for prompt in category.prompts
@@ -96,11 +111,18 @@ class GameService:
                 raise ForbiddenError("Game has finished")
 
             if user.id == state.host.user_id:
-                if state.host.connection_status == PlayerConnectionStatusEnum.CONNECTED:
-                    raise ForbiddenError("Host is already connected from another device")
+                # Socket handlers replace an older live socket for this user.
+                # Treat the persisted flag as recoverable so users can return
+                # after a transport drop or backend restart.
                 state.host.connection_status = PlayerConnectionStatusEnum.CONNECTED
             else:
                 player = _find_player(state, user.id)
+                participant = await uow.lobby_repo.select_participant(
+                    lobby_id=lobby_id,
+                    user_id=user.id,
+                )
+                if participant is not None and participant.is_banned:
+                    raise ForbiddenError("Player is banned from this lobby")
                 if player is None:
                     lobby = await uow.lobby_repo.select_lobby(lobby_id=lobby_id)
                     if lobby is None:
@@ -109,6 +131,7 @@ class GameService:
                         raise ForbiddenError(
                             "Lobby roster is locked after the game has started",
                         )
+                    await uow.lobby_repo.ensure_participant(lobby_id=lobby_id, user=user)
                     state.players.append(
                         GamePlayerState(
                             user_id=user.id,
@@ -118,11 +141,16 @@ class GameService:
                     )
                 else:
                     if player.is_banned:
-                        raise ForbiddenError("Player is banned from this lobby")
-                    if player.connection_status == PlayerConnectionStatusEnum.CONNECTED:
-                        raise ForbiddenError(
-                            "Player is already connected from another device",
+                        if participant is None:
+                            await uow.lobby_repo.ensure_participant(lobby_id=lobby_id, user=user)
+                        await uow.lobby_repo.update_participant_ban(
+                            lobby_id=lobby_id,
+                            user_id=user.id,
+                            is_banned=True,
                         )
+                        raise ForbiddenError("Player is banned from this lobby")
+                    if participant is None:
+                        await uow.lobby_repo.ensure_participant(lobby_id=lobby_id, user=user)
                     player.connection_status = PlayerConnectionStatusEnum.CONNECTED
 
             await uow.game_state_repo.save_state(state)
@@ -284,7 +312,11 @@ class GameService:
             await uow.game_state_repo.save_state(state)
         return state
 
-    async def buzz(self, lobby_id: int, user_id: int) -> GameLobbyState:
+    async def buzz(
+        self,
+        lobby_id: int,
+        user_id: int,
+    ) -> GameLobbyState:
         async with self._uow as uow:
             state = await self._load_state(uow, lobby_id)
             _require_phase(state, GamePhaseEnum.BUZZ_OPEN)
@@ -326,6 +358,21 @@ class GameService:
 
             target.is_banned = True
             target.connection_status = PlayerConnectionStatusEnum.DISCONNECTED
+            participant = await uow.lobby_repo.select_participant(
+                lobby_id=lobby_id,
+                user_id=target.user_id,
+            )
+            if participant is None:
+                await uow.lobby_repo.ensure_participant(
+                    lobby_id=lobby_id,
+                    user=UserPublicSchema(id=target.user_id, username=target.username),
+                )
+            await uow.lobby_repo.update_participant_ban(
+                lobby_id=lobby_id,
+                user_id=target.user_id,
+                is_banned=True,
+            )
+            _recover_from_banned_player(state, target.user_id)
 
             await uow.game_state_repo.save_state(state)
         return state
@@ -345,6 +392,20 @@ class GameService:
                 raise BadRequestError(f"Player {payload.user_id} is not in this lobby")
 
             target.is_banned = False
+            participant = await uow.lobby_repo.select_participant(
+                lobby_id=lobby_id,
+                user_id=target.user_id,
+            )
+            if participant is None:
+                await uow.lobby_repo.ensure_participant(
+                    lobby_id=lobby_id,
+                    user=UserPublicSchema(id=target.user_id, username=target.username),
+                )
+            await uow.lobby_repo.update_participant_ban(
+                lobby_id=lobby_id,
+                user_id=target.user_id,
+                is_banned=False,
+            )
 
             await uow.game_state_repo.save_state(state)
         return state
@@ -385,6 +446,22 @@ class GameService:
             await uow.game_state_repo.save_state(state)
         return state
 
+    async def issue_sound_cue(
+        self,
+        lobby_id: int,
+        cue: GameSoundCueName,
+    ) -> GameSoundCuePayload:
+        """
+        Reserve a monotonically increasing presentation-only sound cue id.
+        Gameplay has already changed when this runs; failures cannot roll back
+        timers, phases, scores, or permissions.
+        """
+        async with self._uow as uow:
+            state = await self._load_state(uow, lobby_id)
+            state.sound_cue_id += 1
+            await uow.game_state_repo.save_state(state)
+        return GameSoundCuePayload(cue_id=state.sound_cue_id, cue=cue)
+
     @classmethod
     async def _load_state(
         cls,
@@ -413,15 +490,23 @@ class GameService:
             prompt.is_selected for category in state.categories for prompt in category.prompts
         )
         if not all_used:
-            state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
-            if state.selecting_player_id is not None:
-                selector = _find_player(state, state.selecting_player_id)
-                if selector is not None:
-                    selector.is_selected = True
+            selector = _find_player(state, state.selecting_player_id)
+            if _is_eligible_player(selector):
+                state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
+                selector.is_selected = True
+            else:
+                _enter_host_player_selection(state)
             return
 
         state.phase = GamePhaseEnum.FINISHED
         state.selecting_player_id = None
+        await uow.lobby_repo.snapshot_final_results(
+            lobby_id=state.lobby_id,
+            players=[
+                (player.user_id, player.username, player.score, player.is_banned)
+                for player in state.players
+            ],
+        )
         await uow.lobby_repo.update_lobby_state(
             lobby_id=state.lobby_id,
             state=LobbyStateEnum.COMPLETED,
@@ -455,6 +540,50 @@ def _eligible_buzzers(state: GameLobbyState) -> list[GamePlayerState]:
     ]
 
 
+def _is_eligible_player(player: GamePlayerState | None) -> bool:
+    return (
+        player is not None
+        and not player.is_banned
+        and player.connection_status == PlayerConnectionStatusEnum.CONNECTED
+    )
+
+
+def _enter_host_player_selection(state: GameLobbyState) -> None:
+    _clear_selected_flags(state)
+    state.selecting_player_id = None
+    state.answering_player_id = None
+    state.timer_deadline = None
+    state.phase = GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
+
+
+def _recover_from_banned_player(state: GameLobbyState, user_id: int) -> None:
+    """
+    Remove a banned player from active ownership without discarding a spent
+    prompt. An interrupted answer becomes a normal unanswered reveal.
+    """
+    is_selector = state.selecting_player_id == user_id
+    is_answerer = state.answering_player_id == user_id
+
+    if state.phase == GamePhaseEnum.PLAYER_SELECTING_PROMPT and is_selector:
+        _enter_host_player_selection(state)
+        return
+
+    if state.phase == GamePhaseEnum.PLAYER_ANSWERING and is_answerer:
+        state.selecting_player_id = None
+        _clear_selected_flags(state)
+        _enter_answer_reveal(state, GameResolutionEnum.UNANSWERED)
+        return
+
+    if is_selector:
+        state.selecting_player_id = None
+        banned_player = _find_player(state, user_id)
+        if banned_player is not None:
+            banned_player.is_selected = False
+
+    if state.phase == GamePhaseEnum.BUZZ_OPEN and not _eligible_buzzers(state):
+        _enter_answer_reveal(state, GameResolutionEnum.UNANSWERED)
+
+
 def _enter_answer_reveal(
     state: GameLobbyState,
     resolution: GameResolutionEnum,
@@ -472,12 +601,16 @@ def _enter_answer_reveal(
     state.timer_deadline = _deadline(ANSWER_REVEAL_TIME_SECONDS)
     state.resolved_prompt_id = prompt.prompt_id
     state.resolved_answer = prompt.answer
+    state.resolved_answer_type = prompt.answer_type
+    state.resolved_answer_media = prompt.answer_media
     state.resolution = resolution
 
 
 def _clear_resolution(state: GameLobbyState) -> None:
     state.resolved_prompt_id = None
     state.resolved_answer = None
+    state.resolved_answer_type = None
+    state.resolved_answer_media = None
     state.resolution = None
 
 

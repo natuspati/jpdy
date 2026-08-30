@@ -44,7 +44,12 @@ const RegisterForm = () => {
   return (
     <form className="space-y-3" onSubmit={handleSubmit((values) => mutation.mutate(values))}>
       <Field label="Username" htmlFor="username" error={errors.username?.message}>
-        <Input id="username" autoComplete="username" invalid={!!errors.username} {...register('username')} />
+        <Input
+          id="username"
+          autoComplete="username"
+          invalid={!!errors.username}
+          {...register('username')}
+        />
       </Field>
       <Field label="Password" htmlFor="password" error={errors.password?.message}>
         <Input

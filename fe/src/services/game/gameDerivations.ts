@@ -17,13 +17,21 @@ export function currentPrompt(state: GameLobbyState): GamePromptState | undefine
 }
 
 export function totalConnectedPlayers(state: GameLobbyState): number {
-  return state.players.filter(
-    (p) => !p.is_banned && p.connection_status === 'connected',
-  ).length;
+  return state.players.filter((p) => !p.is_banned && p.connection_status === 'connected').length;
+}
+
+export function compareScoreboardPlayers(
+  a: GameLobbyState['players'][number],
+  b: GameLobbyState['players'][number],
+): number {
+  if (a.is_banned !== b.is_banned) return a.is_banned ? 1 : -1;
+  if (a.score !== b.score) return b.score - a.score;
+  if (a.username !== b.username) return a.username < b.username ? -1 : 1;
+  return a.user_id - b.user_id;
 }
 
 export function sortedScoreboard(
   state: GameLobbyState,
 ): readonly GameLobbyState['players'][number][] {
-  return [...state.players].sort((a, b) => b.score - a.score);
+  return [...state.players].sort(compareScoreboardPlayers);
 }

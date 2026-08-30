@@ -9,6 +9,8 @@ export const queryKeys = {
   lobbies: {
     all: () => ['lobbies'] as const,
     list: (filters: Partial<LobbyFilter>) => ['lobbies', 'list', filters] as const,
+    active: () => ['lobbies', 'active'] as const,
+    mine: () => ['lobbies', 'mine'] as const,
     detail: (id: number) => ['lobbies', 'detail', id] as const,
   },
   categories: {

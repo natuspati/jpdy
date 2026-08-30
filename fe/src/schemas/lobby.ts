@@ -19,8 +19,47 @@ export type LobbyInDB = z.infer<typeof LobbyInDB>;
 export const LobbyWithCategories = LobbyInDB.extend({
   owner: UserPublic.nullable(),
   prompt_categories: z.array(PromptCategoryInDB),
+  player_count: z.number().int().nonnegative().nullable(),
 });
 export type LobbyWithCategories = z.infer<typeof LobbyWithCategories>;
+
+export const ActiveLobby = z.object({
+  id: z.number().int(),
+  host_username: z.string(),
+  player_count: z.number().int().nonnegative(),
+  state: z.literal('waiting_start'),
+  can_join: z.boolean(),
+});
+export type ActiveLobby = z.infer<typeof ActiveLobby>;
+
+export const MyLobby = z.object({
+  id: z.number().int(),
+  owner_id: z.number().int().nullable(),
+  host_username: z.string().nullable(),
+  player_count: z.number().int().nonnegative(),
+  state: LobbyStateEnum,
+  created_at: z.string(),
+  updated_at: z.string(),
+  is_owner: z.boolean(),
+  is_participant: z.boolean(),
+});
+export type MyLobby = z.infer<typeof MyLobby>;
+
+export const LobbyFinalRanking = z.object({
+  user_id: z.number().int().nullable(),
+  username: z.string(),
+  final_score: z.number().int(),
+  is_banned: z.boolean(),
+  rank: z.number().int().positive(),
+});
+export type LobbyFinalRanking = z.infer<typeof LobbyFinalRanking>;
+
+export const LobbyDetails = LobbyWithCategories.extend({
+  is_owner: z.boolean(),
+  is_participant: z.boolean(),
+  final_rankings: z.array(LobbyFinalRanking).nullable(),
+});
+export type LobbyDetails = z.infer<typeof LobbyDetails>;
 
 // LobbyUpdateSchema — at least one set
 export const LobbyUpdate = z

@@ -9,8 +9,7 @@ const TimerBar = ({ deadline, totalSeconds = 30 }: Props) => {
   const remaining = useCountdown(deadline);
   if (remaining === null) return null;
   const pct = Math.max(0, Math.min(100, (remaining / totalSeconds) * 100));
-  const tone =
-    remaining <= 3 ? 'bg-rose-500' : remaining <= 10 ? 'bg-amber-400' : 'bg-emerald-400';
+  const tone = remaining <= 3 ? 'bg-rose-500' : remaining <= 10 ? 'bg-amber-400' : 'bg-emerald-400';
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs text-slate-400">

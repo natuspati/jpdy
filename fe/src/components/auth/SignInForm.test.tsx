@@ -43,11 +43,12 @@ describe('SignInForm', () => {
     const token = makeToken(42, 2_000_000_000);
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ access_token: token, token_type: 'bearer' }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ access_token: token, token_type: 'bearer' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
       ),
     );
     renderWithQueryClient();
@@ -60,11 +61,12 @@ describe('SignInForm', () => {
   it('shows error detail toast on API error', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ detail: 'bad creds' }), {
-          status: 401,
-          headers: { 'content-type': 'application/json' },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ detail: 'bad creds' }), {
+            status: 401,
+            headers: { 'content-type': 'application/json' },
+          }),
       ),
     );
     renderWithQueryClient();

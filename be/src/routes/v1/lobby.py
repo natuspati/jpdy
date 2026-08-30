@@ -10,6 +10,9 @@ from schemas.lobby.base import (
     LobbyUpdateSchema,
 )
 from schemas.lobby.nested import (
+    LobbyActiveListItemSchema,
+    LobbyDetailsSchema,
+    LobbyMineListItemSchema,
     LobbyWithCategoriesInDBSchema,
     PaginatedLobbyWithCategoriesInDBSchema,
 )
@@ -46,9 +49,34 @@ _FORBIDDEN_LOBBY = ErrorResponse(
 )
 async def search_lobbies(
     filters: Annotated[LobbyFilterSchema, Query()],
+    current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[LobbyService, Depends()],
 ) -> PaginatedLobbyWithCategoriesInDBSchema:
-    return await service.search_lobbies(filters=filters)
+    return await service.search_lobbies(filters=filters, user=current_user)
+
+
+@router.get(
+    "/active",
+    responses=generate_responses(_UNAUTHORIZED),
+    dependencies=[Depends(get_current_user)],
+)
+async def get_active_lobbies(
+    current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
+    service: Annotated[LobbyService, Depends()],
+) -> list[LobbyActiveListItemSchema]:
+    return await service.get_active_lobbies(user=current_user)
+
+
+@router.get(
+    "/mine",
+    responses=generate_responses(_UNAUTHORIZED),
+    dependencies=[Depends(get_current_user)],
+)
+async def get_my_lobbies(
+    current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
+    service: Annotated[LobbyService, Depends()],
+) -> list[LobbyMineListItemSchema]:
+    return await service.get_my_lobbies(user=current_user)
 
 
 @router.get(
@@ -61,9 +89,10 @@ async def search_lobbies(
 )
 async def get_lobby(
     lobby_id: int,
+    current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[LobbyService, Depends()],
-) -> LobbyWithCategoriesInDBSchema:
-    return await service.get_lobby(lobby_id=lobby_id)
+) -> LobbyDetailsSchema:
+    return await service.get_lobby(lobby_id=lobby_id, user=current_user)
 
 
 @router.post(
@@ -88,7 +117,7 @@ async def create_lobby(
             status.HTTP_400_BAD_REQUEST,
             "REST may only transition CREATED lobbies to WAITING_START. "
             "Categories may only be changed while CREATED and every attached "
-            "category must contain five uniquely ordered text prompts.",
+            "category must contain five uniquely ordered prompts.",
         ),
         ErrorResponse(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -116,10 +145,6 @@ async def update_lobby(
         _UNAUTHORIZED,
         _FORBIDDEN_LOBBY,
         _LOBBY_NOT_FOUND,
-        ErrorResponse(
-            status.HTTP_400_BAD_REQUEST,
-            "Only lobbies in the CREATED state can be deleted",
-        ),
     ),
 )
 async def delete_lobby(
