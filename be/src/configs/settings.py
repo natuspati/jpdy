@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     db_apply_migrations: bool = False
     db_driver: str = "sqlite+aiosqlite"
     db_sync_driver: str = "sqlite"
+    db_host: str | None = None
+    db_port: int | None = None
+    db_user: str | None = None
+    db_password: str | None = None
     db_name: str = "jpdy.db"
     db_echo: bool = False
     db_echo_pool: bool = False
@@ -52,6 +56,8 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
+    socketio_redis_url: str | None = None
+    socketio_redis_channel: str = "jpdy.socketio"
 
     # Uploaded prompt media. Browser delivery is always through Nginx at
     # ``/media/``; FastAPI only validates and writes files in this directory.
@@ -62,6 +68,10 @@ class Settings(BaseSettings):
     def db_url(self) -> sqlalchemy.URL:
         return sqlalchemy.URL.create(
             drivername=self.db_driver,
+            username=self.db_user,
+            password=self.db_password,
+            host=self.db_host,
+            port=self.db_port,
             database=self.db_name,
         )
 
@@ -69,6 +79,10 @@ class Settings(BaseSettings):
     def db_sync_url(self) -> sqlalchemy.URL:
         return sqlalchemy.URL.create(
             drivername=self.db_sync_driver,
+            username=self.db_user,
+            password=self.db_password,
+            host=self.db_host,
+            port=self.db_port,
             database=self.db_name,
         )
 

@@ -42,6 +42,7 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
   } = args;
   return {
     lobby_id: 100,
+    state_revision: 0,
     host: {
       user_id: hostId,
       username: hostName,

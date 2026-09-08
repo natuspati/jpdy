@@ -55,6 +55,7 @@ export function useLobbySocket({ lobbyId, token }: UseLobbySocketArgs): UseLobby
   const socketRef = useRef<LobbySocket | null>(null);
   const lobbyDeletedRef = useRef(false);
   const latestCueIdRef = useRef(0);
+  const latestStateRevisionRef = useRef(-1);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -70,6 +71,7 @@ export function useLobbySocket({ lobbyId, token }: UseLobbySocketArgs): UseLobby
     setLobbyDeleted(false);
     lobbyDeletedRef.current = false;
     latestCueIdRef.current = 0;
+    latestStateRevisionRef.current = -1;
 
     socket.on('connect', () => {
       setStatus('open');
@@ -97,6 +99,8 @@ export function useLobbySocket({ lobbyId, token }: UseLobbySocketArgs): UseLobby
         toastError('Received invalid game state from server');
         return;
       }
+      if (parsed.data.state_revision < latestStateRevisionRef.current) return;
+      latestStateRevisionRef.current = parsed.data.state_revision;
       setState(parsed.data);
       latestCueIdRef.current = Math.max(
         latestCueIdRef.current,

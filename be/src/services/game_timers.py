@@ -1,23 +1,19 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from datetime import UTC, datetime
 
 _logger = logging.getLogger(__name__)
 
-# Single-process registry of per-lobby timer tasks. The current Socket.IO
-# deployment runs in one process, so an in-memory dict is enough. Sharding
-# across processes would require moving deadlines into Redis with key
-# expiration + a notification channel.
-_timers: dict[int, asyncio.Task] = {}
+# Local wakeups reduce latency. Redis sorted sets remain authoritative: every
+# wakeup submits a fenced expiry command and startup recovery finds deadlines
+# that belonged to a process which stopped.
+_timers: dict[int, asyncio.Task[None]] = {}
+_scheduler_task: asyncio.Task[None] | None = None
 
 
 async def _sleep_until(deadline: datetime) -> None:
-    # Event loops may run a scheduled callback a few clock-resolution ticks
-    # before its requested delay. ``expire_timer`` correctly ignores a state
-    # whose deadline has not arrived yet, but a one-shot timer would then be
-    # lost until another socket event re-armed it. Recheck wall-clock time
-    # after every sleep so callbacks never run early.
     while True:
         remaining = (deadline - datetime.now(UTC)).total_seconds()
         if remaining <= 0:
@@ -30,13 +26,9 @@ def arm(
     deadline: datetime,
     on_expire: Callable[[int], Awaitable[None]],
 ) -> None:
-    """
-    Schedule ``on_expire(lobby_id)`` to run when ``deadline`` is reached.
-    Cancels any timer already armed for ``lobby_id`` first.
-    """
     cancel(lobby_id)
 
-    async def _runner() -> None:
+    async def runner() -> None:
         try:
             await _sleep_until(deadline)
             await on_expire(lobby_id)
@@ -45,20 +37,46 @@ def arm(
         except Exception:
             _logger.exception("Timer callback failed for lobby %s", lobby_id)
         finally:
-            # ``on_expire`` can transition into another timed phase. In that
-            # case it arms a replacement timer before this runner finishes;
-            # never remove that newer task from the registry.
             if _timers.get(lobby_id) is asyncio.current_task():
                 _timers.pop(lobby_id, None)
 
-    _timers[lobby_id] = asyncio.create_task(_runner())
+    _timers[lobby_id] = asyncio.create_task(runner())
 
 
 def cancel(lobby_id: int) -> None:
     task = _timers.pop(lobby_id, None)
-    # Timer-expiry callbacks re-arm the next phase timer themselves. Do not
-    # cancel the task currently running that callback, or its next await
-    # raises ``CancelledError`` and prevents the newly armed timer from
-    # completing its transition.
+    # Expiry callbacks can arm next phase before returning. Never cancel
+    # current task, or that callback loses its new schedule/broadcast.
     if task is not None and task is not asyncio.current_task() and not task.done():
         task.cancel()
+
+
+def start_scheduler(run_schedule_pass: Callable[[], Awaitable[None]]) -> None:
+    """Start one process-local poller over durable Redis timer schedules."""
+    global _scheduler_task
+    if _scheduler_task is not None and not _scheduler_task.done():
+        return
+
+    async def runner() -> None:
+        while True:
+            try:
+                await run_schedule_pass()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _logger.exception("Redis timer scheduler pass failed")
+            await asyncio.sleep(1)
+
+    _scheduler_task = asyncio.create_task(runner())
+
+
+async def stop_scheduler() -> None:
+    global _scheduler_task
+    task = _scheduler_task
+    _scheduler_task = None
+    if task is not None and not task.done():
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+    for lobby_id in list(_timers):
+        cancel(lobby_id)

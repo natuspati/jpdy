@@ -1,8 +1,9 @@
 # Jeopardy game flow
 
 This is the normative game contract for the local Jeopardy application.
-The server owns game state and timers; clients render the latest Socket.IO
-snapshot and do not maintain a parallel game-state machine.
+Redis owns live-game state and timers; SQL owns lobby setup plus
+participant/completion projections. Clients render ordered Socket.IO snapshots
+and do not maintain a parallel game-state machine.
 
 This document describes the intended **voice-answer** game. Players answer
 through external voice software such as Discord. They do not type answers into
@@ -16,11 +17,11 @@ the application and do not press an answer-submission button.
   or video. Every prompt still has canonical text question and answer fields.
 - A player answers verbally after selecting a clue or winning a buzz.
 - The host accepts or rejects the spoken answer directly.
-- Canonical expected answer text is private to host while clue is active, then
-  canonical answer text and optional answer media are revealed publicly after
-  clue resolves.
-- The board is visible only while a player is choosing a clue. An active clue
-  replaces the board with a full prompt stage.
+- Canonical expected answer text is private to host only while a player is
+  actively answering. Canonical answer text and optional answer media are
+  revealed publicly after clue resolves.
+- The board is visible only before a clue is active. An active clue replaces
+  the board with a full prompt stage.
 
 ## Lobby lifecycle and setup
 
@@ -33,8 +34,16 @@ created → waiting_start → in_progress → completed
 - REST is used for lobby setup and discovery.
 - Socket.IO is used for live gameplay at path `/ws`, with each lobby at
   `/lobbies/{lobby_id}`.
-- Redis stores the persisted internal state of an active lobby at
-  `lobby:{lobby_id}`.
+- Redis stores persisted live-game state at `game:{lobby_id}:state`, where the
+  braces are a Redis Cluster hash tag. State is initialized when the lobby
+  enters `waiting_start` and remains available through `finished`, unless the
+  lobby is deleted.
+- Each accepted live command uses Redis `WATCH`/`MULTI`/`EXEC` to atomically
+  write one incremented state revision, a command-result deduplication entry,
+  a Redis Stream transition event, and a durable timer schedule.
+- SQL participant, ban, and completion records are projections written after
+  Redis accepts a transition. Live-game authorization, scores, phases, and
+  deadlines never use SQL projections as their authority.
 
 ### Category requirements
 
@@ -54,13 +63,18 @@ created → waiting_start → in_progress → completed
 ### Roster rules
 
 - Before the game starts, authenticated players join by connecting to the
-  lobby Socket.IO namespace. This creates or refreshes a persistent
-  `LobbyParticipant` record.
+  lobby Socket.IO namespace. Redis immediately updates the authoritative
+  roster; the server then creates or refreshes the persistent
+  `LobbyParticipant` projection.
 - When a lobby becomes `in_progress`, its player roster is locked:
   - existing players may reconnect and retain their score;
   - new users cannot join;
   - banned users cannot reconnect until unbanned;
-  - one account cannot play simultaneously from multiple devices.
+  - a reconnect takes over that user's recorded Socket.IO SID and asks the
+    prior SID to disconnect.
+- Redis fences SID cleanup: a disconnect removes connection ownership only
+  when its SID is still the recorded owner, so an old disconnected socket
+  cannot mark a newer reconnect as offline.
 - The host may reconnect and resume judging/control duties.
 - Lobby discovery lists a waiting lobby as active only for users who are not
   its host or participant. **My lobbies** offers **Join** to the host and
@@ -70,8 +84,9 @@ created → waiting_start → in_progress → completed
   `LobbyParticipant`. Host and non-banned participants can read lobby details
   and final ranking without opening a game socket.
 - Host may delete its lobby in any lifecycle state. Server removes persistent
-  lobby data and Redis game state, cancels timer, emits `lobby_deleted`, then
-  disconnects lobby sockets.
+  lobby data plus the Redis state, event-stream, and timer-schedule keys,
+  cancels local timer wakeups, emits `lobby_deleted`, then asks Socket.IO to
+  disconnect sockets known to that server process.
 
 ### Prompt media
 
@@ -99,6 +114,7 @@ snapshot:
 ```text
 PublicGameLobbyState
 ├─ lobby_id
+├─ state_revision
 ├─ host { user_id, username, connection_status }
 ├─ players[]
 │  └─ { user_id, username, score, connection_status, is_selected, is_banned }
@@ -121,10 +137,15 @@ PublicGameLobbyState
 └─ latest_sound_cue_id
 ```
 
+`state_revision` starts at `0` for a materialized game and increments exactly
+once for each accepted state mutation. Recipients discard a state frame older
+than the newest revision they rendered.
+
 The host receives the full player roster, including banned rows, so it can
 moderate and unban them. Non-host snapshots omit banned players entirely,
-including their scores, connection state, and active labels. The server never
-broadcasts a broad state frame before these recipient-specific frames.
+including their scores, connection state, and active labels. The server emits
+recipient-specific snapshots to separate host and player Socket.IO rooms; it
+never broadcasts a broad state frame before these recipient-specific frames.
 
 Public prompt data never contains expected-answer field. `question`,
 `question_type`, and `question_media` are populated only for current active
@@ -158,10 +179,10 @@ HostAnswerKey
 └─ expected_answer
 ```
 
-The backend emits or re-emits the answer key to the current host when the game
-enters `player_answering` and when the host reconnects during that phase. The
-client clears this private value whenever the phase changes away from
-`player_answering`.
+The backend emits or re-emits the answer key to the current host while the
+game is in `player_answering`, including when the phase starts or the host
+reconnects. The client clears this private value whenever the phase changes
+away from `player_answering`.
 
 No player receives `host_answer_key`. There is no public submitted-answer
 field because spoken answers are not transmitted through the application.
@@ -170,6 +191,38 @@ field because spoken answers are not transmitted through the application.
 
 Persisted state contains full prompt data: canonical answers, content types,
 and media references. It is never emitted directly to clients.
+
+Per-lobby Redis data also includes:
+
+- `game:{lobby_id}:events`: Redis Stream record for every accepted mutation,
+  including command ID, transition reason, revision, and internal snapshot;
+- `game:{lobby_id}:command:{command_id}`: short-lived cached accepted result
+  used to make a repeated command ID idempotent;
+- `game:{lobby_id}:timers`: sorted-set timer schedule, whose member contains
+  the expected timer revision and deadline;
+- `game:{lobby_id}:connection:{user_id}`: current Socket.IO SID used for
+  reconnect takeover and fenced disconnect cleanup.
+
+The Stream and internal snapshots are backend infrastructure data and must not
+be exposed to browser clients.
+
+### Live command serialization and Socket.IO delivery
+
+- Redis serializes conflicting commands for one lobby optimistically. On a
+  `WATCH` conflict, the backend reloads and revalidates against the newer
+  revision; only retry exhaustion returns a retryable game-busy error.
+- Socket.IO uses a shared `AsyncRedisManager` when
+  `BE_SOCKETIO_REDIS_URL` is configured. Host/player room broadcasts and
+  Redis SID lookup can then reach sockets attached to another backend worker.
+  This Pub/Sub manager transports notifications only; Redis game-state
+  transactions remain the authority.
+- A WebSocket stays attached to the backend worker that accepted it. A
+  reconnect can land on another worker and must receive a newly broadcast
+  recipient-specific snapshot.
+- State broadcasts are performed by the command/timer handler after its Redis
+  transaction commits. The Redis Stream records transitions durably, but this
+  implementation does not yet run a Stream consumer that replays a missed
+  broadcast after that handler process crashes.
 
 ## Game phases
 
@@ -391,11 +444,22 @@ answer reveal timer: 30 seconds maximum
 
 The server is authoritative:
 
-- `judge_answer` must reject or resolve expired answering attempts even if a
-  scheduled timer callback has not yet run.
+- `judge_answer` rejects an expired answering attempt even if a scheduled
+  timer callback has not yet run. A fenced timer-expiry command performs the
+  legal timeout transition.
 - A late buzz is rejected even if the buzz timeout callback has not yet run.
 - The browser derives countdown display from `timer_deadline - now()` and
   never decides game transitions locally.
+- Every timed state carries an internal `timer_revision`. The same accepted
+  transition atomically replaces its Redis sorted-set schedule entry with a
+  member containing that revision and deadline. Timer workers must match both
+  values before expiring it; stale entries therefore become no-ops.
+- Each backend process may arm a local `asyncio` wakeup for low latency, but
+  that wakeup only submits the fenced Redis expiry command. A process-local
+  task is not timer authority.
+- A per-process scheduler reconciles active Redis states with timer schedules
+  and polls due entries. This recovers deadlines after a process restart;
+  concurrent schedulers safely race through the same optimistic executor.
 
 ## Socket event permissions
 
@@ -420,6 +484,14 @@ finish_answering
 
 All rejected events return a structured socket error to the sender. Clients
 must not optimistically mutate game state.
+
+Payload-bearing events accept an optional UUID `command_id`; a repeated
+accepted ID returns its cached result without a second state mutation. The
+web client emits a UUID for every gameplay event, but the current server reads
+it only from payload-bearing events. `start_game`, `buzz`, and
+`advance_answer_reveal` currently receive a server-generated ID, so retries
+of those payload-free events are not client-idempotent. Older clients without
+a payload command ID also receive a server-generated ID.
 
 ## Rendering rules
 
@@ -463,7 +535,8 @@ must not optimistically mutate game state.
 ## Client implementation rules
 
 - Maintain one Socket.IO connection per lobby namespace.
-- Replace client game state on each valid `state_changed` frame.
+- Replace client game state on each valid `state_changed` frame unless its
+  `state_revision` is older than the newest rendered revision.
 - Keep host-private answer-key data separate from public game state and clear
   it on phase change/disconnect.
 - Invalidate lobby discovery queries when a lobby moves out of

@@ -1,4 +1,5 @@
 from enum import StrEnum, auto
+from uuid import UUID
 
 from pydantic import Field
 
@@ -7,22 +8,27 @@ from schemas.base import BaseSchema
 
 class SelectStarterPayload(BaseSchema):
     user_id: int
+    command_id: UUID | None = None
 
 
 class SelectPromptPayload(BaseSchema):
     prompt_id: int
+    command_id: UUID | None = None
 
 
 class JudgeAnswerPayload(BaseSchema):
     correct: bool
+    command_id: UUID | None = None
 
 
 class BanPlayerPayload(BaseSchema):
     user_id: int
+    command_id: UUID | None = None
 
 
 class UnbanPlayerPayload(BaseSchema):
     user_id: int
+    command_id: UUID | None = None
 
 
 class SocketErrorPayload(BaseSchema):

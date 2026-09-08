@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from uuid import uuid4
 
 from socketio.exceptions import ConnectionRefusedError as SocketConnectionRefusedError
 
@@ -11,9 +12,9 @@ from sockets.auth import authenticate_socket
 from sockets.broadcast import broadcast_state
 from sockets.namespace import parse_lobby_namespace
 from sockets.session import (
-    find_sid_for_user,
     get_socket_session,
-    has_other_sid_for_user,
+    lobby_host_room,
+    lobby_player_room,
     save_socket_session,
 )
 from sockets.timer_hooks import arm_timer_if_needed, cancel_timer
@@ -36,16 +37,21 @@ async def on_connect(
     async with build_uow() as auth_uow:
         user = await authenticate_socket(environ, auth_uow)
 
-    previous_sid = await find_sid_for_user(namespace, user.id)
-
     try:
         async with build_uow() as uow:
-            state = await GameService(uow).connect_user(
+            service = GameService(uow)
+            previous_sid = await uow.game_state_repo.get_connection_sid(lobby_id, user.id)
+            state = await service.connect_user(
                 lobby_id=lobby_id,
                 user=UserPublicSchema(id=user.id, username=user.username),
+                command_id=f"connect:{sid}:{uuid4().hex}",
             )
+            await uow.game_state_repo.set_connection_sid(lobby_id, user.id, sid)
     except BaseError as e:
         raise SocketConnectionRefusedError(e.detail) from e
+    except Exception as e:
+        _logger.exception("Failed to connect user %s to lobby %s", user.id, lobby_id)
+        raise SocketConnectionRefusedError("Unable to connect to this lobby") from e
 
     await save_socket_session(
         sid=sid,
@@ -54,6 +60,10 @@ async def on_connect(
         username=user.username,
         lobby_id=lobby_id,
     )
+    room = (
+        lobby_host_room(lobby_id) if user.id == state.host.user_id else lobby_player_room(lobby_id)
+    )
+    await sio.enter_room(sid, room, namespace=namespace)
     if previous_sid is not None:
         # Rejoining takes over the roster slot. This handles stale Socket.IO
         # sessions after a dropped browser/network connection and keeps one
@@ -77,13 +87,20 @@ async def on_disconnect(namespace: str, sid: str, reason: Any = None) -> None:
 
     # A reconnect can establish its new sid before this old sid's disconnect
     # callback runs. Preserve the new connection's status in that race.
-    if await has_other_sid_for_user(namespace, user_id, sid):
+    async with build_uow() as uow:
+        owns_connection = await uow.game_state_repo.clear_connection_sid(
+            lobby_id,
+            user_id,
+            sid,
+        )
+    if not owns_connection:
         return
 
     async with build_uow() as uow:
         state = await GameService(uow).disconnect_user(
             lobby_id=lobby_id,
             user_id=user_id,
+            command_id=f"disconnect:{sid}:{uuid4().hex}",
         )
 
     if state is None:

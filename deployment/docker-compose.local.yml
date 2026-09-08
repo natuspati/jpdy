@@ -1,6 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     volumes:
       - jpdy_redis_data:/data
     healthcheck:
@@ -9,29 +10,62 @@ services:
       timeout: 3s
       retries: 10
 
-  backend:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: jpdy
+      POSTGRES_USER: jpdy
+      POSTGRES_PASSWORD: local-compose-postgres-password
+    volumes:
+      - jpdy_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jpdy -d jpdy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
     build:
       context: ../be
-    environment:
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    environment: &backend-environment
       BE_ENVIRONMENT: local
       BE_SECRET_KEY: local-compose-development-secret
       BE_RELOAD: "false"
       BE_PORT: "8000"
+      BE_WORKERS_COUNT: "${BE_WORKERS_COUNT:-1}"
       BE_ALLOWED_HOSTS: '["http://localhost:8080"]'
-      BE_DB_APPLY_MIGRATIONS: "true"
-      BE_DB_DRIVER: sqlite+aiosqlite
-      BE_DB_SYNC_DRIVER: sqlite
-      BE_DB_NAME: /data/jpdy.db
+      BE_DB_APPLY_MIGRATIONS: "false"
+      BE_DB_DRIVER: postgresql+asyncpg
+      BE_DB_SYNC_DRIVER: postgresql+psycopg
+      BE_DB_HOST: postgres
+      BE_DB_PORT: "5432"
+      BE_DB_USER: jpdy
+      BE_DB_PASSWORD: local-compose-postgres-password
+      BE_DB_NAME: jpdy
       BE_REDIS_URL: redis://redis:6379/0
+      BE_SOCKETIO_REDIS_URL: redis://redis:6379/0
+      BE_SOCKETIO_REDIS_CHANNEL: jpdy.socketio
       BE_MEDIA_ROOT: /media
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ../be
+    environment: *backend-environment
     expose:
       - "8000"
     volumes:
-      - jpdy_backend_data:/data
       - jpdy_media_data:/media
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -73,5 +107,5 @@ services:
 
 volumes:
   jpdy_redis_data:
-  jpdy_backend_data:
+  jpdy_postgres_data:
   jpdy_media_data:

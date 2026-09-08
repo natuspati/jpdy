@@ -50,6 +50,7 @@ export type GameCategoryState = z.infer<typeof GameCategoryState>;
 export const GameLobbyState = z
   .object({
     lobby_id: z.number().int(),
+    state_revision: z.number().int().nonnegative().default(0),
     host: GameHostState,
     players: z.array(GamePlayerState).default([]),
     categories: z.array(GameCategoryState).default([]),

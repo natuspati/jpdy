@@ -37,9 +37,19 @@ export function emit<E extends ClientEventName>(
       return false;
     }
   }
+  const commandId = crypto.randomUUID();
+  const eventArgs: unknown[] =
+    args.length > 0
+      ? [
+          {
+            ...(args[0] as object),
+            command_id: commandId,
+          },
+        ]
+      : [{ command_id: commandId }];
   // Socket.IO's emit implementation reads instance state through `this`, so
   // bind it before crossing the generic spread boundary.
   const emitFn = socket.emit.bind(socket) as unknown as (e: string, ...rest: unknown[]) => unknown;
-  emitFn(event, ...args);
+  emitFn(event, ...eventArgs);
   return true;
 }

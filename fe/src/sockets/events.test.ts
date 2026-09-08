@@ -16,4 +16,21 @@ describe('emit', () => {
     expect(emit(socket as unknown as LobbySocket, 'start_game')).toBe(true);
     expect(socket.emit).toHaveBeenCalledOnce();
   });
+
+  it('attaches a retry-safe command_id to each gameplay command', () => {
+    const socket = {
+      emit: vi.fn(),
+    };
+
+    expect(
+      emit(socket as unknown as LobbySocket, 'select_prompt', { prompt_id: 42 }),
+    ).toBe(true);
+    expect(socket.emit).toHaveBeenCalledWith(
+      'select_prompt',
+      expect.objectContaining({
+        prompt_id: 42,
+        command_id: expect.any(String),
+      }),
+    );
+  });
 });

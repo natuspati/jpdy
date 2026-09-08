@@ -40,13 +40,14 @@ the local Colima setup. If your Docker CLI has the Compose v2 plugin, use
 This starts every local runtime dependency:
 
 - app, REST API, Socket.IO, built assets, and uploaded media at `http://localhost:8080`
-- backend, Redis, SQLite, and media storage remain private Compose services
+- backend, Redis, PostgreSQL, and media storage remain private Compose services
 
 Nginx is sole browser entry point. It serves built React `/assets/`, immutable
 uploaded `/media/` files, SPA routes, and proxies `/api/` plus Socket.IO
 `/ws/` to FastAPI. FastAPI validates uploads but does not serve media bytes.
-Redis persists in `jpdy_redis_data`, SQLite in `jpdy_backend_data`, and
-uploaded prompt media in `jpdy_media_data`.
+The `migrate` job applies Alembic before backend starts. Redis persists in
+`jpdy_redis_data`, PostgreSQL in `jpdy_postgres_data`, and uploaded prompt
+media in `jpdy_media_data`.
 
 ### 2. Seed local users and categories
 
@@ -117,9 +118,11 @@ unbanned.
 
 ## State and answer visibility
 
-Gameplay state is server-authoritative and replaced wholesale after each
-Socket.IO update. Redis retains the internal game snapshot, including prompt
-answers, for the active game.
+Gameplay state is Redis-authoritative. Each live command uses a Redis
+`WATCH`/`MULTI`/`EXEC` transition which atomically writes its incremented
+revision, event-stream record, command dedup result, and timer schedule.
+Clients discard stale state revisions. PostgreSQL stores lobby setup and
+eventually-consistent participant/completion projections.
 
 Visibility rules are specified in [`GAME_FLOW.md`](GAME_FLOW.md):
 
@@ -162,9 +165,23 @@ empty so clients use same-origin Nginx. Native Vite does not serve FastAPI's
 `BE_MEDIA_ROOT`, so test uploaded media through Compose/Nginx unless you add a
 dedicated Vite media-serving configuration.
 
+## Multi-worker local smoke check
+
+Normal Compose deliberately starts one backend worker. To smoke-test shared
+Socket.IO delivery, run this candidate branch with:
+
+```bash
+BE_WORKERS_COUNT=2 docker-compose -f deployment/docker-compose.local.yml up --build
+```
+
+Verify host/private answer key, player public state, reconnect takeover,
+remote ban disconnect, timer expiry, and completion with separate browsers.
+`BE_SOCKETIO_REDIS_URL` is required for this mode and is already configured
+by Compose. Do not use a scaled baseline branch.
+
 ## Reset local data
 
-To reset all Compose-managed state (SQLite and Redis):
+To reset all Compose-managed state (PostgreSQL and Redis):
 
 ```bash
 docker-compose -f deployment/docker-compose.local.yml down -v

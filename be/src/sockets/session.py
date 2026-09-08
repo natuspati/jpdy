@@ -22,6 +22,7 @@ async def save_socket_session(
         "lobby_id": lobby_id,
     }
     await sio.save_session(sid, session, namespace=namespace)
+    await sio.enter_room(sid, lobby_user_room(lobby_id, user_id), namespace=namespace)
 
 
 async def get_socket_session(sid: str, namespace: str) -> SocketSession | None:
@@ -39,39 +40,13 @@ async def get_socket_session(sid: str, namespace: str) -> SocketSession | None:
     return session
 
 
-async def find_sid_for_user(namespace: str, user_id: int) -> str | None:
-    """
-    Walk the namespace's participants and return the sid of the socket whose
-    session belongs to ``user_id``, or ``None`` if no such socket is connected.
-    """
-    for sid, _ in list(sio.manager.get_participants(namespace, None)):
-        session = await get_socket_session(sid, namespace)
-        if session and session["user_id"] == user_id:
-            return sid
-    return None
+def lobby_player_room(lobby_id: int) -> str:
+    return f"lobby:{lobby_id}:players"
 
 
-async def connected_socket_sessions(
-    namespace: str,
-) -> list[tuple[str, SocketSession]]:
-    """Return valid live sessions in a namespace, skipping stale participants."""
-    sessions: list[tuple[str, SocketSession]] = []
-    for sid, _ in list(sio.manager.get_participants(namespace, None)):
-        session = await get_socket_session(sid, namespace)
-        if session is not None:
-            sessions.append((sid, session))
-    return sessions
+def lobby_host_room(lobby_id: int) -> str:
+    return f"lobby:{lobby_id}:host"
 
 
-async def has_other_sid_for_user(
-    namespace: str,
-    user_id: int,
-    excluded_sid: str,
-) -> bool:
-    """Return whether ``user_id`` has another live socket in ``namespace``."""
-    for sid, session in await connected_socket_sessions(namespace):
-        if sid == excluded_sid:
-            continue
-        if session["user_id"] == user_id:
-            return True
-    return False
+def lobby_user_room(lobby_id: int, user_id: int) -> str:
+    return f"lobby:{lobby_id}:user:{user_id}"

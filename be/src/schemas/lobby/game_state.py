@@ -78,6 +78,9 @@ class PublicGameLobbyState(BaseSchema):
     """Full player-visible game snapshot sent with every ``state_changed`` frame."""
 
     lobby_id: int
+    # Client snapshots are whole documents. Recipients discard a frame whose
+    # revision is older than one they have already rendered.
+    state_revision: int = Field(default=0, ge=0)
     host: GameHostState
     players: list[GamePlayerState] = Field(default_factory=list)
     categories: list[PublicGameCategoryState] = Field(default_factory=list)
@@ -107,6 +110,9 @@ class GameLobbyState(BaseSchema):
     """Internal state persisted in Redis, including expected prompt answers."""
 
     lobby_id: int
+    # Redis is authoritative for live games. Every accepted command increments
+    # this version exactly once.
+    state_revision: int = Field(default=0, ge=0)
     host: GameHostState
     players: list[GamePlayerState] = Field(default_factory=list)
     categories: list[GameCategoryState] = Field(default_factory=list)
@@ -118,6 +124,9 @@ class GameLobbyState(BaseSchema):
     # cleared whenever a new prompt becomes current.
     attempted_player_ids: list[int] = Field(default_factory=list)
     timer_deadline: datetime | None = None
+    # Revision which armed ``timer_deadline``. Timer workers use this fencing
+    # value to make old due entries harmless after any newer transition.
+    timer_revision: int | None = Field(default=None, ge=0)
     # Resolution data stays private until public_state projects it during
     # answer_reveal, then is cleared before the next clue or final leaderboard.
     resolved_prompt_id: int | None = None
@@ -129,7 +138,7 @@ class GameLobbyState(BaseSchema):
 
     @classmethod
     def redis_key(cls, lobby_id: int) -> str:
-        return f"lobby:{lobby_id}"
+        return f"game:{{{lobby_id}}}:state"
 
     @property
     def key(self) -> str:
@@ -151,6 +160,7 @@ class GameLobbyState(BaseSchema):
 
         return PublicGameLobbyState(
             lobby_id=self.lobby_id,
+            state_revision=self.state_revision,
             host=self.host,
             players=players,
             categories=[

@@ -3,7 +3,7 @@ from schemas.lobby.game_state import GameLobbyState, HostAnswerKey
 from schemas.socket.events import GameSoundCuePayload, SocketErrorPayload
 from sockets.app import sio
 from sockets.namespace import lobby_namespace
-from sockets.session import connected_socket_sessions, find_sid_for_user
+from sockets.session import lobby_host_room, lobby_player_room
 
 STATE_CHANGED_EVENT = "state_changed"
 HOST_ANSWER_KEY_EVENT = "host_answer_key"
@@ -17,14 +17,18 @@ async def broadcast_state(lobby_id: int, state: GameLobbyState) -> None:
     namespace = lobby_namespace(lobby_id)
     player_payload = state.public_state().model_dump(mode="json")
     host_payload = state.public_state(include_banned_players=True).model_dump(mode="json")
-    for sid, session in await connected_socket_sessions(namespace):
-        payload = host_payload if session["user_id"] == state.host.user_id else player_payload
-        await sio.emit(
-            STATE_CHANGED_EVENT,
-            payload,
-            to=sid,
-            namespace=namespace,
-        )
+    await sio.emit(
+        STATE_CHANGED_EVENT,
+        player_payload,
+        to=lobby_player_room(lobby_id),
+        namespace=namespace,
+    )
+    await sio.emit(
+        STATE_CHANGED_EVENT,
+        host_payload,
+        to=lobby_host_room(lobby_id),
+        namespace=namespace,
+    )
     await _emit_host_answer_key(namespace, state)
 
 
@@ -44,10 +48,6 @@ async def _emit_host_answer_key(namespace: str, state: GameLobbyState) -> None:
     if prompt is None:
         return
 
-    host_sid = await find_sid_for_user(namespace, state.host.user_id)
-    if host_sid is None:
-        return
-
     payload = HostAnswerKey(
         lobby_id=state.lobby_id,
         prompt_id=prompt.prompt_id,
@@ -56,7 +56,7 @@ async def _emit_host_answer_key(namespace: str, state: GameLobbyState) -> None:
     await sio.emit(
         HOST_ANSWER_KEY_EVENT,
         payload.model_dump(mode="json"),
-        to=host_sid,
+        to=lobby_host_room(state.lobby_id),
         namespace=namespace,
     )
 

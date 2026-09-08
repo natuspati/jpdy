@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
+from uuid import uuid4
 
 import pydantic
 
@@ -19,7 +20,7 @@ from services.game import GameService
 from sockets.app import sio
 from sockets.broadcast import broadcast_sound_cue, broadcast_state, emit_error
 from sockets.namespace import parse_lobby_namespace
-from sockets.session import find_sid_for_user, get_socket_session
+from sockets.session import get_socket_session
 from sockets.timer_hooks import arm_timer_if_needed
 from sockets.uow import build_uow
 
@@ -58,7 +59,10 @@ async def _run_event[T: pydantic.BaseModel](
     sid: str,
     payload: Any,
     payload_schema: type[T] | None,
-    action: Callable[[GameService, int, int, T | None], Awaitable[GameLobbyState]],
+    action: Callable[
+        [GameService, int, int, T | None, str],
+        Awaitable[GameLobbyState],
+    ],
     sound_cues: Callable[[GameLobbyState, T | None], list[GameSoundCueName]] | None = None,
 ) -> bool:
     """
@@ -84,7 +88,13 @@ async def _run_event[T: pydantic.BaseModel](
 
     try:
         async with build_uow() as uow:
-            state = await action(GameService(uow), lobby_id, user_id, validated)
+            state = await action(
+                GameService(uow),
+                lobby_id,
+                user_id,
+                validated,
+                _command_id(payload, validated),
+            )
     except BaseError as e:
         code = _ERROR_CODES.get(type(e), "error")
         await emit_error(namespace, sid, code, e.detail)
@@ -105,7 +115,11 @@ async def _run_event[T: pydantic.BaseModel](
 async def _emit_sound_cue(lobby_id: int, cue: GameSoundCueName) -> None:
     try:
         async with build_uow() as uow:
-            payload = await GameService(uow).issue_sound_cue(lobby_id, cue)
+            payload = await GameService(uow).issue_sound_cue(
+                lobby_id,
+                cue,
+                command_id=f"sound:{uuid4().hex}",
+            )
         await broadcast_sound_cue(lobby_id, payload)
     except Exception:
         _logger.exception("Failed to emit %s sound cue for lobby %s", cue, lobby_id)
@@ -118,8 +132,13 @@ async def on_start_game(namespace: str, sid: str, _data: Any = None) -> None:
         lobby_id: int,
         user_id: int,
         _payload: pydantic.BaseModel | None,
+        command_id: str,
     ) -> GameLobbyState:
-        return await service.start_game(lobby_id=lobby_id, user_id=user_id)
+        return await service.start_game(
+            lobby_id=lobby_id,
+            user_id=user_id,
+            command_id=command_id,
+        )
 
     await _run_event(
         namespace,
@@ -138,12 +157,14 @@ async def on_select_starter(namespace: str, sid: str, data: Any = None) -> None:
         lobby_id: int,
         user_id: int,
         payload: SelectStarterPayload | None,
+        command_id: str,
     ) -> GameLobbyState:
         assert payload is not None
         return await service.select_starter(
             lobby_id=lobby_id,
             user_id=user_id,
             payload=payload,
+            command_id=command_id,
         )
 
     await _run_event(namespace, sid, data, SelectStarterPayload, _action)
@@ -156,12 +177,14 @@ async def on_select_prompt(namespace: str, sid: str, data: Any = None) -> None:
         lobby_id: int,
         user_id: int,
         payload: SelectPromptPayload | None,
+        command_id: str,
     ) -> GameLobbyState:
         assert payload is not None
         return await service.select_prompt(
             lobby_id=lobby_id,
             user_id=user_id,
             payload=payload,
+            command_id=command_id,
         )
 
     await _run_event(
@@ -181,12 +204,14 @@ async def on_judge_answer(namespace: str, sid: str, data: Any = None) -> None:
         lobby_id: int,
         user_id: int,
         payload: JudgeAnswerPayload | None,
+        command_id: str,
     ) -> GameLobbyState:
         assert payload is not None
         return await service.judge_answer(
             lobby_id=lobby_id,
             user_id=user_id,
             payload=payload,
+            command_id=command_id,
         )
 
     def _cues(
@@ -211,8 +236,13 @@ async def on_buzz(namespace: str, sid: str, _data: Any = None) -> None:
         lobby_id: int,
         user_id: int,
         _payload: pydantic.BaseModel | None,
+        command_id: str,
     ) -> GameLobbyState:
-        return await service.buzz(lobby_id=lobby_id, user_id=user_id)
+        return await service.buzz(
+            lobby_id=lobby_id,
+            user_id=user_id,
+            command_id=command_id,
+        )
 
     await _run_event(
         namespace,
@@ -231,10 +261,12 @@ async def on_advance_answer_reveal(namespace: str, sid: str, _data: Any = None) 
         lobby_id: int,
         user_id: int,
         _payload: pydantic.BaseModel | None,
+        command_id: str,
     ) -> GameLobbyState:
         return await service.advance_answer_reveal(
             lobby_id=lobby_id,
             user_id=user_id,
+            command_id=command_id,
         )
 
     await _run_event(
@@ -256,12 +288,14 @@ async def on_ban_player(namespace: str, sid: str, data: Any = None) -> None:
         lobby_id: int,
         user_id: int,
         payload: BanPlayerPayload | None,
+        command_id: str,
     ) -> GameLobbyState:
         assert payload is not None
         return await service.ban_player(
             lobby_id=lobby_id,
             user_id=user_id,
             payload=payload,
+            command_id=command_id,
         )
 
     succeeded = await _run_event(namespace, sid, data, BanPlayerPayload, _action)
@@ -273,7 +307,11 @@ async def on_ban_player(namespace: str, sid: str, data: Any = None) -> None:
         banned_id = BanPlayerPayload.model_validate(data or {}).user_id
     except pydantic.ValidationError:
         return
-    target_sid = await find_sid_for_user(namespace, banned_id)
+    lobby_id = parse_lobby_namespace(namespace)
+    if lobby_id is None:
+        return
+    async with build_uow() as uow:
+        target_sid = await uow.game_state_repo.get_connection_sid(lobby_id, banned_id)
     if target_sid is not None:
         await sio.disconnect(target_sid, namespace=namespace)
 
@@ -285,12 +323,30 @@ async def on_unban_player(namespace: str, sid: str, data: Any = None) -> None:
         lobby_id: int,
         user_id: int,
         payload: UnbanPlayerPayload | None,
+        command_id: str,
     ) -> GameLobbyState:
         assert payload is not None
         return await service.unban_player(
             lobby_id=lobby_id,
             user_id=user_id,
             payload=payload,
+            command_id=command_id,
         )
 
     await _run_event(namespace, sid, data, UnbanPlayerPayload, _action)
+
+
+def _command_id(payload: Any, validated: pydantic.BaseModel | None) -> str:
+    """
+    Front-end command IDs make reconnect retries idempotent. Older clients
+    omit it, so retain a unique server fallback without changing event shapes.
+    """
+    if validated is not None:
+        candidate = getattr(validated, "command_id", None)
+        if candidate is not None:
+            return str(candidate)
+    if isinstance(payload, dict):
+        candidate = payload.get("command_id")
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return uuid4().hex
