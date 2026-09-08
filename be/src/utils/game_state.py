@@ -1,23 +1,15 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-from enums.game import GamePhaseEnum
+from enums.game import GamePhaseEnum, PlayerConnectionStatusEnum
 from enums.prompt import QuestionTypeEnum
-from errors.request import BadRequestError, NotFoundError
 from schemas.lobby.game_state import (
-    GameCategoryState,
-    GameHostState,
     GameLobbyState,
+    GamePlayerState,
     GamePromptState,
     PublicGameCategoryState,
     PublicGameLobbyState,
     PublicGamePromptState,
 )
-from schemas.lobby.nested import LobbyWithCategoryPromptsInDBSchema
-from utils.media import build_media_reference
-
-if TYPE_CHECKING:
-    from database import UnitOfWork
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +49,53 @@ def timer_schedule_member(state: GameLobbyState) -> str | None:
 
 def set_timer_revision(state: GameLobbyState) -> None:
     state.timer_revision = state.state_revision if state.timer_deadline is not None else None
+
+
+def find_game_player(
+    state: GameLobbyState,
+    user_id: int | None,
+) -> GamePlayerState | None:
+    if user_id is None:
+        return None
+    return next((player for player in state.players if player.user_id == user_id), None)
+
+
+def find_game_prompt(
+    state: GameLobbyState,
+    prompt_id: int | None,
+) -> GamePromptState | None:
+    if prompt_id is None:
+        return None
+    for category in state.categories:
+        for prompt in category.prompts:
+            if prompt.prompt_id == prompt_id:
+                return prompt
+    return None
+
+
+def clear_game_player_selection_flags(state: GameLobbyState) -> None:
+    for player in state.players:
+        player.is_selected = False
+
+
+def is_eligible_game_player(player: GamePlayerState | None) -> bool:
+    return (
+        player is not None
+        and not player.is_banned
+        and player.connection_status == PlayerConnectionStatusEnum.CONNECTED
+    )
+
+
+def get_eligible_buzzers(state: GameLobbyState) -> list[GamePlayerState]:
+    return [
+        player
+        for player in state.players
+        if is_eligible_game_player(player) and player.user_id not in state.attempted_player_ids
+    ]
+
+
+def all_board_prompts_spent(state: GameLobbyState) -> bool:
+    return all(prompt.is_selected for category in state.categories for prompt in category.prompts)
 
 
 def build_public_game_state(
@@ -125,53 +164,3 @@ def build_public_game_state(
         resolution=state.resolution if is_revealing_answer else None,
         latest_sound_cue_id=state.sound_cue_id,
     )
-
-
-def build_game_lobby_state(lobby: LobbyWithCategoryPromptsInDBSchema) -> GameLobbyState:
-    """Build immutable SQL lobby snapshot into initial Redis game state."""
-    if lobby.owner is None:
-        raise BadRequestError("Lobby has no owner; cannot start a game")
-
-    return GameLobbyState(
-        lobby_id=lobby.id,
-        host=GameHostState(user_id=lobby.owner.id, username=lobby.owner.username),
-        categories=[
-            GameCategoryState(
-                category_id=category.id,
-                name=category.name,
-                prompts=[
-                    GamePromptState(
-                        prompt_id=prompt.id,
-                        question=prompt.question,
-                        answer=prompt.answer,
-                        question_type=prompt.question_type,
-                        answer_type=prompt.answer_type,
-                        question_media=(
-                            build_media_reference(prompt.question_media_asset)
-                            if prompt.question_media_asset is not None
-                            else None
-                        ),
-                        answer_media=(
-                            build_media_reference(prompt.answer_media_asset)
-                            if prompt.answer_media_asset is not None
-                            else None
-                        ),
-                        order=prompt.order or 0,
-                    )
-                    for prompt in category.prompts
-                ],
-            )
-            for category in lobby.prompt_categories
-        ],
-    )
-
-
-async def materialize_game_state(
-    uow: UnitOfWork,
-    lobby_id: int,
-) -> GameLobbyState:
-    """Build SQL lobby snapshot then initialize Redis exactly once."""
-    lobby = await uow.lobby_repo.select_lobby_with_prompts(lobby_id=lobby_id)
-    if lobby is None:
-        raise NotFoundError(f"Lobby {lobby_id} not found")
-    return await uow.game_state_repo.initialize_state(build_game_lobby_state(lobby))

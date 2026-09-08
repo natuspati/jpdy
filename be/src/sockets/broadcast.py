@@ -5,7 +5,7 @@ from sockets.app import sio
 from sockets.namespace import lobby_namespace
 from sockets.session import lobby_host_room, lobby_player_room
 from sockets.uow import build_uow
-from utils.game_state import build_public_game_state
+from utils.game_state import build_public_game_state, find_game_prompt
 
 STATE_CHANGED_EVENT = "state_changed"
 HOST_ANSWER_KEY_EVENT = "host_answer_key"
@@ -41,15 +41,7 @@ async def _emit_host_answer_key(namespace: str, state: GameLobbyState) -> None:
     if state.phase != GamePhaseEnum.PLAYER_ANSWERING or state.current_prompt_id is None:
         return
 
-    prompt = next(
-        (
-            prompt
-            for category in state.categories
-            for prompt in category.prompts
-            if prompt.prompt_id == state.current_prompt_id
-        ),
-        None,
-    )
+    prompt = find_game_prompt(state, state.current_prompt_id)
     if prompt is None:
         return
 

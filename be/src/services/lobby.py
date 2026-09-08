@@ -15,8 +15,8 @@ from schemas.lobby.nested import (
 )
 from schemas.user.base import UserPublicSchema
 from services import game_timers
+from services.game_state_materializer import GameStateMaterializer
 from sockets.lobby_lifecycle import notify_lobby_deleted_and_disconnect
-from utils.game_state import materialize_game_state
 from utils.lobby import (
     ensure_owned_lobby,
     get_player_count,
@@ -129,7 +129,7 @@ class LobbyService:
                     lobby_id=lobby_id,
                     state=schema.state,
                 )
-                await materialize_game_state(uow, lobby_id)
+                await GameStateMaterializer(uow).materialize(lobby_id)
 
             updated = await uow.lobby_repo.select_lobby(lobby_id=lobby_id)
         if updated is None:

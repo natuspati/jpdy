@@ -1,4 +1,4 @@
-from enums.game import GamePhaseEnum, GameResolutionEnum
+from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
 from schemas.lobby.game_state import (
     GameCategoryState,
@@ -7,7 +7,15 @@ from schemas.lobby.game_state import (
     GamePlayerState,
     GamePromptState,
 )
-from utils.game_state import build_public_game_state
+from utils.game_state import (
+    all_board_prompts_spent,
+    build_public_game_state,
+    clear_game_player_selection_flags,
+    find_game_player,
+    find_game_prompt,
+    get_eligible_buzzers,
+    is_eligible_game_player,
+)
 
 
 def _state() -> GameLobbyState:
@@ -69,3 +77,23 @@ def test_public_projection_reveals_answer_only_during_reveal() -> None:
     assert [player.user_id for player in projected.players] == [2, 3]
     assert projected.resolved_answer == "Answer"
     assert projected.resolution == GameResolutionEnum.CORRECT
+
+
+def test_shared_state_helpers_find_and_filter_live_entities() -> None:
+    state = _state()
+    state.players[0].connection_status = PlayerConnectionStatusEnum.CONNECTED
+    state.players[0].is_selected = True
+    state.players[1].connection_status = PlayerConnectionStatusEnum.CONNECTED
+
+    assert find_game_player(state, 2) is state.players[0]
+    assert find_game_player(state, None) is None
+    assert find_game_prompt(state, 10) is state.categories[0].prompts[0]
+    assert find_game_prompt(state, None) is None
+    assert is_eligible_game_player(state.players[0]) is True
+    assert get_eligible_buzzers(state) == [state.players[0]]
+
+    clear_game_player_selection_flags(state)
+    assert not any(player.is_selected for player in state.players)
+    assert all_board_prompts_spent(state) is False
+    state.categories[0].prompts[0].is_selected = True
+    assert all_board_prompts_spent(state) is True

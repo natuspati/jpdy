@@ -45,6 +45,26 @@ created → waiting_start → in_progress → completed
   Redis accepts a transition. Live-game authorization, scores, phases, and
   deadlines never use SQL projections as their authority.
 
+### Backend ownership boundaries
+
+- `GameService` is thin application-command façade used by Socket.IO handlers
+  and timer hooks. It extracts command inputs, invokes Redis serialization,
+  then requests any required SQL projection.
+- `GameStateMachine` owns pure synchronous Jeopardy transitions: permissions,
+  phase/deadline rules, score changes, reveal progression, and ban recovery.
+  It mutates only an in-memory `GameLobbyState` and returns a command outcome;
+  it performs no database, Redis, Socket.IO, or other awaited I/O.
+- `GameCommandExecutor` sends one state-machine transition to
+  `GameStateRepo`, supplies fallback command IDs, and translates missing-state
+  or optimistic-conflict errors. `GameStateRepo` retains Redis
+  `WATCH`/`MULTI`/`EXEC`, idempotency, event-stream, and timer-schedule work.
+- `GameProjectionService` performs idempotent post-Redis SQL projections:
+  participant creation and bans, lobby `in_progress`, and completed-game score
+  snapshots. Redis remains live-game authority if projection work must retry.
+- `GameStateMaterializer` converts the SQL lobby/category/prompt snapshot into
+  its initial Redis `GameLobbyState` when lobby preparation reaches
+  `waiting_start`.
+
 ### Category requirements
 
 - A lobby must have between one and ten attached categories.
