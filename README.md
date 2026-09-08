@@ -5,7 +5,7 @@ video prompts:
 
 - `be/` — FastAPI, SQLite, Redis, Socket.IO
 - `fe/` — React, TypeScript, Vite
-- `deployment/` — local Compose configuration and API seed scripts
+- `deployment/` — local Compose configuration
 
 The existing JWT sign-in is only a lightweight local identity mechanism. This
 setup is for local development, not production deployment.
@@ -29,13 +29,32 @@ and every resolved clue gets a short public answer-reveal period.
 From the repository root:
 
 ```bash
-docker-compose -f deployment/docker-compose.local.yml up --build -d
-docker-compose -f deployment/docker-compose.local.yml ps
+cp deployment/local.env.example deployment/local.env
+
+docker-compose --env-file deployment/local.env \
+  -f deployment/docker-compose.local.yml up --build -d
+docker-compose --env-file deployment/local.env \
+  -f deployment/docker-compose.local.yml ps
 ```
 
 This guide uses the hyphenated `docker-compose` command because it works with
 the local Colima setup. If your Docker CLI has the Compose v2 plugin, use
 `docker compose` in place of `docker-compose`.
+
+`deployment/local.env` contains every local runtime and frontend build setting.
+It is injected into the PostgreSQL, migration, and backend containers through
+Compose `env_file`; `--env-file` supplies Compose interpolation and frontend
+Docker build arguments. It is gitignored; `deployment/local.env.example` is
+its tracked template. Always pass the local file with `--env-file` when running
+Compose from the repository root. `BE_ALLOWED_HOSTS` must include the selected
+`NGINX_HOST_PORT`.
+
+`POSTGRES_PASSWORD` and `BE_DB_PASSWORD` must always have the same value.
+PostgreSQL applies `POSTGRES_*` only when it initializes an empty data volume.
+If an existing local database was initialized with different credentials,
+either restore its original matching password or reset it with `down -v`
+(which permanently deletes local PostgreSQL, Redis, and uploaded-media data)
+before starting Compose.
 
 This starts every local runtime dependency:
 
@@ -45,26 +64,12 @@ This starts every local runtime dependency:
 Nginx is sole browser entry point. It serves built React `/assets/`, immutable
 uploaded `/media/` files, SPA routes, and proxies `/api/` plus Socket.IO
 `/ws/` to FastAPI. FastAPI validates uploads but does not serve media bytes.
-The `migrate` job applies Alembic before backend starts. Redis persists in
-`jpdy_redis_data`, PostgreSQL in `jpdy_postgres_data`, and uploaded prompt
-media in `jpdy_media_data`.
-
-### 2. Seed local users and categories
-
-After `docker-compose ... ps` reports the backend as healthy, run the seed
-script through the backend's local uv environment:
-
-```bash
-cd be
-uv sync
-uv run ../deployment/scripts/seed_local.py
-```
-
-The script calls only the running API; it does not access the database
-directly, and it refuses to run until the API health endpoint responds.
-Re-running it is safe: it keeps the four fixed users and reconciles five
-host-owned categories to their 25 text prompts. It never creates a lobby or
-game.
+The `migrate` job applies Alembic, then seeds local users and categories before
+backend starts. Seeding is database-direct and safe to rerun after migrations:
+it retains fixed users and reconciles five host-owned categories to 25 text
+prompts without creating a lobby or game. Redis persists in `jpdy_redis_data`,
+PostgreSQL in `jpdy_postgres_data`, and uploaded prompt media in
+`jpdy_media_data`.
 
 Seeded credentials are:
 
@@ -75,7 +80,7 @@ The API currently has a six-character password minimum, hence the `123`
 suffixes. It has a single `username` field, so `alice`, `bob`, and `carol`
 are also the display identities shown in the app.
 
-### 3. Create and play a local game
+### 2. Create and play a local game
 
 1. Open `http://localhost:8080` and sign in as the seeded **host**.
 2. Open three separate browser profiles or incognito windows and sign in as
@@ -138,7 +143,8 @@ Visibility rules are specified in [`GAME_FLOW.md`](GAME_FLOW.md):
 If you prefer running FastAPI and Vite directly, start Redis only:
 
 ```bash
-docker-compose -f deployment/docker-compose.local.yml up -d redis
+docker-compose --env-file deployment/local.env \
+  -f deployment/docker-compose.local.yml up -d redis
 ```
 
 Then configure and run the backend:
@@ -171,7 +177,8 @@ Normal Compose deliberately starts one backend worker. To smoke-test shared
 Socket.IO delivery, run this candidate branch with:
 
 ```bash
-BE_WORKERS_COUNT=2 docker-compose -f deployment/docker-compose.local.yml up --build
+BE_WORKERS_COUNT=2 docker-compose --env-file deployment/local.env \
+  -f deployment/docker-compose.local.yml up --build
 ```
 
 Verify host/private answer key, player public state, reconnect takeover,
@@ -184,11 +191,12 @@ by Compose. Do not use a scaled baseline branch.
 To reset all Compose-managed state (PostgreSQL and Redis):
 
 ```bash
-docker-compose -f deployment/docker-compose.local.yml down -v
+docker-compose --env-file deployment/local.env \
+  -f deployment/docker-compose.local.yml down -v
 ```
 
-Then use the complete-stack command and seed command above to recreate a clean
-local instance.
+Then use the complete-stack command above to recreate and seed a clean local
+instance.
 
 For native development, stop the backend and remove the local SQLite database
 from `be/`:
@@ -200,7 +208,8 @@ rm -f be/jpdy.db
 To also reset native Redis game state:
 
 ```bash
-docker-compose -f deployment/docker-compose.local.yml down -v
+docker-compose --env-file deployment/local.env \
+  -f deployment/docker-compose.local.yml down -v
 ```
 
 Start Redis and the backend again; with the example `be/.env`, Alembic will

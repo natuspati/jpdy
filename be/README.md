@@ -15,11 +15,13 @@ uv run src/main.py
 With the tracked local environment example, the API runs at
 `http://localhost:8000`.
 
-After the API is healthy, seed local users and five host-owned text categories
-through the public API:
+Compose runs `deployment/scripts/seed_local.py` after Alembic and before its
+backend starts.
+For native development, run the same idempotent database seed script after
+Alembic has created the schema:
 
 ```bash
-uv run ../deployment/scripts/seed_local.py
+PYTHONPATH=src uv run ../deployment/scripts/seed_local.py
 ```
 
 Before handing off back-end changes, run:

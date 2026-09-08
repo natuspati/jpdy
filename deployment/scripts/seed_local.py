@@ -1,35 +1,26 @@
 #!/usr/bin/env python3
-"""Seed a running local Jeopardy API through its public REST endpoints.
-
-Run from ``be/`` so the backend's uv environment is used:
-
-    uv run ../deployment/scripts/seed_local.py
-
-The API must already be healthy. Re-running this script is safe: it keeps the
-four fixed users, creates missing seed categories, and reconciles the five
-seed categories to their five text prompts. It never creates a lobby or game.
-"""
+"""Idempotently seed the configured database with local Jeopardy data."""
 
 from __future__ import annotations
 
-import json
-import os
-import sys
-from collections.abc import Iterable, Mapping
+import asyncio
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-DEFAULT_API_URL: Final = "http://localhost:8080/api/v1"
-DEFAULT_HEALTH_URL: Final = "http://localhost:8080/api/health"
-REQUEST_TIMEOUT_SECONDS: Final = 10
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from database.session import async_session_maker
+from models.prompt import Prompt
+from models.prompt_category import PromptCategory
+from models.user import User
+from utils.auth import hash_password
 
 
 @dataclass(frozen=True)
 class SeedUser:
-    label: str
     username: str
     password: str
 
@@ -47,10 +38,10 @@ class SeedCategory:
 
 
 USERS: Final = (
-    SeedUser(label="Host", username="host", password="host123"),
-    SeedUser(label="Player", username="alice", password="alice123"),
-    SeedUser(label="Player", username="bob", password="bob123"),
-    SeedUser(label="Player", username="carol", password="carol123"),
+    SeedUser(username="host", password="host123"),
+    SeedUser(username="alice", password="alice123"),
+    SeedUser(username="bob", password="bob123"),
+    SeedUser(username="carol", password="carol123"),
 )
 
 CATEGORIES: Final = (
@@ -110,289 +101,117 @@ CATEGORIES: Final = (
 )
 
 
-class ApiError(RuntimeError):
-    """An API request failed or returned an unexpected response."""
+async def seed_local_database(session: AsyncSession) -> None:
+    """
+    Ensure fixed local users and host-owned text categories exist.
 
+    Existing users are retained. Existing host categories with seed names are
+    reconciled to their five expected prompts, so executing this after Alembic
+    migrations is safe repeatedly.
+    """
+    users = await _ensure_users(session)
+    host = users["host"]
+    categories = await _load_host_categories(session, host.id)
 
-class ApiClient:
-    def __init__(self, api_url: str) -> None:
-        self._api_url = api_url.rstrip("/")
-
-    def request(
-        self,
-        method: str,
-        path: str,
-        *,
-        json_body: Mapping[str, object] | None = None,
-        form_body: Mapping[str, str] | None = None,
-        token: str | None = None,
-        allowed_error_statuses: Iterable[int] = (),
-    ) -> tuple[int, object | None]:
-        headers = {"Accept": "application/json"}
-        data: bytes | None = None
-
-        if token is not None:
-            headers["Authorization"] = f"Bearer {token}"
-        if json_body is not None:
-            headers["Content-Type"] = "application/json"
-            data = json.dumps(json_body).encode("utf-8")
-        elif form_body is not None:
-            headers["Content-Type"] = "application/x-www-form-urlencoded"
-            data = urlencode(form_body).encode("utf-8")
-
-        request = Request(
-            url=f"{self._api_url}{path}",
-            data=data,
-            headers=headers,
-            method=method,
-        )
-        try:
-            with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-                return response.status, _read_json_response(response.read())
-        except HTTPError as error:
-            payload = _read_json_response(error.read())
-            if error.code in allowed_error_statuses:
-                return error.code, payload
-            raise ApiError(
-                f"{method} {path} failed with HTTP {error.code}: {_error_detail(payload)}",
-            ) from error
-        except URLError as error:
-            raise ApiError(
-                f"Could not reach the API at {self._api_url}: {error.reason}",
-            ) from error
-
-
-def _read_json_response(raw_body: bytes) -> object | None:
-    if not raw_body:
-        return None
-    try:
-        return json.loads(raw_body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ApiError("API returned a non-JSON response") from error
-
-
-def _error_detail(payload: object | None) -> str:
-    if isinstance(payload, Mapping):
-        detail = payload.get("detail")
-        if isinstance(detail, str):
-            return detail
-    return "unexpected response body"
-
-
-def _require_object(payload: object | None, description: str) -> Mapping[str, object]:
-    if not isinstance(payload, Mapping):
-        raise ApiError(f"Expected an object while reading {description}")
-    return payload
-
-
-def _require_int(payload: Mapping[str, object], key: str, description: str) -> int:
-    value = payload.get(key)
-    if not isinstance(value, int):
-        raise ApiError(f"Expected integer '{key}' while reading {description}")
-    return value
-
-
-def _require_str(payload: Mapping[str, object], key: str, description: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value:
-        raise ApiError(f"Expected non-empty string '{key}' while reading {description}")
-    return value
-
-
-def ensure_api_is_healthy(health_url: str) -> None:
-    request = Request(url=health_url, headers={"Accept": "application/json"}, method="GET")
-    try:
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-            if response.status != 200:
-                raise ApiError(f"Health check returned HTTP {response.status}")
-            payload = _require_object(_read_json_response(response.read()), "health check")
-    except HTTPError as error:
-        raise ApiError(f"Health check failed with HTTP {error.code}") from error
-    except URLError as error:
-        raise ApiError(f"Could not reach health endpoint {health_url}: {error.reason}") from error
-
-    if payload.get("status") != "healthy":
-        raise ApiError(f"Health endpoint {health_url} did not report a healthy API")
-
-
-def ensure_user(client: ApiClient, user: SeedUser) -> None:
-    status, _ = client.request(
-        "POST",
-        "/user/register",
-        json_body={"username": user.username, "password": user.password},
-        allowed_error_statuses=(409,),
-    )
-    action = "created" if status == 201 else "already exists"
-    print(f"{user.label} user '{user.username}': {action}")
-
-
-def sign_in_as_host(client: ApiClient, host: SeedUser) -> str:
-    _, payload = client.request(
-        "POST",
-        "/user/sign-in",
-        form_body={"username": host.username, "password": host.password},
-    )
-    return _require_str(_require_object(payload, "host sign-in"), "access_token", "host sign-in")
-
-
-def get_host_id(client: ApiClient, token: str) -> int:
-    _, payload = client.request("GET", "/user/me", token=token)
-    return _require_int(_require_object(payload, "host profile"), "id", "host profile")
-
-
-def get_host_categories(
-    client: ApiClient,
-    token: str,
-    host_id: int,
-) -> dict[str, Mapping[str, object]]:
-    query = urlencode((("owner_ids", str(host_id)), ("size", "1000")))
-    _, payload = client.request("GET", f"/category?{query}", token=token)
-    response = _require_object(payload, "host categories")
-    contents = response.get("contents")
-    if not isinstance(contents, list):
-        raise ApiError("Expected a category list while reading host categories")
-
-    categories: dict[str, Mapping[str, object]] = {}
-    for category in contents:
-        category_object = _require_object(category, "host category")
-        name = _require_str(category_object, "name", "host category")
-        categories.setdefault(name, category_object)
-    return categories
-
-
-def ensure_category(
-    client: ApiClient,
-    token: str,
-    category: SeedCategory,
-    existing_categories: dict[str, Mapping[str, object]],
-) -> None:
-    existing = existing_categories.get(category.name)
-    if existing is None:
-        _, payload = client.request(
-            "POST",
-            "/category",
-            token=token,
-            json_body={"name": category.name},
-        )
-        category_id = _require_int(
-            _require_object(payload, f"created category {category.name}"),
-            "id",
-            f"created category {category.name}",
-        )
-        prompts: list[Mapping[str, object]] = []
-        print(f"Category '{category.name}': created")
-    else:
-        category_id = _require_int(existing, "id", f"category {category.name}")
-        raw_prompts = existing.get("prompts")
-        if not isinstance(raw_prompts, list):
-            raise ApiError(f"Expected prompts while reading category '{category.name}'")
-        prompts = [
-            _require_object(prompt, f"prompt in category '{category.name}'")
-            for prompt in raw_prompts
-        ]
-        print(f"Category '{category.name}': reconciling")
-
-    _sync_prompts(client, token, category_id, category, prompts)
-
-
-def _sync_prompts(
-    client: ApiClient,
-    token: str,
-    category_id: int,
-    category: SeedCategory,
-    existing_prompts: list[Mapping[str, object]],
-) -> None:
-    prompts_by_order: dict[int, list[Mapping[str, object]]] = {}
-    unordered_prompts: list[Mapping[str, object]] = []
-    for prompt in existing_prompts:
-        order = prompt.get("order")
-        if isinstance(order, int):
-            prompts_by_order.setdefault(order, []).append(prompt)
+    for seed_category in CATEGORIES:
+        category = categories.get(seed_category.name)
+        if category is None:
+            category = PromptCategory(name=seed_category.name, owner_id=host.id)
+            session.add(category)
+            await session.flush()
+            existing_prompts: Sequence[Prompt] = ()
         else:
-            unordered_prompts.append(prompt)
+            existing_prompts = category.prompts
+        await _reconcile_prompts(session, existing_prompts, category.id, seed_category)
 
-    retained_prompts: dict[int, Mapping[str, object]] = {}
-    desired_orders = range(1, len(category.prompts) + 1)
-    for order in desired_orders:
+
+async def _ensure_users(session: AsyncSession) -> dict[str, User]:
+    users: dict[str, User] = {}
+    for seed_user in USERS:
+        user = await session.scalar(
+            select(User).where(User.username == seed_user.username),
+        )
+        if user is None:
+            user = User(
+                username=seed_user.username,
+                hashed_password=hash_password(seed_user.password),
+            )
+            session.add(user)
+            await session.flush()
+        users[seed_user.username] = user
+    return users
+
+
+async def _load_host_categories(
+    session: AsyncSession,
+    host_id: int,
+) -> dict[str, PromptCategory]:
+    query = (
+        select(PromptCategory)
+        .where(PromptCategory.owner_id == host_id)
+        .options(selectinload(PromptCategory.prompts))
+        .order_by(PromptCategory.id)
+    )
+    categories = (await session.scalars(query)).all()
+    categories_by_name: dict[str, PromptCategory] = {}
+    for category in categories:
+        categories_by_name.setdefault(category.name, category)
+    return categories_by_name
+
+
+async def _reconcile_prompts(
+    session: AsyncSession,
+    existing_prompts: Sequence[Prompt],
+    category_id: int,
+    seed_category: SeedCategory,
+) -> None:
+    prompts_by_order: dict[int, list[Prompt]] = {}
+    prompts_to_delete: list[Prompt] = []
+    for prompt in existing_prompts:
+        if prompt.order is None:
+            prompts_to_delete.append(prompt)
+        else:
+            prompts_by_order.setdefault(prompt.order, []).append(prompt)
+
+    retained_prompts: dict[int, Prompt] = {}
+    for order in range(1, len(seed_category.prompts) + 1):
         candidates = prompts_by_order.pop(order, [])
         if candidates:
             retained_prompts[order] = candidates[0]
-            _delete_prompts(client, token, category_id, candidates[1:])
+            prompts_to_delete.extend(candidates[1:])
 
-    for extra_prompts in prompts_by_order.values():
-        _delete_prompts(client, token, category_id, extra_prompts)
-    _delete_prompts(client, token, category_id, unordered_prompts)
+    for prompts in prompts_by_order.values():
+        prompts_to_delete.extend(prompts)
+    for prompt in prompts_to_delete:
+        await session.delete(prompt)
 
-    for order, seed_prompt in enumerate(category.prompts, start=1):
-        existing = retained_prompts.get(order)
-        payload = {
-            "question": seed_prompt.question,
-            "question_type": "text",
-            "answer": seed_prompt.answer,
-            "answer_type": "text",
-        }
-        if existing is None:
-            client.request(
-                "POST",
-                f"/category/{category_id}/prompts",
-                token=token,
-                json_body={**payload, "order": order},
+    for order, seed_prompt in enumerate(seed_category.prompts, start=1):
+        prompt = retained_prompts.get(order)
+        if prompt is None:
+            session.add(
+                Prompt(
+                    category_id=category_id,
+                    order=order,
+                    question=seed_prompt.question,
+                    question_type="text",
+                    answer=seed_prompt.answer,
+                    answer_type="text",
+                ),
             )
-        else:
-            prompt_id = _require_int(
-                existing,
-                "id",
-                f"prompt {order} in category '{category.name}'",
-            )
-            client.request(
-                "PATCH",
-                f"/category/{category_id}/prompts/{prompt_id}",
-                token=token,
-                json_body=payload,
-            )
+            continue
+        prompt.question = seed_prompt.question
+        prompt.question_type = "text"
+        prompt.question_media_asset_id = None
+        prompt.answer = seed_prompt.answer
+        prompt.answer_type = "text"
+        prompt.answer_media_asset_id = None
 
 
-def _delete_prompts(
-    client: ApiClient,
-    token: str,
-    category_id: int,
-    prompts: Iterable[Mapping[str, object]],
-) -> None:
-    for prompt in prompts:
-        prompt_id = _require_int(prompt, "id", f"prompt in category {category_id}")
-        client.request(
-            "DELETE",
-            f"/category/{category_id}/prompts/{prompt_id}",
-            token=token,
-        )
-
-
-def main() -> int:
-    api_url = os.environ.get("JPDY_API_URL", DEFAULT_API_URL)
-    health_url = os.environ.get("JPDY_HEALTH_URL", DEFAULT_HEALTH_URL)
-    client = ApiClient(api_url)
-
-    try:
-        ensure_api_is_healthy(health_url)
-        for user in USERS:
-            ensure_user(client, user)
-
-        host = USERS[0]
-        token = sign_in_as_host(client, host)
-        host_id = get_host_id(client, token)
-        existing_categories = get_host_categories(client, token, host_id)
-        for category in CATEGORIES:
-            ensure_category(client, token, category, existing_categories)
-    except ApiError as error:
-        print(f"Seed failed: {error}", file=sys.stderr)
-        return 1
-
-    print("\nSeed complete. No lobby or game was created.")
-    print("Host: host / host123")
-    print("Players: alice / alice123, bob / bob123, carol / carol123")
-    print("Created or reconciled 5 host-owned text categories with 25 prompts.")
-    return 0
+async def main() -> None:
+    async with async_session_maker.begin() as session:
+        await seed_local_database(session)
+    print("Seed complete: 4 users, 5 host-owned categories, and 25 text prompts.")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    asyncio.run(main())
