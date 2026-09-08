@@ -1,4 +1,4 @@
-from pydantic import Field, computed_field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
 from enums import AnswerTypeEnum, QuestionTypeEnum
@@ -31,31 +31,10 @@ class PromptInDBSchema(BaseSchema):
     question_media_asset: MediaAssetInDBSchema | None = Field(default=None, exclude=True)
     answer_media_asset: MediaAssetInDBSchema | None = Field(default=None, exclude=True)
 
-    @computed_field
-    @property
-    def question_content(self) -> QuestionContentSchema:
-        return QuestionContentSchema(
-            type=self.question_type,
-            text=self.question,
-            media=(
-                MediaReferenceSchema.from_asset(self.question_media_asset)
-                if self.question_media_asset is not None
-                else None
-            ),
-        )
 
-    @computed_field
-    @property
-    def answer_content(self) -> AnswerContentSchema:
-        return AnswerContentSchema(
-            type=self.answer_type,
-            text=self.answer,
-            media=(
-                MediaReferenceSchema.from_asset(self.answer_media_asset)
-                if self.answer_media_asset is not None
-                else None
-            ),
-        )
+class PromptResponseSchema(PromptInDBSchema):
+    question_content: QuestionContentSchema
+    answer_content: AnswerContentSchema
 
 
 class PromptCreateSchema(BaseSchema):

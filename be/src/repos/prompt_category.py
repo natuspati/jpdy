@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
-from errors.request import BadRequestError
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
 from schemas.prompt.category import (
@@ -226,32 +225,13 @@ class PromptCategoryRepo:
         category_id: int,
         prompt_order: dict[int, int],
     ) -> None:
-        if not prompt_order:
-            return
-
-        new_orders = list(prompt_order.values())
-        if len(set(new_orders)) != len(new_orders):
-            raise BadRequestError("Prompt orders must be unique within the mapping")
-        for order_value in new_orders:
-            if not 1 <= order_value <= NUM_PROMPTS_IN_CATEGORY:
-                raise BadRequestError(
-                    f"Prompt order must be between 1 and {NUM_PROMPTS_IN_CATEGORY}",
-                )
-
-        prompt_ids = list(prompt_order.keys())
-        owned_query = select(Prompt.id).where(
-            Prompt.id.in_(prompt_ids),
-            Prompt.category_id == category_id,
-        )
-        owned_ids = set(
-            (await self._session.execute(owned_query)).scalars().all(),
-        )
-        missing = set(prompt_ids) - owned_ids
-        if missing:
-            raise BadRequestError(
-                f"Prompts {sorted(missing)} do not belong to category {category_id}",
-            )
-
         for prompt_id, new_order in prompt_order.items():
-            stmt = update(Prompt).where(Prompt.id == prompt_id).values(order=new_order)
+            stmt = (
+                update(Prompt)
+                .where(
+                    Prompt.id == prompt_id,
+                    Prompt.category_id == category_id,
+                )
+                .values(order=new_order)
+            )
             await self._session.execute(stmt)

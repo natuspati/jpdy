@@ -17,8 +17,12 @@ from schemas.socket.events import (
     UnbanPlayerPayload,
 )
 from services.game import GameService
-from sockets.app import sio
-from sockets.broadcast import broadcast_sound_cue, broadcast_state, emit_error
+from sockets.broadcast import (
+    broadcast_sound_cue,
+    broadcast_state,
+    disconnect_lobby_player,
+    emit_error,
+)
 from sockets.namespace import parse_lobby_namespace
 from sockets.session import get_socket_session
 from sockets.timer_hooks import arm_timer_if_needed
@@ -100,7 +104,7 @@ async def _run_event[T: pydantic.BaseModel](
         await emit_error(namespace, sid, code, e.detail)
         return False
     except Exception:
-        _logger.exception("Unhandled error in socket event for lobby %s", lobby_id)
+        _logger.exception(f"Unhandled error in socket event for lobby {lobby_id}")
         await emit_error(namespace, sid, "internal_error", "Internal server error")
         return False
 
@@ -122,10 +126,9 @@ async def _emit_sound_cue(lobby_id: int, cue: GameSoundCueName) -> None:
             )
         await broadcast_sound_cue(lobby_id, payload)
     except Exception:
-        _logger.exception("Failed to emit %s sound cue for lobby %s", cue, lobby_id)
+        _logger.exception(f"Failed to emit {cue} sound cue for lobby {lobby_id}")
 
 
-@sio.on("start_game", namespace="*")
 async def on_start_game(namespace: str, sid: str, _data: Any = None) -> None:
     async def _action(
         service: GameService,
@@ -150,7 +153,6 @@ async def on_start_game(namespace: str, sid: str, _data: Any = None) -> None:
     )
 
 
-@sio.on("select_starter", namespace="*")
 async def on_select_starter(namespace: str, sid: str, data: Any = None) -> None:
     async def _action(
         service: GameService,
@@ -170,7 +172,6 @@ async def on_select_starter(namespace: str, sid: str, data: Any = None) -> None:
     await _run_event(namespace, sid, data, SelectStarterPayload, _action)
 
 
-@sio.on("select_prompt", namespace="*")
 async def on_select_prompt(namespace: str, sid: str, data: Any = None) -> None:
     async def _action(
         service: GameService,
@@ -197,7 +198,6 @@ async def on_select_prompt(namespace: str, sid: str, data: Any = None) -> None:
     )
 
 
-@sio.on("judge_answer", namespace="*")
 async def on_judge_answer(namespace: str, sid: str, data: Any = None) -> None:
     async def _action(
         service: GameService,
@@ -229,7 +229,6 @@ async def on_judge_answer(namespace: str, sid: str, data: Any = None) -> None:
     await _run_event(namespace, sid, data, JudgeAnswerPayload, _action, _cues)
 
 
-@sio.on("buzz", namespace="*")
 async def on_buzz(namespace: str, sid: str, _data: Any = None) -> None:
     async def _action(
         service: GameService,
@@ -254,7 +253,6 @@ async def on_buzz(namespace: str, sid: str, _data: Any = None) -> None:
     )
 
 
-@sio.on("advance_answer_reveal", namespace="*")
 async def on_advance_answer_reveal(namespace: str, sid: str, _data: Any = None) -> None:
     async def _action(
         service: GameService,
@@ -281,7 +279,6 @@ async def on_advance_answer_reveal(namespace: str, sid: str, _data: Any = None) 
     )
 
 
-@sio.on("ban_player", namespace="*")
 async def on_ban_player(namespace: str, sid: str, data: Any = None) -> None:
     async def _action(
         service: GameService,
@@ -302,21 +299,15 @@ async def on_ban_player(namespace: str, sid: str, data: Any = None) -> None:
     if not succeeded:
         return
 
-    # After ban, force the banned player off the namespace.
     try:
         banned_id = BanPlayerPayload.model_validate(data or {}).user_id
     except pydantic.ValidationError:
         return
     lobby_id = parse_lobby_namespace(namespace)
-    if lobby_id is None:
-        return
-    async with build_uow() as uow:
-        target_sid = await uow.game_state_repo.get_connection_sid(lobby_id, banned_id)
-    if target_sid is not None:
-        await sio.disconnect(target_sid, namespace=namespace)
+    if lobby_id is not None:
+        await disconnect_lobby_player(lobby_id, banned_id)
 
 
-@sio.on("unban_player", namespace="*")
 async def on_unban_player(namespace: str, sid: str, data: Any = None) -> None:
     async def _action(
         service: GameService,

@@ -5,8 +5,9 @@ from fakeredis import FakeAsyncRedis
 
 from enums.game import GamePhaseEnum, PlayerConnectionStatusEnum
 from errors.request import BadRequestError
-from repos.game_state import GameStateRepo, GameTransition
+from repos.game_state import GameStateRepo
 from schemas.lobby.game_state import GameHostState, GameLobbyState, GamePlayerState
+from utils.game_state import GameCommandOutcome, game_events_key
 
 
 async def test_execute_serializes_simultaneous_buzzes(
@@ -37,12 +38,12 @@ async def test_execute_serializes_simultaneous_buzzes(
     barrier = asyncio.Barrier(2)
 
     def buzz_transition(user_id: int):
-        def transition(current: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(current: GameLobbyState) -> GameCommandOutcome:
             if current.phase != GamePhaseEnum.BUZZ_OPEN:
                 raise BadRequestError("Buzz is already closed")
             current.phase = GamePhaseEnum.PLAYER_ANSWERING
             current.answering_player_id = user_id
-            return GameTransition(current, current, "buzz_accepted")
+            return GameCommandOutcome(current, current, "buzz_accepted")
 
         return transition
 
@@ -65,7 +66,7 @@ async def test_execute_serializes_simultaneous_buzzes(
     assert persisted is not None
     assert persisted.answering_player_id == accepted[0].answering_player_id
     assert persisted.state_revision == 1
-    events = await redis_client.xrange(GameStateRepo.events_key(42))
+    events = await redis_client.xrange(game_events_key(42))
     assert len(events) == 1
 
 
@@ -77,11 +78,11 @@ async def test_execute_deduplicates_command_id(
     await repo.save_state(state)
     calls = 0
 
-    def transition(current: GameLobbyState) -> GameTransition[GameLobbyState]:
+    def transition(current: GameLobbyState) -> GameCommandOutcome:
         nonlocal calls
         calls += 1
         current.sound_cue_id += 1
-        return GameTransition(current, current, "sound_cue")
+        return GameCommandOutcome(current, current, "sound_cue")
 
     first = await repo.execute(7, "same-command", "sound", transition)
     second = await repo.execute(7, "same-command", "sound", transition)
@@ -89,4 +90,4 @@ async def test_execute_deduplicates_command_id(
     assert calls == 1
     assert first.state_revision == second.state_revision == 1
     assert second.sound_cue_id == 1
-    assert len(await redis_client.xrange(GameStateRepo.events_key(7))) == 1
+    assert len(await redis_client.xrange(game_events_key(7))) == 1

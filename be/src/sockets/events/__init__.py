@@ -1,1 +1,1 @@
-from sockets.events import connection, game  # registers handlers
+"""Socket.IO handler function modules."""

@@ -12,8 +12,9 @@ from configs.constants import MEDIA_MAX_BYTES_BY_KIND
 from database import UnitOfWork
 from enums import MediaKindEnum
 from errors.request import BadRequestError, ForbiddenError, NotFoundError
-from schemas.media import MediaAssetInDBSchema
+from schemas.media import MediaAssetResponseSchema
 from schemas.user.base import UserPublicSchema
+from utils.media import build_media_response
 
 _UPLOAD_CHUNK_SIZE = 64 * 1024
 _PUBLISHED_MEDIA_MODE = 0o644
@@ -36,7 +37,7 @@ class MediaService:
         upload: UploadFile,
         media_kind: MediaKindEnum,
         user: UserPublicSchema,
-    ) -> MediaAssetInDBSchema:
+    ) -> MediaAssetResponseSchema:
         temporary_path: Path | None = None
         final_path: Path | None = None
         try:
@@ -66,7 +67,7 @@ class MediaService:
                 os.chmod(temporary_path, _PUBLISHED_MEDIA_MODE)
                 os.replace(temporary_path, final_path)
                 temporary_path = None
-            return asset
+            return build_media_response(asset)
         except Exception:
             if final_path is not None:
                 final_path.unlink(missing_ok=True)
@@ -96,30 +97,6 @@ class MediaService:
             storage_key = asset.storage_key
             await uow.media_asset_repo.delete_media_asset(asset_id)
         (settings.media_root / storage_key).unlink(missing_ok=True)
-
-    @classmethod
-    async def ensure_owned_asset(
-        cls,
-        *,
-        uow: UnitOfWork,
-        asset_id: int | None,
-        expected_kind: MediaKindEnum | None,
-        user_id: int,
-        field_name: str,
-    ) -> None:
-        if asset_id is None:
-            return
-        asset = await uow.media_asset_repo.select_media_asset(asset_id)
-        if asset is None:
-            raise BadRequestError(f"{field_name} does not exist")
-        if asset.owner_id != user_id:
-            raise ForbiddenError("Only your media assets can be assigned to a prompt")
-        if expected_kind is None:
-            raise BadRequestError(f"{field_name} is not allowed for text content")
-        if asset.media_kind != expected_kind:
-            raise BadRequestError(
-                f"{field_name} must reference {expected_kind.value} media",
-            )
 
 
 async def _store_upload_temporarily(

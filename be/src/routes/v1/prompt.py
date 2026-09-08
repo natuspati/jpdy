@@ -11,12 +11,12 @@ from schemas.prompt.category import (
     PromptCategoryUpdateSchema,
 )
 from schemas.prompt.nested import (
-    PaginatedPromptCategoryWithPromptsInDBSchema,
-    PromptCategoryWithPromptsInDBSchema,
+    PaginatedPromptCategoryResponseSchema,
+    PromptCategoryResponseSchema,
 )
 from schemas.prompt.prompt import (
     PromptCreateSchema,
-    PromptInDBSchema,
+    PromptResponseSchema,
     PromptUpdateSchema,
 )
 from schemas.user.base import UserInDBSchema
@@ -54,7 +54,7 @@ async def search_prompt_categories(
     filters: Annotated[PromptCategoryFilterSchema, Query()],
     current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[PromptService, Depends()],
-) -> PaginatedPromptCategoryWithPromptsInDBSchema:
+) -> PaginatedPromptCategoryResponseSchema:
     return await service.search_prompt_category(filters=filters, user=current_user)
 
 
@@ -71,7 +71,7 @@ async def get_prompt_category(
     category_id: int,
     current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[PromptService, Depends()],
-) -> PromptCategoryWithPromptsInDBSchema:
+) -> PromptCategoryResponseSchema:
     return await service.get_prompt_category(category_id, current_user)
 
 
@@ -119,7 +119,7 @@ async def update_prompt_category(
     schema: PromptCategoryUpdateSchema,
     current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[PromptService, Depends()],
-) -> PromptCategoryWithPromptsInDBSchema:
+) -> PromptCategoryResponseSchema:
     return await service.update_prompt_category(
         category_id=category_id,
         user=current_user,
@@ -169,7 +169,7 @@ async def create_prompt(
     schema: PromptCreateSchema,
     current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[PromptService, Depends()],
-) -> PromptInDBSchema:
+) -> PromptResponseSchema:
     return await service.create_prompt(
         category_id=category_id,
         schema=schema,
@@ -198,7 +198,7 @@ async def update_prompt(
     current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     schema: PromptUpdateSchema,
     service: Annotated[PromptService, Depends()],
-) -> PromptInDBSchema:
+) -> PromptResponseSchema:
     return await service.update_prompt(
         prompt_id=prompt_id,
         category_id=category_id,

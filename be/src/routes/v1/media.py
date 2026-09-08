@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from auth import get_current_user
 from enums import MediaKindEnum
 from schemas.error import ErrorResponse
-from schemas.media import MediaAssetInDBSchema
+from schemas.media import MediaAssetResponseSchema
 from schemas.user.base import UserInDBSchema
 from services.media import MediaService
 from utils.route_response import generate_responses
@@ -26,7 +26,7 @@ async def upload_media(
     kind: Annotated[MediaKindEnum, Form()],
     current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
     service: Annotated[MediaService, Depends()],
-) -> MediaAssetInDBSchema:
+) -> MediaAssetResponseSchema:
     return await service.upload_media_asset(
         upload=file,
         media_kind=kind,

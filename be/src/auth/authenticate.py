@@ -45,7 +45,7 @@ async def get_current_user(
         )
     payload = decode_access_token(token)
     async with uow:
-        user = await uow.user_repo.select_user(user_id=payload.sub)
+        user = await uow.user_repo.select_user_for_auth(user_id=payload.sub)
     if user is None:
         raise UnauthorizedError(
             "User no longer exists",

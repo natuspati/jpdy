@@ -1,10 +1,13 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from fastapi import status
 
 
 class BaseError(Exception):
     detail: str = "Internal service error"
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    headers: dict = {}  # noqa: RUF012 - sub-classes can override, not a class variable
+    headers: Mapping[str, str] = MappingProxyType({})
     extra_info: str | dict | None = None
 
     def __init__(
@@ -14,10 +17,10 @@ class BaseError(Exception):
         headers: dict[str, str] | None = None,
         extra_info: str | dict | None = None,
     ):
-        self.detail = detail or self.detail
-        self.status_code = status_code or self.status_code
-        self.headers = headers or self.headers
-        self.extra_info = extra_info or self.extra_info
+        self.detail = detail if detail is not None else self.detail
+        self.status_code = status_code if status_code is not None else self.status_code
+        self.headers = dict(self.headers) if headers is None else dict(headers)
+        self.extra_info = extra_info if extra_info is not None else self.extra_info
         super().__init__(self.detail)
 
     def __str__(self):

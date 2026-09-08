@@ -44,7 +44,7 @@ async def authenticate_socket(
         raise SocketConnectionRefusedError(e.detail) from e
 
     async with uow:
-        user = await uow.user_repo.select_user(user_id=payload.sub)
+        user = await uow.user_repo.select_user_for_auth(user_id=payload.sub)
     if user is None:
         raise SocketConnectionRefusedError("User no longer exists")
     return user

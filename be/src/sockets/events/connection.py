@@ -23,7 +23,6 @@ from sockets.uow import build_uow
 _logger = logging.getLogger(__name__)
 
 
-@sio.on("connect", namespace="*")
 async def on_connect(
     namespace: str,
     sid: str,
@@ -50,7 +49,7 @@ async def on_connect(
     except BaseError as e:
         raise SocketConnectionRefusedError(e.detail) from e
     except Exception as e:
-        _logger.exception("Failed to connect user %s to lobby %s", user.id, lobby_id)
+        _logger.exception(f"Failed to connect user {user.id} to lobby {lobby_id}")
         raise SocketConnectionRefusedError("Unable to connect to this lobby") from e
 
     await save_socket_session(
@@ -65,16 +64,12 @@ async def on_connect(
     )
     await sio.enter_room(sid, room, namespace=namespace)
     if previous_sid is not None:
-        # Rejoining takes over the roster slot. This handles stale Socket.IO
-        # sessions after a dropped browser/network connection and keeps one
-        # active namespace connection per lobby user.
         await sio.disconnect(previous_sid, namespace=namespace)
     await broadcast_state(lobby_id, state)
     arm_timer_if_needed(lobby_id, state)
-    _logger.info("User %s connected to lobby %s", user.id, lobby_id)
+    _logger.info(f"User {user.id} connected to lobby {lobby_id}")
 
 
-@sio.on("disconnect", namespace="*")
 async def on_disconnect(namespace: str, sid: str, reason: Any = None) -> None:
     lobby_id = parse_lobby_namespace(namespace)
     if lobby_id is None:
@@ -85,8 +80,6 @@ async def on_disconnect(namespace: str, sid: str, reason: Any = None) -> None:
         return
     user_id = session["user_id"]
 
-    # A reconnect can establish its new sid before this old sid's disconnect
-    # callback runs. Preserve the new connection's status in that race.
     async with build_uow() as uow:
         owns_connection = await uow.game_state_repo.clear_connection_sid(
             lobby_id,
@@ -109,9 +102,4 @@ async def on_disconnect(namespace: str, sid: str, reason: Any = None) -> None:
 
     await broadcast_state(lobby_id, state)
     arm_timer_if_needed(lobby_id, state)
-    _logger.info(
-        "User %s disconnected from lobby %s (reason: %s)",
-        user_id,
-        lobby_id,
-        reason,
-    )
+    _logger.info(f"User {user_id} disconnected from lobby {lobby_id} (reason: {reason})")

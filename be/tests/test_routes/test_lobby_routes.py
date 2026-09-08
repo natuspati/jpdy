@@ -9,6 +9,7 @@ from fixtures.auth_fixtures import AuthedUser
 from models.lobby import Lobby, LobbyParticipant
 from repos.game_state import GameStateRepo
 from schemas.lobby.game_state import GameLobbyState, GamePlayerState
+from utils.game_state import game_state_key
 
 
 async def _create_category(client: AsyncClient, user: AuthedUser, name: str = "Cat") -> int:
@@ -252,7 +253,7 @@ async def test_update_lobby_prepares_complete_categories_and_snapshots_state(
     )
     assert response.status_code == 200, response.text
     assert response.json()["state"] == LobbyStateEnum.WAITING_START.value
-    assert await redis_client.get(GameLobbyState.redis_key(lobby_id)) is not None
+    assert await redis_client.get(game_state_key(lobby_id)) is not None
 
 
 async def test_prepared_lobby_keeps_prompt_snapshot_after_category_edit(
@@ -282,7 +283,7 @@ async def test_prepared_lobby_keeps_prompt_snapshot_after_category_edit(
     )
     assert prepare.status_code == 200, prepare.text
 
-    raw_state = await redis_client.get(GameLobbyState.redis_key(lobby_id))
+    raw_state = await redis_client.get(game_state_key(lobby_id))
     assert raw_state is not None
     original_question = (
         GameLobbyState.model_validate_json(raw_state).categories[0].prompts[0].question
@@ -295,7 +296,7 @@ async def test_prepared_lobby_keeps_prompt_snapshot_after_category_edit(
     )
     assert update.status_code == 200, update.text
 
-    snapshotted = await redis_client.get(GameLobbyState.redis_key(lobby_id))
+    snapshotted = await redis_client.get(game_state_key(lobby_id))
     assert snapshotted is not None
     assert (
         GameLobbyState.model_validate_json(snapshotted).categories[0].prompts[0].question
@@ -549,7 +550,7 @@ async def test_delete_waiting_lobby_returns_204(
         headers=authed_user["headers"],
     )
     assert response.status_code == 204
-    assert await redis_client.get(GameLobbyState.redis_key(lobby_id)) is None
+    assert await redis_client.get(game_state_key(lobby_id)) is None
 
     after = await http_client.get(
         f"/api/v1/lobby/{lobby_id}",

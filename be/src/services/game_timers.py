@@ -6,9 +6,7 @@ from datetime import UTC, datetime
 
 _logger = logging.getLogger(__name__)
 
-# Local wakeups reduce latency. Redis sorted sets remain authoritative: every
-# wakeup submits a fenced expiry command and startup recovery finds deadlines
-# that belonged to a process which stopped.
+"""Process-local wakeups complement durable Redis timer schedules."""
 _timers: dict[int, asyncio.Task[None]] = {}
 _scheduler_task: asyncio.Task[None] | None = None
 
@@ -35,7 +33,7 @@ def arm(
         except asyncio.CancelledError:
             raise
         except Exception:
-            _logger.exception("Timer callback failed for lobby %s", lobby_id)
+            _logger.exception(f"Timer callback failed for lobby {lobby_id}")
         finally:
             if _timers.get(lobby_id) is asyncio.current_task():
                 _timers.pop(lobby_id, None)
@@ -45,8 +43,6 @@ def arm(
 
 def cancel(lobby_id: int) -> None:
     task = _timers.pop(lobby_id, None)
-    # Expiry callbacks can arm next phase before returning. Never cancel
-    # current task, or that callback loses its new schedule/broadcast.
     if task is not None and task is not asyncio.current_task() and not task.done():
         task.cancel()
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import sqlalchemy
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from enums import AppEnvironmentEnum
@@ -20,28 +21,23 @@ class Settings(BaseSettings):
         env_parse_none_str="null",
     )
 
-    # Application state
     environment: AppEnvironmentEnum = AppEnvironmentEnum.LOCAL
     name: str = "Jeopardy Back-end"
     version: str = get_version()
     secret_key: str | bytes = secrets.token_bytes(32)
 
-    # Uvicorn
     host: str = "0.0.0.0"
     port: int = 8000
     workers_count: int = 1
     reload: bool = True
 
-    # Authentication
     openapi_schema_user: str = "user"
     openapi_schema_password: str = "password"
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 24
 
-    # CORS
     allowed_hosts: list[str] = ["*"]
 
-    # Database
     db_apply_migrations: bool = False
     db_driver: str = "sqlite+aiosqlite"
     db_sync_driver: str = "sqlite"
@@ -54,14 +50,14 @@ class Settings(BaseSettings):
     db_echo_pool: bool = False
     db_expire_on_commit: bool = False
 
-    # Redis
     redis_url: str = "redis://localhost:6379/0"
     socketio_redis_url: str | None = None
     socketio_redis_channel: str = "jpdy.socketio"
 
-    # Uploaded prompt media. Browser delivery is always through Nginx at
-    # ``/media/``; FastAPI only validates and writes files in this directory.
-    media_root: Path = Path("media")
+    media_root: Path = Field(
+        default=Path("media"),
+        description="Directory FastAPI uses to validate and write media files.",
+    )
     media_url_prefix: str = "/media"
 
     @cached_property

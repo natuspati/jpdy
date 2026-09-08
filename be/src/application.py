@@ -6,11 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 import routes
-import sockets.events  # noqa: F401  # registers socket.io event handlers
 from configs import settings
 from errors import add_error_handlers
 from lifespan import lifespan
 from sockets.app import sio
+from sockets.handlers import register_socket_handlers
 
 _logger = logging.getLogger(__name__)
 
@@ -40,11 +40,11 @@ async def redirect_to_docs() -> RedirectResponse:
 
 
 add_error_handlers(fastapi_app)
+register_socket_handlers()
 
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path="ws")
 
 _logger.warning(
-    "Finished setting application up, "
-    f"version: {settings.version}, "
+    f"Finished setting application up, version: {settings.version}, "
     f"environment: {settings.environment}",
 )

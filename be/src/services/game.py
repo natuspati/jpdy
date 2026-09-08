@@ -14,15 +14,8 @@ from database import UnitOfWork
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from enums.lobby import LobbyStateEnum
 from errors.request import BadRequestError, ForbiddenError, NotFoundError
-from repos.game_state import GameStateConflictError, GameStateMissingError, GameTransition
-from schemas.lobby.game_state import (
-    GameCategoryState,
-    GameHostState,
-    GameLobbyState,
-    GamePlayerState,
-    GamePromptState,
-)
-from schemas.media import MediaReferenceSchema
+from repos.game_state import GameStateConflictError, GameStateMissingError
+from schemas.lobby.game_state import GameLobbyState, GamePlayerState, GamePromptState
 from schemas.socket.events import (
     BanPlayerPayload,
     GameSoundCueName,
@@ -33,6 +26,7 @@ from schemas.socket.events import (
     UnbanPlayerPayload,
 )
 from schemas.user.base import UserPublicSchema
+from utils.game_state import GameCommandOutcome
 
 
 class GameService:
@@ -41,64 +35,13 @@ class GameService:
     def __init__(self, uow: Annotated[UnitOfWork, Depends()]):
         self._uow = uow
 
-    async def materialize_state(self, lobby_id: int) -> GameLobbyState:
-        async with self._uow as uow:
-            return await self.materialize_state_in_uow(uow, lobby_id)
-
-    @classmethod
-    async def materialize_state_in_uow(
-        cls,
-        uow: UnitOfWork,
-        lobby_id: int,
-    ) -> GameLobbyState:
-        """Build SQL lobby snapshot then initialize Redis exactly once."""
-        lobby = await uow.lobby_repo.select_lobby_with_prompts(lobby_id=lobby_id)
-        if lobby is None:
-            raise NotFoundError(f"Lobby {lobby_id} not found")
-        if lobby.owner is None:
-            raise BadRequestError("Lobby has no owner; cannot start a game")
-
-        state = GameLobbyState(
-            lobby_id=lobby.id,
-            host=GameHostState(user_id=lobby.owner.id, username=lobby.owner.username),
-            categories=[
-                GameCategoryState(
-                    category_id=category.id,
-                    name=category.name,
-                    prompts=[
-                        GamePromptState(
-                            prompt_id=prompt.id,
-                            question=prompt.question,
-                            answer=prompt.answer,
-                            question_type=prompt.question_type,
-                            answer_type=prompt.answer_type,
-                            question_media=(
-                                MediaReferenceSchema.from_asset(prompt.question_media_asset)
-                                if prompt.question_media_asset is not None
-                                else None
-                            ),
-                            answer_media=(
-                                MediaReferenceSchema.from_asset(prompt.answer_media_asset)
-                                if prompt.answer_media_asset is not None
-                                else None
-                            ),
-                            order=prompt.order or 0,
-                        )
-                        for prompt in category.prompts
-                    ],
-                )
-                for category in lobby.prompt_categories
-            ],
-        )
-        return await uow.game_state_repo.initialize_state(state)
-
     async def connect_user(
         self,
         lobby_id: int,
         user: UserPublicSchema,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             if state.phase == GamePhaseEnum.FINISHED:
                 raise ForbiddenError("Game has finished")
             if user.id == state.host.user_id:
@@ -119,11 +62,9 @@ class GameService:
                     if player.is_banned:
                         raise ForbiddenError("Player is banned from this lobby")
                     player.connection_status = PlayerConnectionStatusEnum.CONNECTED
-            return GameTransition(state=state, result=state, reason="user_connected")
+            return GameCommandOutcome(state=state, result=state, reason="user_connected")
 
         state = await self._execute(lobby_id, command_id, "connect_user", transition)
-        # SQL is an idempotent projection after Redis commits. It is never used
-        # to decide active-game permissions.
         if user.id != state.host.user_id:
             async with self._uow as uow:
                 await uow.lobby_repo.ensure_participant(lobby_id=lobby_id, user=user)
@@ -135,15 +76,15 @@ class GameService:
         user_id: int,
         command_id: str | None = None,
     ) -> GameLobbyState | None:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             if user_id == state.host.user_id:
                 state.host.connection_status = PlayerConnectionStatusEnum.DISCONNECTED
             else:
                 player = _find_player(state, user_id)
                 if player is None:
-                    return GameTransition(state=None, result=state, reason="unknown_disconnect")
+                    return GameCommandOutcome(state=None, result=state, reason="unknown_disconnect")
                 player.connection_status = PlayerConnectionStatusEnum.DISCONNECTED
-            return GameTransition(state=state, result=state, reason="user_disconnected")
+            return GameCommandOutcome(state=state, result=state, reason="user_disconnected")
 
         try:
             return await self._execute(lobby_id, command_id, "disconnect_user", transition)
@@ -156,13 +97,13 @@ class GameService:
         user_id: int,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             _require_host(state, user_id)
             _require_phase(state, GamePhaseEnum.WAITING_FOR_PLAYERS)
             if not any(_is_eligible_player(player) for player in state.players):
                 raise BadRequestError("At least one connected, non-banned player is required")
             state.phase = GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
-            return GameTransition(state=state, result=state, reason="game_started")
+            return GameCommandOutcome(state=state, result=state, reason="game_started")
 
         state = await self._execute(lobby_id, command_id, "start_game", transition)
         async with self._uow as uow:
@@ -176,7 +117,7 @@ class GameService:
         payload: SelectStarterPayload,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             _require_host(state, user_id)
             _require_phase(state, GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER)
             target = _find_player(state, payload.user_id)
@@ -190,7 +131,7 @@ class GameService:
             target.is_selected = True
             state.selecting_player_id = target.user_id
             state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
-            return GameTransition(state=state, result=state, reason="starter_selected")
+            return GameCommandOutcome(state=state, result=state, reason="starter_selected")
 
         return await self._execute(lobby_id, command_id, "select_starter", transition)
 
@@ -201,7 +142,7 @@ class GameService:
         payload: SelectPromptPayload,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             _require_phase(state, GamePhaseEnum.PLAYER_SELECTING_PROMPT)
             if state.selecting_player_id != user_id:
                 raise ForbiddenError("Only the selecting player may pick a prompt")
@@ -221,7 +162,7 @@ class GameService:
             _clear_resolution(state)
             state.phase = GamePhaseEnum.PLAYER_ANSWERING
             state.timer_deadline = _deadline(ANSWERING_TIME_SECONDS)
-            return GameTransition(state=state, result=state, reason="prompt_selected")
+            return GameCommandOutcome(state=state, result=state, reason="prompt_selected")
 
         return await self._execute(lobby_id, command_id, "select_prompt", transition)
 
@@ -232,7 +173,7 @@ class GameService:
         payload: JudgeAnswerPayload,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             _require_host(state, user_id)
             _require_phase(state, GamePhaseEnum.PLAYER_ANSWERING)
             if state.current_prompt_id is None or state.answering_player_id is None:
@@ -260,7 +201,7 @@ class GameService:
                     state.timer_deadline = _deadline(BUZZING_TIME_SECONDS)
                 else:
                     _enter_answer_reveal(state, GameResolutionEnum.UNANSWERED)
-            return GameTransition(state=state, result=state, reason="answer_judged")
+            return GameCommandOutcome(state=state, result=state, reason="answer_judged")
 
         return await self._execute(lobby_id, command_id, "judge_answer", transition)
 
@@ -270,7 +211,7 @@ class GameService:
         user_id: int,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             _require_phase(state, GamePhaseEnum.BUZZ_OPEN)
             if state.timer_deadline is None or state.timer_deadline <= datetime.now(UTC):
                 raise BadRequestError("Buzz time has expired")
@@ -288,7 +229,7 @@ class GameService:
             state.answering_player_id = user_id
             state.phase = GamePhaseEnum.PLAYER_ANSWERING
             state.timer_deadline = _deadline(ANSWERING_TIME_SECONDS)
-            return GameTransition(state=state, result=state, reason="buzz_accepted")
+            return GameCommandOutcome(state=state, result=state, reason="buzz_accepted")
 
         return await self._execute(lobby_id, command_id, "buzz", transition)
 
@@ -298,11 +239,11 @@ class GameService:
         user_id: int,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             _require_host(state, user_id)
             _require_phase(state, GamePhaseEnum.ANSWER_REVEAL)
             _advance_after_reveal(state)
-            return GameTransition(state=state, result=state, reason="answer_reveal_advanced")
+            return GameCommandOutcome(state=state, result=state, reason="answer_reveal_advanced")
 
         state = await self._execute(lobby_id, command_id, "advance_answer_reveal", transition)
         await self._project_completion(state)
@@ -315,7 +256,7 @@ class GameService:
         payload: BanPlayerPayload,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             _require_host(state, user_id)
             target = _find_player(state, payload.user_id)
             if target is None:
@@ -323,7 +264,7 @@ class GameService:
             target.is_banned = True
             target.connection_status = PlayerConnectionStatusEnum.DISCONNECTED
             _recover_from_banned_player(state, target.user_id)
-            return GameTransition(state=state, result=state, reason="player_banned")
+            return GameCommandOutcome(state=state, result=state, reason="player_banned")
 
         state = await self._execute(lobby_id, command_id, "ban_player", transition)
         await self._project_participant(state, payload.user_id)
@@ -336,13 +277,13 @@ class GameService:
         payload: UnbanPlayerPayload,
         command_id: str | None = None,
     ) -> GameLobbyState:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             _require_host(state, user_id)
             target = _find_player(state, payload.user_id)
             if target is None:
                 raise BadRequestError(f"Player {payload.user_id} is not in this lobby")
             target.is_banned = False
-            return GameTransition(state=state, result=state, reason="player_unbanned")
+            return GameCommandOutcome(state=state, result=state, reason="player_unbanned")
 
         state = await self._execute(lobby_id, command_id, "unban_player", transition)
         await self._project_participant(state, payload.user_id)
@@ -355,15 +296,15 @@ class GameService:
         expected_deadline: datetime | None = None,
         command_id: str | None = None,
     ) -> GameLobbyState | None:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState | None]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             if state.timer_deadline is None:
-                return GameTransition(state=None, result=None, reason="no_timer")
+                return GameCommandOutcome(state=None, result=None, reason="no_timer")
             if expected_revision is not None and state.timer_revision != expected_revision:
-                return GameTransition(state=None, result=None, reason="stale_timer_revision")
+                return GameCommandOutcome(state=None, result=None, reason="stale_timer_revision")
             if expected_deadline is not None and state.timer_deadline != expected_deadline:
-                return GameTransition(state=None, result=None, reason="stale_timer_deadline")
+                return GameCommandOutcome(state=None, result=None, reason="stale_timer_deadline")
             if state.timer_deadline > datetime.now(UTC):
-                return GameTransition(state=None, result=None, reason="timer_not_due")
+                return GameCommandOutcome(state=None, result=None, reason="timer_not_due")
             if state.phase == GamePhaseEnum.PLAYER_ANSWERING:
                 if state.answering_player_id is not None:
                     if state.answering_player_id not in state.attempted_player_ids:
@@ -382,8 +323,8 @@ class GameService:
             elif state.phase == GamePhaseEnum.ANSWER_REVEAL:
                 _advance_after_reveal(state)
             else:
-                return GameTransition(state=None, result=None, reason="timer_phase_not_timed")
-            return GameTransition(state=state, result=state, reason="timer_expired")
+                return GameCommandOutcome(state=None, result=None, reason="timer_phase_not_timed")
+            return GameCommandOutcome(state=state, result=state, reason="timer_expired")
 
         try:
             state = await self._execute(lobby_id, command_id, "expire_timer", transition)
@@ -399,9 +340,9 @@ class GameService:
         cue: GameSoundCueName,
         command_id: str | None = None,
     ) -> GameSoundCuePayload:
-        def transition(state: GameLobbyState) -> GameTransition[GameLobbyState]:
+        def transition(state: GameLobbyState) -> GameCommandOutcome:
             state.sound_cue_id += 1
-            return GameTransition(state=state, result=state, reason=f"sound_cue:{cue.value}")
+            return GameCommandOutcome(state=state, result=state, reason=f"sound_cue:{cue.value}")
 
         state = await self._execute(lobby_id, command_id, "issue_sound_cue", transition)
         return GameSoundCuePayload(cue_id=state.sound_cue_id, cue=cue)
@@ -411,7 +352,7 @@ class GameService:
         lobby_id: int,
         command_id: str | None,
         command_name: str,
-        transition: Callable,
+        transition: Callable[[GameLobbyState], GameCommandOutcome],
     ) -> GameLobbyState | None:
         try:
             async with self._uow as uow:

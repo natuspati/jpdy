@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import UnitOfWork
 from database.session import get_db_session, get_redis_session
 
-# Tests swap these to point at per-test SQLite + fakeredis. Production code
-# leaves them at the originals defined in ``database.session``.
+"""Socket UoW factories are replaceable for isolated integration tests."""
 db_session_factory: type[AsyncGenerator[AsyncSession]] = get_db_session
 redis_session_factory: type[AsyncGenerator[Redis]] = get_redis_session
 

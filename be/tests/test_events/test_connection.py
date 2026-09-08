@@ -9,6 +9,7 @@ from enums.game import GamePhaseEnum, PlayerConnectionStatusEnum
 from fixtures.game_fixtures import SeededLobby, SocketClient
 from models.lobby import LobbyParticipant
 from schemas.lobby.game_state import GamePlayerState
+from utils.game_state import game_state_key
 
 
 async def test_connect_with_invalid_token_is_rejected(
@@ -158,7 +159,7 @@ async def test_host_can_reconnect_when_persisted_status_is_stale(
 ):
     seeded = await seed_lobby(player_count=1)
     seeded.state.host.connection_status = PlayerConnectionStatusEnum.CONNECTED
-    await redis_client.set(seeded.state.key, seeded.state.model_dump_json())
+    await redis_client.set(game_state_key(seeded.state.lobby_id), seeded.state.model_dump_json())
 
     reconnected = await connect_socket(seeded.lobby_id, seeded.host.token)
     state = await reconnected.expect("state_changed")
@@ -180,7 +181,7 @@ async def test_player_can_reconnect_when_persisted_status_is_stale(
             connection_status=PlayerConnectionStatusEnum.CONNECTED,
         ),
     ]
-    await redis_client.set(seeded.state.key, seeded.state.model_dump_json())
+    await redis_client.set(game_state_key(seeded.state.lobby_id), seeded.state.model_dump_json())
 
     reconnected = await connect_socket(seeded.lobby_id, player.token)
     state = await reconnected.expect("state_changed")

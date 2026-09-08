@@ -1,35 +1,21 @@
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol, TypeVar
 
 from redis.asyncio import Redis
+from redis.asyncio.client import Pipeline
 from redis.exceptions import WatchError
 
 from schemas.lobby.game_state import GameLobbyState
-
-T = TypeVar("T")
-
-
-@dataclass(frozen=True, slots=True)
-class GameTransition[T]:
-    """Pure-command result consumed by optimistic Redis executor."""
-
-    state: GameLobbyState | None
-    result: T
-    reason: str
-
-
-class RedisPipeline(Protocol):
-    def set(self, *args: Any, **kwargs: Any) -> None: ...
-
-    def xadd(self, *args: Any, **kwargs: Any) -> None: ...
-
-    def zadd(self, *args: Any, **kwargs: Any) -> None: ...
-
-    def zrem(self, *args: Any, **kwargs: Any) -> None: ...
-
-    def delete(self, *args: Any, **kwargs: Any) -> None: ...
+from utils.game_state import (
+    GameCommandOutcome,
+    game_command_key,
+    game_connection_key,
+    game_events_key,
+    game_state_key,
+    game_timer_schedule_key,
+    set_timer_revision,
+    timer_schedule_member,
+)
 
 
 class GameStateRepo:
@@ -42,7 +28,7 @@ class GameStateRepo:
         self._redis = redis
 
     async def get_state(self, lobby_id: int) -> GameLobbyState | None:
-        raw = await self._redis.get(GameLobbyState.redis_key(lobby_id))
+        raw = await self._redis.get(game_state_key(lobby_id))
         if raw is None:
             return None
         return GameLobbyState.model_validate_json(raw)
@@ -51,13 +37,14 @@ class GameStateRepo:
         """Bootstrap/test helper. Live commands must use :meth:`execute`."""
         previous = await self.get_state(state.lobby_id)
         async with self._redis.pipeline(transaction=True) as pipe:
-            pipe.set(state.key, state.model_dump_json())
+            pipe.set(game_state_key(state.lobby_id), state.model_dump_json())
             self._queue_timer_schedule(pipe, state, previous)
             await pipe.execute()
 
     async def initialize_state(self, state: GameLobbyState) -> GameLobbyState:
         """Create materialized lobby once without clobbering active game."""
-        created = await self._redis.set(state.key, state.model_dump_json(), nx=True)
+        state_key = game_state_key(state.lobby_id)
+        created = await self._redis.set(state_key, state.model_dump_json(), nx=True)
         if not created:
             existing = await self.get_state(state.lobby_id)
             if existing is None:
@@ -74,14 +61,14 @@ class GameStateRepo:
         state = await self.get_state(lobby_id)
         async with self._redis.pipeline(transaction=True) as pipe:
             pipe.delete(
-                GameLobbyState.redis_key(lobby_id),
-                self.events_key(lobby_id),
-                self.timer_schedule_key(lobby_id),
+                game_state_key(lobby_id),
+                game_events_key(lobby_id),
+                game_timer_schedule_key(lobby_id),
             )
             if state is not None:
-                old_timer = self.timer_member(state)
+                old_timer = timer_schedule_member(state)
                 if old_timer is not None:
-                    pipe.zrem(self.timer_schedule_key(lobby_id), old_timer)
+                    pipe.zrem(game_timer_schedule_key(lobby_id), old_timer)
             await pipe.execute()
 
     async def execute(
@@ -89,11 +76,11 @@ class GameStateRepo:
         lobby_id: int,
         command_id: str,
         command_name: str,
-        transition: Callable[[GameLobbyState], GameTransition[T]],
-    ) -> T:
+        transition: Callable[[GameLobbyState], GameCommandOutcome],
+    ) -> GameLobbyState | None:
         """Commit state, dedup result, event, and timer schedule atomically."""
-        state_key = GameLobbyState.redis_key(lobby_id)
-        command_key = self.command_key(lobby_id, command_id)
+        state_key = game_state_key(lobby_id)
+        command_key = game_command_key(lobby_id, command_id)
 
         for _ in range(self._MAX_WATCH_RETRIES):
             async with self._redis.pipeline(transaction=True) as pipe:
@@ -101,7 +88,7 @@ class GameStateRepo:
                     await pipe.watch(state_key, command_key)
                     cached = await pipe.get(command_key)
                     if cached is not None:
-                        return self._deserialize_result(cached)
+                        return GameLobbyState.model_validate_json(cached)
 
                     raw_state = await pipe.get(state_key)
                     if raw_state is None:
@@ -113,17 +100,17 @@ class GameStateRepo:
 
                     next_state = outcome.state
                     next_state.state_revision = current.state_revision + 1
-                    self._set_timer_revision(next_state)
+                    set_timer_revision(next_state)
 
                     pipe.multi()
                     pipe.set(state_key, next_state.model_dump_json())
                     pipe.set(
                         command_key,
-                        self._serialize_result(outcome.result),
+                        _serialize_game_state(outcome.result),
                         ex=self._COMMAND_TTL_SECONDS,
                     )
                     pipe.xadd(
-                        self.events_key(lobby_id),
+                        game_events_key(lobby_id),
                         {
                             "command_id": command_id,
                             "command": command_name,
@@ -140,47 +127,25 @@ class GameStateRepo:
 
         raise GameStateConflictError(lobby_id)
 
-    @classmethod
-    def events_key(cls, lobby_id: int) -> str:
-        return f"game:{{{lobby_id}}}:events"
-
-    @classmethod
-    def command_key(cls, lobby_id: int, command_id: str) -> str:
-        return f"game:{{{lobby_id}}}:command:{command_id}"
-
-    @classmethod
-    def timer_schedule_key(cls, lobby_id: int) -> str:
-        return f"game:{{{lobby_id}}}:timers"
-
-    @classmethod
-    def connection_key(cls, lobby_id: int, user_id: int) -> str:
-        return f"game:{{{lobby_id}}}:connection:{user_id}"
-
-    @classmethod
-    def timer_member(cls, state: GameLobbyState) -> str | None:
-        if state.timer_deadline is None or state.timer_revision is None:
-            return None
-        return f"{state.timer_revision}:{state.timer_deadline.isoformat()}"
-
     async def due_timer_members(self, lobby_id: int, now: datetime) -> list[str]:
         raw = await self._redis.zrangebyscore(
-            self.timer_schedule_key(lobby_id),
+            game_timer_schedule_key(lobby_id),
             min="-inf",
             max=now.timestamp(),
         )
         return [item.decode() if isinstance(item, bytes) else item for item in raw]
 
     async def remove_timer_member(self, lobby_id: int, member: str) -> None:
-        await self._redis.zrem(self.timer_schedule_key(lobby_id), member)
+        await self._redis.zrem(game_timer_schedule_key(lobby_id), member)
 
     async def get_connection_sid(self, lobby_id: int, user_id: int) -> str | None:
-        raw = await self._redis.get(self.connection_key(lobby_id, user_id))
+        raw = await self._redis.get(game_connection_key(lobby_id, user_id))
         if raw is None:
             return None
         return raw.decode() if isinstance(raw, bytes) else raw
 
     async def set_connection_sid(self, lobby_id: int, user_id: int, sid: str) -> None:
-        await self._redis.set(self.connection_key(lobby_id, user_id), sid)
+        await self._redis.set(game_connection_key(lobby_id, user_id), sid)
 
     async def clear_connection_sid(
         self,
@@ -189,7 +154,7 @@ class GameStateRepo:
         expected_sid: str,
     ) -> bool:
         """Fenced cleanup: old socket cannot remove newer reconnect ownership."""
-        key = self.connection_key(lobby_id, user_id)
+        key = game_connection_key(lobby_id, user_id)
         async with self._redis.pipeline(transaction=True) as pipe:
             try:
                 await pipe.watch(key)
@@ -221,44 +186,36 @@ class GameStateRepo:
             state = await self.get_state(lobby_id)
             if state is None:
                 continue
-            member = self.timer_member(state)
+            member = timer_schedule_member(state)
             if member is None or state.timer_deadline is None:
                 continue
             await self._redis.zadd(
-                self.timer_schedule_key(lobby_id),
+                game_timer_schedule_key(lobby_id),
                 {member: state.timer_deadline.timestamp()},
             )
 
     def _queue_timer_schedule(
         self,
-        pipe: RedisPipeline,
+        pipe: Pipeline,
         state: GameLobbyState,
         previous: GameLobbyState | None,
     ) -> None:
         if previous is not None:
-            old_member = self.timer_member(previous)
+            old_member = timer_schedule_member(previous)
             if old_member is not None:
-                pipe.zrem(self.timer_schedule_key(state.lobby_id), old_member)
-        member = self.timer_member(state)
+                pipe.zrem(game_timer_schedule_key(state.lobby_id), old_member)
+        member = timer_schedule_member(state)
         if member is not None and state.timer_deadline is not None:
             pipe.zadd(
-                self.timer_schedule_key(state.lobby_id),
+                game_timer_schedule_key(state.lobby_id),
                 {member: state.timer_deadline.timestamp()},
             )
 
-    @staticmethod
-    def _set_timer_revision(state: GameLobbyState) -> None:
-        state.timer_revision = state.state_revision if state.timer_deadline is not None else None
 
-    @staticmethod
-    def _serialize_result(result: T) -> str:
-        if isinstance(result, GameLobbyState):
-            return result.model_dump_json()
-        raise TypeError(f"Unsupported game command result: {type(result)!r}")
-
-    @staticmethod
-    def _deserialize_result(raw: bytes | str) -> T:
-        return GameLobbyState.model_validate_json(raw)  # type: ignore[return-value]
+def _serialize_game_state(state: GameLobbyState | None) -> str:
+    if state is None:
+        raise TypeError("Accepted game commands must return a game state")
+    return state.model_dump_json()
 
 
 class GameStateMissingError(RuntimeError):

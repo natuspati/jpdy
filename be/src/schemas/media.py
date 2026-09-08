@@ -1,8 +1,7 @@
 from datetime import datetime
 
-from pydantic import Field, computed_field
+from pydantic import Field
 
-from configs import settings
 from enums import MediaKindEnum
 from schemas.base import BaseSchema
 
@@ -20,10 +19,9 @@ class MediaAssetInDBSchema(BaseSchema):
     height: int | None
     created_at: datetime
 
-    @computed_field
-    @property
-    def url(self) -> str:
-        return f"{settings.media_url_prefix.rstrip('/')}/{self.storage_key}"
+
+class MediaAssetResponseSchema(MediaAssetInDBSchema):
+    url: str
 
 
 class MediaReferenceSchema(BaseSchema):
@@ -31,12 +29,3 @@ class MediaReferenceSchema(BaseSchema):
     url: str
     mime_type: str
     filename: str
-
-    @classmethod
-    def from_asset(cls, asset: MediaAssetInDBSchema) -> MediaReferenceSchema:
-        return cls(
-            asset_id=asset.id,
-            url=asset.url,
-            mime_type=asset.mime_type,
-            filename=asset.original_filename,
-        )

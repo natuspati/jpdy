@@ -92,7 +92,7 @@ async def _on_timer_expire(
                 command_id=f"timer:{lobby_id}:{uuid4().hex}",
             )
     except Exception:
-        _logger.exception("Failed to expire timer for lobby %s", lobby_id)
+        _logger.exception(f"Failed to expire timer for lobby {lobby_id}")
         return
     if state is None:
         return
@@ -108,7 +108,7 @@ async def _on_timer_expire(
                 )
             await broadcast_sound_cue(lobby_id, payload)
         except Exception:
-            _logger.exception("Failed to emit %s sound cue for lobby %s", cue, lobby_id)
+            _logger.exception(f"Failed to emit {cue} sound cue for lobby {lobby_id}")
 
 
 def _sound_cues_for_expired_timer(

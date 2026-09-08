@@ -4,6 +4,8 @@ from schemas.socket.events import GameSoundCuePayload, SocketErrorPayload
 from sockets.app import sio
 from sockets.namespace import lobby_namespace
 from sockets.session import lobby_host_room, lobby_player_room
+from sockets.uow import build_uow
+from utils.game_state import build_public_game_state
 
 STATE_CHANGED_EVENT = "state_changed"
 HOST_ANSWER_KEY_EVENT = "host_answer_key"
@@ -15,8 +17,11 @@ LOBBY_DELETED_EVENT = "lobby_deleted"
 async def broadcast_state(lobby_id: int, state: GameLobbyState) -> None:
     """Emit a recipient-specific safe snapshot and host-private answer key."""
     namespace = lobby_namespace(lobby_id)
-    player_payload = state.public_state().model_dump(mode="json")
-    host_payload = state.public_state(include_banned_players=True).model_dump(mode="json")
+    player_payload = build_public_game_state(state).model_dump(mode="json")
+    host_payload = build_public_game_state(
+        state,
+        include_banned_players=True,
+    ).model_dump(mode="json")
     await sio.emit(
         STATE_CHANGED_EVENT,
         player_payload,
@@ -94,3 +99,11 @@ async def broadcast_lobby_deleted(lobby_id: int) -> None:
         {"lobby_id": lobby_id},
         namespace=lobby_namespace(lobby_id),
     )
+
+
+async def disconnect_lobby_player(lobby_id: int, user_id: int) -> None:
+    """Disconnect currently connected player after a successful ban."""
+    async with build_uow() as uow:
+        sid = await uow.game_state_repo.get_connection_sid(lobby_id, user_id)
+    if sid is not None:
+        await sio.disconnect(sid, namespace=lobby_namespace(lobby_id))

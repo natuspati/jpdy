@@ -21,6 +21,7 @@ from schemas.socket.events import (
 )
 from services import game_timers
 from services.game import GameService
+from utils.game_state import game_state_key
 
 
 async def _drain(socket: SocketClient, count: int) -> dict:
@@ -198,7 +199,7 @@ async def test_advance_answer_reveal_rejects_non_host_and_wrong_phase(
             connection_status=PlayerConnectionStatusEnum.CONNECTED,
         ),
     ]
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
     service = GameService(UnitOfWork(db_session, redis_client))
 
     with pytest.raises(Exception, match="Only the host"):
@@ -257,7 +258,7 @@ async def test_wrong_without_eligible_buzzer_reveals_answer(
     state.selecting_player_id = player.id
     state.timer_deadline = datetime.now(UTC) + timedelta(seconds=10)
     state.categories[0].prompts[0].is_selected = True
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     result = await GameService(UnitOfWork(db_session, redis_client)).judge_answer(
         lobby_id=seeded.lobby_id,
@@ -287,7 +288,7 @@ async def test_expired_clue_without_eligible_buzzer_reveals_answer(
     state.answering_player_id = player.id if phase == GamePhaseEnum.PLAYER_ANSWERING else None
     state.categories[0].prompts[0].is_selected = True
     state.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     result = await GameService(UnitOfWork(db_session, redis_client)).expire_timer(
         seeded.lobby_id,
@@ -314,7 +315,7 @@ async def test_final_clue_finishes_only_after_answer_reveal(
     state.selecting_player_id = player.id
     state.timer_deadline = datetime.now(UTC) + timedelta(seconds=10)
     state.categories[0].prompts[0].is_selected = True
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     service = GameService(UnitOfWork(db_session, redis_client))
     reveal = await service.judge_answer(
@@ -325,7 +326,7 @@ async def test_final_clue_finishes_only_after_answer_reveal(
     assert reveal.phase == GamePhaseEnum.ANSWER_REVEAL
 
     reveal.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
-    await redis_client.set(reveal.key, reveal.model_dump_json())
+    await redis_client.set(game_state_key(reveal.lobby_id), reveal.model_dump_json())
     finished = await service.expire_timer(seeded.lobby_id)
 
     assert finished is not None
@@ -355,7 +356,7 @@ async def test_ban_and_unban_sync_persistent_participant_state(
     player = seeded.players[0]
     state = seeded.state
     state.players = [GamePlayerState(user_id=player.id, username=player.username)]
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
     service = GameService(UnitOfWork(db_session, redis_client))
 
     banned = await service.ban_player(
@@ -410,7 +411,7 @@ async def test_ban_current_selector_recovers_to_host_player_selection(
     state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
     state.selecting_player_id = selector.id
     state.timer_deadline = datetime.now(UTC) + timedelta(seconds=30)
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     service = GameService(UnitOfWork(db_session, redis_client))
     result = await service.ban_player(
@@ -462,7 +463,7 @@ async def test_ban_active_answerer_reveals_without_score_change_then_recovers(
     state.answering_player_id = answerer.id
     state.timer_deadline = datetime.now(UTC) + timedelta(seconds=30)
     state.categories[0].prompts[0].is_selected = True
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     service = GameService(UnitOfWork(db_session, redis_client))
     revealed = await service.ban_player(
@@ -480,7 +481,7 @@ async def test_ban_active_answerer_reveals_without_score_change_then_recovers(
     assert 29 <= (revealed.timer_deadline - datetime.now(UTC)).total_seconds() <= 30
 
     revealed.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
-    await redis_client.set(revealed.key, revealed.model_dump_json())
+    await redis_client.set(game_state_key(revealed.lobby_id), revealed.model_dump_json())
     recovered = await service.expire_timer(seeded.lobby_id)
 
     assert recovered is not None
@@ -512,7 +513,7 @@ async def test_ban_pending_selector_during_reveal_returns_control_to_host(
     state.resolved_prompt_id = seeded.prompt_ids[0]
     state.resolved_answer = "Category 1 A1"
     state.resolution = GameResolutionEnum.CORRECT
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     service = GameService(UnitOfWork(db_session, redis_client))
     banned = await service.ban_player(
@@ -524,7 +525,7 @@ async def test_ban_pending_selector_during_reveal_returns_control_to_host(
     assert banned.selecting_player_id is None
 
     banned.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
-    await redis_client.set(banned.key, banned.model_dump_json())
+    await redis_client.set(game_state_key(banned.lobby_id), banned.model_dump_json())
     recovered = await service.expire_timer(seeded.lobby_id)
 
     assert recovered is not None
@@ -557,7 +558,7 @@ async def test_ban_selector_during_buzz_keeps_valid_buzzer_active(
     state.attempted_player_ids = [selector.id]
     state.timer_deadline = datetime.now(UTC) + timedelta(seconds=10)
     state.categories[0].prompts[0].is_selected = True
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     service = GameService(UnitOfWork(db_session, redis_client))
     banned = await service.ban_player(
@@ -593,7 +594,7 @@ async def test_ban_leaving_no_eligible_buzzer_reveals_immediately(
     state.selecting_player_id = player.id
     state.timer_deadline = datetime.now(UTC) + timedelta(seconds=10)
     state.categories[0].prompts[0].is_selected = True
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     result = await GameService(UnitOfWork(db_session, redis_client)).ban_player(
         lobby_id=seeded.lobby_id,
@@ -632,7 +633,7 @@ async def test_buzz_deadline_is_ten_seconds_after_wrong_judgment(
     state.answering_player_id = answerer.id
     state.timer_deadline = datetime.now(UTC) + timedelta(seconds=30)
     state.categories[0].prompts[0].is_selected = True
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     result = await GameService(UnitOfWork(db_session, redis_client)).judge_answer(
         lobby_id=seeded.lobby_id,
@@ -671,7 +672,7 @@ async def test_buzz_deadline_is_ten_seconds_after_answer_timeout(
     state.answering_player_id = answerer.id
     state.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
     state.categories[0].prompts[0].is_selected = True
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     result = await GameService(UnitOfWork(db_session, redis_client)).expire_timer(seeded.lobby_id)
 
@@ -728,7 +729,7 @@ async def test_expiry_timer_can_advance_from_answer_reveal_to_next_clue(
     state.selecting_player_id = player.id
     state.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
     state.categories[0].prompts[0].is_selected = True
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
 
     service = GameService(UnitOfWork(db_session, redis_client))
     reveal = await service.expire_timer(seeded.lobby_id)
@@ -736,7 +737,7 @@ async def test_expiry_timer_can_advance_from_answer_reveal_to_next_clue(
     assert reveal.phase == GamePhaseEnum.ANSWER_REVEAL
 
     reveal.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
-    await redis_client.set(reveal.key, reveal.model_dump_json())
+    await redis_client.set(game_state_key(reveal.lobby_id), reveal.model_dump_json())
     advanced = await service.expire_timer(seeded.lobby_id)
 
     assert advanced is not None
@@ -807,7 +808,7 @@ async def test_only_host_can_judge_and_late_judgment_is_rejected(
     state.current_prompt_id = seeded.prompt_ids[0]
     state.answering_player_id = player.id
     state.timer_deadline = datetime.now(UTC) + timedelta(seconds=10)
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
     service = GameService(UnitOfWork(db_session, redis_client))
 
     with pytest.raises(Exception, match="Only the host"):
@@ -818,7 +819,7 @@ async def test_only_host_can_judge_and_late_judgment_is_rejected(
         )
 
     state.timer_deadline = datetime.now(UTC) - timedelta(seconds=1)
-    await redis_client.set(state.key, state.model_dump_json())
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
     with pytest.raises(Exception, match="Answer time has expired"):
         await service.judge_answer(
             lobby_id=seeded.lobby_id,
