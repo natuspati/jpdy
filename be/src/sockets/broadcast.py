@@ -12,6 +12,7 @@ HOST_ANSWER_KEY_EVENT = "host_answer_key"
 ERROR_EVENT = "error"
 GAME_SOUND_CUE_EVENT = "game_sound_cue"
 LOBBY_DELETED_EVENT = "lobby_deleted"
+SESSION_REPLACED_EVENT = "session_replaced"
 
 
 async def broadcast_state(lobby_id: int, state: GameLobbyState) -> None:
@@ -72,6 +73,11 @@ async def emit_error(
         to=sid,
         namespace=namespace,
     )
+
+
+async def emit_session_replaced(namespace: str, sid: str) -> None:
+    """Tell a socket it is about to be dropped for a newer one of the same user."""
+    await sio.emit(SESSION_REPLACED_EVENT, {}, to=sid, namespace=namespace)
 
 
 async def broadcast_sound_cue(

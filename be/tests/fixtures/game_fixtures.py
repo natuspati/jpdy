@@ -253,7 +253,12 @@ async def connect_socket(
             "state_changed": asyncio.Queue(),
             "host_answer_key": asyncio.Queue(),
             "error": asyncio.Queue(),
+            "session_replaced": asyncio.Queue(),
         }
+
+        @client.on("session_replaced", namespace=f"/lobbies/{lobby_id}")
+        async def _on_session_replaced(data: dict) -> None:
+            await events["session_replaced"].put(data)
 
         @client.on("state_changed", namespace=f"/lobbies/{lobby_id}")
         async def _on_state_changed(data: dict) -> None:

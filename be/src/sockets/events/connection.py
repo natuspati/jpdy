@@ -9,7 +9,7 @@ from schemas.user.base import UserPublicSchema
 from services.game import GameService
 from sockets.app import sio
 from sockets.auth import authenticate_socket
-from sockets.broadcast import broadcast_state
+from sockets.broadcast import broadcast_state, emit_session_replaced
 from sockets.namespace import parse_lobby_namespace
 from sockets.session import (
     get_socket_session,
@@ -36,19 +36,22 @@ async def on_connect(
     async with build_uow() as auth_uow:
         user = await authenticate_socket(environ, auth_uow)
 
+    # Claim ownership before connect_user so a racing disconnect of the old sid
+    # cannot clear it, and concurrent connects (any replica) have one winner.
+    async with build_uow() as uow:
+        previous_sid = await uow.game_state_repo.swap_connection_sid(lobby_id, user.id, sid)
     try:
         async with build_uow() as uow:
-            service = GameService(uow)
-            previous_sid = await uow.game_state_repo.get_connection_sid(lobby_id, user.id)
-            state = await service.connect_user(
+            state = await GameService(uow).connect_user(
                 lobby_id=lobby_id,
                 user=UserPublicSchema(id=user.id, username=user.username),
                 command_id=f"connect:{sid}:{uuid4().hex}",
             )
-            await uow.game_state_repo.set_connection_sid(lobby_id, user.id, sid)
-    except BaseError as e:
-        raise SocketConnectionRefusedError(e.detail) from e
     except Exception as e:
+        async with build_uow() as uow:
+            await uow.game_state_repo.clear_connection_sid(lobby_id, user.id, sid)
+        if isinstance(e, BaseError):
+            raise SocketConnectionRefusedError(e.detail) from e
         _logger.exception(f"Failed to connect user {user.id} to lobby {lobby_id}")
         raise SocketConnectionRefusedError("Unable to connect to this lobby") from e
 
@@ -63,7 +66,8 @@ async def on_connect(
         lobby_host_room(lobby_id) if user.id == state.host.user_id else lobby_player_room(lobby_id)
     )
     await sio.enter_room(sid, room, namespace=namespace)
-    if previous_sid is not None:
+    if previous_sid is not None and previous_sid != sid:
+        await emit_session_replaced(namespace, previous_sid)
         await sio.disconnect(previous_sid, namespace=namespace)
     await broadcast_state(lobby_id, state)
     arm_timer_if_needed(lobby_id, state)
@@ -95,6 +99,14 @@ async def on_disconnect(namespace: str, sid: str, reason: Any = None) -> None:
             user_id=user_id,
             command_id=f"disconnect:{sid}:{uuid4().hex}",
         )
+        # A reconnect may have landed between the fenced clear and this
+        # command; if so, restore the connected status it just overwrote.
+        if state is not None and await uow.game_state_repo.get_connection_sid(lobby_id, user_id):
+            state = await GameService(uow).connect_user(
+                lobby_id=lobby_id,
+                user=UserPublicSchema(id=user_id, username=session["username"]),
+                command_id=f"reconnect:{sid}:{uuid4().hex}",
+            )
 
     if state is None:
         cancel_timer(lobby_id)

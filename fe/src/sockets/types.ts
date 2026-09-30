@@ -16,6 +16,7 @@ export interface ServerToClientEvents {
   host_answer_key: (payload: HostAnswerKey) => void;
   game_sound_cue: (payload: GameSoundCuePayload) => void;
   lobby_deleted: (payload: LobbyDeletedPayload) => void;
+  session_replaced: () => void;
   error: (payload: SocketErrorPayload) => void;
 }
 

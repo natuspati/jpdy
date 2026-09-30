@@ -60,4 +60,28 @@ describe('useLobbySocket', () => {
 
     unmount();
   });
+
+  it('explains a takeover by another tab or device', () => {
+    const socket = createSocket();
+    vi.mocked(createLobbySocket).mockReturnValueOnce(socket);
+    const queryClient = new QueryClient();
+    const Wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useLobbySocket({ lobbyId: 7, token: 'test-token' }), {
+      wrapper: Wrapper,
+    });
+    const handler = (name: string) =>
+      vi.mocked(socket.on).mock.calls.find(([event]) => event === name)?.[1] as (
+        ...args: unknown[]
+      ) => void;
+
+    act(() => {
+      handler('session_replaced')();
+      handler('disconnect')('io server disconnect');
+    });
+
+    expect(result.current.status).toBe('closed');
+    expect(result.current.reason).toBe('Opened in another tab or device');
+  });
 });

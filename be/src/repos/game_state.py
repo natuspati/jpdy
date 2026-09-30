@@ -144,8 +144,12 @@ class GameStateRepo:
             return None
         return raw.decode() if isinstance(raw, bytes) else raw
 
-    async def set_connection_sid(self, lobby_id: int, user_id: int, sid: str) -> None:
-        await self._redis.set(game_connection_key(lobby_id, user_id), sid)
+    async def swap_connection_sid(self, lobby_id: int, user_id: int, sid: str) -> str | None:
+        """Atomically claim ownership; returns the sid it replaced, if any."""
+        raw = await self._redis.set(game_connection_key(lobby_id, user_id), sid, get=True)
+        if raw is None:
+            return None
+        return raw.decode() if isinstance(raw, bytes) else raw
 
     async def clear_connection_sid(
         self,

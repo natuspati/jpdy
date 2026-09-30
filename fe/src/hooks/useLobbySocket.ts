@@ -54,6 +54,7 @@ export function useLobbySocket({ lobbyId, token }: UseLobbySocketArgs): UseLobby
   const [reason, setReason] = useState<string | null>(null);
   const socketRef = useRef<LobbySocket | null>(null);
   const lobbyDeletedRef = useRef(false);
+  const sessionReplacedRef = useRef(false);
   const latestCueIdRef = useRef(0);
   const latestStateRevisionRef = useRef(-1);
   const queryClient = useQueryClient();
@@ -70,15 +71,22 @@ export function useLobbySocket({ lobbyId, token }: UseLobbySocketArgs): UseLobby
     setSoundCue(null);
     setLobbyDeleted(false);
     lobbyDeletedRef.current = false;
+    sessionReplacedRef.current = false;
     latestCueIdRef.current = 0;
     latestStateRevisionRef.current = -1;
 
     socket.on('connect', () => {
+      sessionReplacedRef.current = false;
       setStatus('open');
       setReason(null);
     });
     socket.on('disconnect', (r) => {
       if (lobbyDeletedRef.current) return;
+      if (sessionReplacedRef.current) {
+        setStatus('closed');
+        setReason('Opened in another tab or device');
+        return;
+      }
       if (r !== 'io server disconnect' && r !== 'io client disconnect') {
         setStatus('connecting');
         setReason('Connection lost. Reconnecting…');
@@ -133,6 +141,9 @@ export function useLobbySocket({ lobbyId, token }: UseLobbySocketArgs): UseLobby
       if (parsed.data.cue_id <= latestCueIdRef.current) return;
       latestCueIdRef.current = parsed.data.cue_id;
       setSoundCue(parsed.data);
+    });
+    socket.on('session_replaced', () => {
+      sessionReplacedRef.current = true;
     });
     socket.on('lobby_deleted', (raw: unknown) => {
       const parsed = parseLobbyDeleted(raw);

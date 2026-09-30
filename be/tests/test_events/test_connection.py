@@ -108,6 +108,7 @@ async def test_new_connection_replaces_existing_user_connection(
     await first.expect("state_changed")
     second = await connect_socket(seeded.lobby_id, player.token)
     state = await second.expect("state_changed")
+    await first.expect("session_replaced")
     player_row = next(item for item in state["players"] if item["user_id"] == player.id)
     assert player_row["connection_status"] == PlayerConnectionStatusEnum.CONNECTED.value
 
