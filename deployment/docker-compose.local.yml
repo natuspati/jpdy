@@ -75,7 +75,7 @@ services:
         - VITE_SOCKET_URL
         - VITE_SOCKET_PATH
     ports:
-      - "${NGINX_HOST_PORT}:80"
+      - "127.0.0.1:${NGINX_HOST_PORT}:80"
     volumes:
       - jpdy_media_data:/srv/jpdy-media:ro
     depends_on:
@@ -85,7 +85,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://localhost/api/health | grep -q '\"status\":\"healthy\"'",
+          "wget -qO- http://127.0.0.1/api/health | grep -q '\"status\":\"healthy\"'",
         ]
       interval: 5s
       timeout: 3s

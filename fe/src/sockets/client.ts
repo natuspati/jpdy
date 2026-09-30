@@ -8,6 +8,7 @@ export type LobbySocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export function createLobbySocket(lobbyId: number, token: string): LobbySocket {
   return io(`${env.SOCKET_URL}/lobbies/${lobbyId}`, {
     path: env.SOCKET_PATH,
+    // WebSocket-only: no HTTP long-polling, so multiple backend replicas need no sticky sessions.
     transports: ['websocket'],
     query: { token },
     autoConnect: false,
