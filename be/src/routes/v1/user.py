@@ -19,6 +19,10 @@ router = APIRouter(prefix="/user", tags=["user"])
     status_code=status.HTTP_201_CREATED,
     responses=generate_responses(
         ErrorResponse(
+            status.HTTP_403_FORBIDDEN,
+            "Invalid invite code",
+        ),
+        ErrorResponse(
             status.HTTP_409_CONFLICT,
             "Username already taken",
         ),

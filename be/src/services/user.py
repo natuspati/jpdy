@@ -1,9 +1,16 @@
+import secrets
 from typing import Annotated
 
 from fastapi import Depends
 
+from configs import settings
 from database import UnitOfWork
-from errors.request import NotFoundError, ResourceConflictError, UnauthorizedError
+from errors.request import (
+    ForbiddenError,
+    NotFoundError,
+    ResourceConflictError,
+    UnauthorizedError,
+)
 from schemas.token import TokenSchema
 from schemas.user.base import UserCreateSchema, UserPublicSchema
 from schemas.user.nested import UserWithPromptsLobbiesPublicSchema
@@ -15,6 +22,11 @@ class UserService:
         self._uow = uow
 
     async def register(self, schema: UserCreateSchema) -> UserPublicSchema:
+        if settings.registration_code and not secrets.compare_digest(
+            (schema.invite_code or "").encode(),
+            settings.registration_code.encode(),
+        ):
+            raise ForbiddenError("Invalid invite code")
         async with self._uow:
             existing = await self._uow.user_repo.select_user_for_auth(username=schema.username)
             if existing is not None:

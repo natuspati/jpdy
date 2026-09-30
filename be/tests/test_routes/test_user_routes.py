@@ -1,7 +1,9 @@
 from collections.abc import Awaitable, Callable
 
+import pytest
 from httpx import AsyncClient
 
+from configs import settings
 from factories import UserCreateSchemaFactory
 from fixtures.auth_fixtures import AuthedUser
 
@@ -29,6 +31,28 @@ async def test_register_with_duplicate_username_returns_409(http_client: AsyncCl
 
     second = await http_client.post("/api/v1/user/register", json=payload)
     assert second.status_code == 409
+
+
+async def test_register_requires_matching_invite_code_when_configured(
+    http_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "registration_code", "friends-only")
+    payload = UserCreateSchemaFactory.build(invite_code=None).model_dump()
+
+    missing = await http_client.post("/api/v1/user/register", json=payload)
+    wrong = await http_client.post(
+        "/api/v1/user/register",
+        json={**payload, "invite_code": "guess"},
+    )
+    right = await http_client.post(
+        "/api/v1/user/register",
+        json={**payload, "invite_code": "friends-only"},
+    )
+
+    assert missing.status_code == 403
+    assert wrong.status_code == 403
+    assert right.status_code == 201, right.text
 
 
 async def test_register_with_too_short_password_returns_422(http_client: AsyncClient):

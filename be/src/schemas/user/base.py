@@ -6,6 +6,7 @@ from schemas.base import BaseSchema
 class UserCreateSchema(BaseSchema):
     username: str = Field(min_length=3, max_length=20)
     password: str = Field(min_length=6, max_length=20)
+    invite_code: str | None = None
 
 
 class UserPublicSchema(BaseSchema):

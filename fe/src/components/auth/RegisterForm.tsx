@@ -22,12 +22,12 @@ const RegisterForm = () => {
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormSchema>({
     resolver: zodResolver(RegisterFormSchema),
-    defaultValues: { username: '', password: '', passwordConfirm: '' },
+    defaultValues: { username: '', password: '', passwordConfirm: '', inviteCode: '' },
   });
 
   const mutation = useMutation({
     mutationFn: async (values: RegisterFormSchema) => {
-      await registerApi(values.username, values.password);
+      await registerApi(values.username, values.password, values.inviteCode);
       return signIn(values.username, values.password);
     },
     onSuccess: (data) => {
@@ -71,6 +71,14 @@ const RegisterForm = () => {
           autoComplete="new-password"
           invalid={!!errors.passwordConfirm}
           {...register('passwordConfirm')}
+        />
+      </Field>
+      <Field label="Invite code" htmlFor="inviteCode" error={errors.inviteCode?.message}>
+        <Input
+          id="inviteCode"
+          autoComplete="off"
+          invalid={!!errors.inviteCode}
+          {...register('inviteCode')}
         />
       </Field>
       <Button type="submit" fullWidth disabled={isSubmitting || mutation.isPending}>

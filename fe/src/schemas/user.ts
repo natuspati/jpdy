@@ -13,6 +13,7 @@ export const RegisterForm = z
     username: z.string().min(3, 'At least 3 characters').max(20, 'At most 20 characters'),
     password: z.string().min(6, 'At least 6 characters').max(20, 'At most 20 characters'),
     passwordConfirm: z.string(),
+    inviteCode: z.string(),
   })
   .refine((data) => data.password === data.passwordConfirm, {
     message: 'Passwords do not match',
@@ -24,6 +25,7 @@ export type RegisterForm = z.infer<typeof RegisterForm>;
 export const UserCreate = z.object({
   username: z.string().min(3).max(20),
   password: z.string().min(6).max(20),
+  invite_code: z.string().nullable().optional(),
 });
 export type UserCreate = z.infer<typeof UserCreate>;
 

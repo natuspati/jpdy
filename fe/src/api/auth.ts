@@ -11,10 +11,14 @@ export async function signIn(username: string, password: string): Promise<TokenR
   return request('/user/sign-in', TokenResponse, { method: 'POST', formBody });
 }
 
-export async function register(username: string, password: string): Promise<UserPublic> {
+export async function register(
+  username: string,
+  password: string,
+  inviteCode: string,
+): Promise<UserPublic> {
   return request('/user/register', UserPublic, {
     method: 'POST',
-    body: { username, password },
+    body: { username, password, invite_code: inviteCode || null },
   });
 }
 

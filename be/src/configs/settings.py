@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     jwt_expiration_hours: int = 24
 
     allowed_hosts: list[str] = ["*"]
+    registration_code: str | None = Field(
+        default=None,
+        description="When set, registration requires this invite code.",
+    )
 
     db_apply_migrations: bool = False
     db_driver: str = "sqlite+aiosqlite"
