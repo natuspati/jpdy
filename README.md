@@ -138,6 +138,42 @@ Visibility rules are specified in [`GAME_FLOW.md`](GAME_FLOW.md):
 - the correct answer becomes public only during the short `answer_reveal`
   phase after resolution.
 
+## Host a game night (public, from this Mac)
+
+`deployment/scripts/jpdy.sh` brings the app online at a stable public HTTPS
+URL through [Tailscale Funnel](https://tailscale.com/kb/1223/funnel). No
+domain, router port-forwarding, or certificates needed; your home IP stays
+hidden. Nothing starts on boot; run the script when you want to play.
+
+One-time setup in the [Tailscale admin console](https://login.tailscale.com/admin):
+
+1. Create a free account; under **DNS** enable MagicDNS and HTTPS certificates.
+   Note your tailnet DNS name (e.g. `tail1234.ts.net`).
+2. In **Access controls**, allow Funnel:
+   `"nodeAttrs": [{"target": ["autogroup:member"], "attr": ["funnel"]}]`.
+3. Under **Settings → Keys**, generate an auth key.
+
+Then, from the repository root:
+
+```bash
+./deployment/scripts/jpdy.sh
+```
+
+The first run asks for the auth key and tailnet name and writes
+`deployment/prod.env` (gitignored) with generated secrets and an invite
+code. After the first start, disable key expiry for the `jpdy` machine in
+the admin console. The script prints the URL (`https://jpdy.<tailnet>`) and
+invite code, then keeps the Mac awake until you press Ctrl+C, which stops
+the containers (data is kept in the `jpdy-prod_*` volumes).
+
+- Friends register with the invite code (`BE_REGISTRATION_CODE`); without
+  it registration is refused. Share it privately. The URL is public.
+- No demo users are seeded. Register your own host account first.
+- Backend runs `BE_REPLICAS` (default 2) instances behind Nginx; Socket.IO
+  fan-out and game state live in Redis, so any replica can serve anyone.
+- A MacBook sleeps when its lid closes (unless an external display is
+  attached), so keep the lid open with the screen dimmed.
+
 ## Native development (without Compose)
 
 If you prefer running FastAPI and Vite directly, start Redis only:
