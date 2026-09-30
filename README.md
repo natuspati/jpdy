@@ -59,7 +59,9 @@ before starting Compose.
 This starts every local runtime dependency:
 
 - app, REST API, Socket.IO, built assets, and uploaded media at `http://localhost:8080`
-- backend, Redis, PostgreSQL, and media storage remain private Compose services
+- PostgreSQL at `localhost:5432` and Redis at `localhost:6379` for IDE data sources
+  (`POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`; bound to this machine only)
+- backend and media storage remain private Compose services
 
 Nginx is sole browser entry point. It serves built React `/assets/`, immutable
 uploaded `/media/` files, SPA routes, and proxies `/api/` plus Socket.IO

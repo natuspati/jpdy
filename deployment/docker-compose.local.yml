@@ -2,6 +2,8 @@ services:
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - jpdy_redis_data:/data
     healthcheck:
@@ -14,6 +16,8 @@ services:
     image: postgres:17-alpine
     env_file:
       - local.env
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - jpdy_postgres_data:/var/lib/postgresql/data
     healthcheck:
