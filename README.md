@@ -4,45 +4,24 @@ Voice-answer Jeopardy with text, image, audio, and video clues. Players answer
 over an external voice channel; the host judges. See [`GAME_FLOW.md`](GAME_FLOW.md)
 for gameplay rules.
 
-React/TypeScript frontend, FastAPI backend, PostgreSQL for persistent data,
-Redis for live games, and Nginx for the browser entry point. Run the app with
-Docker Compose; SQLite is used only for tests.
+## Play online
 
-## Development stack
+Open the public URL shared by your host, typically
+`https://jpdy.<tailnet>.ts.net`. It is available only while the host runs a
+session; players do not need Docker or Tailscale installed.
 
-Start Docker, then run from the repository root:
+Register with the host's private invite code, sign in, and join the waiting
+lobby. Agree on a voice channel before playing. The host starts the game,
+chooses a starting player, and judges spoken answers without scoring.
+After the game starts, existing participants can reconnect but new players
+cannot join.
 
-```bash
-# First setup only:
-cp deployment/local.env.example deployment/local.env
+## Deployment
 
-docker compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml up --build -d --wait
-```
+To host sessions, install Docker with Compose and configure
+[Tailscale Funnel](https://tailscale.com/kb/1223/funnel) for public HTTPS access.
 
-Open `http://localhost:8080`. PostgreSQL (`localhost:5432`) and Redis
-(`localhost:6379`) are also available locally for IDE access.
-
-Compose applies Alembic migrations and seeds five categories with 25 clues:
-
-| Role | Username | Password |
-| --- | --- | --- |
-| Host | host | host123 |
-| Player | alice | alice123 |
-| Player | bob | bob123 |
-| Player | carol | carol123 |
-
-Use separate browser profiles for test users. As host, create a lobby and
-select categories; players join before the host starts. The host does not score.
-Once started, only existing participants can reconnect.
-
-## Host a game night
-
-The game-night overlay skips demo accounts and exposes the app publicly through
-[Tailscale Funnel](https://tailscale.com/kb/1223/funnel). Players do not need
-Tailscale installed.
-
-### One-time setup
+### Configure Tailscale and `prod.env`
 
 In the [Tailscale admin console](https://login.tailscale.com/admin):
 
@@ -56,9 +35,19 @@ cp deployment/prod.env.example deployment/prod.env
 chmod 600 deployment/prod.env
 ```
 
-Replace all `__PLACEHOLDERS__` with your tailnet name, auth key, database
-password, JWT secret, and private registration code. Generate secrets with
-`openssl rand -hex 32`. Never commit or share the environment file.
+Replace every placeholder in `deployment/prod.env`:
+
+| Placeholder | Value |
+| --- | --- |
+| `__TAILNET__` | Full tailnet DNS name, e.g. `tail1234.ts.net` |
+| `__TS_AUTHKEY__` | Tailscale auth key |
+| `__DB_PASSWORD__` | Same generated password for `POSTGRES_PASSWORD` and `BE_DB_PASSWORD` |
+| `__SECRET_KEY__` | Generated signing secret |
+| `__INVITE_CODE__` | Private registration code to share with players |
+
+Generate secrets with `openssl rand -hex 32`. Keep the environment file private
+and untracked. Changing its database password does not update an existing
+database's password.
 
 ### Start a session
 
@@ -75,8 +64,9 @@ Verify the device's Tailscale DNS name matches `PUBLIC_URL` and
 `BE_ALLOWED_HOSTS`. For infrequent sessions, consider disabling device key
 expiry. Open the public URL and check sign-in and lobby connectivity.
 
-Register your host account, then privately share `BE_REGISTRATION_CODE` with
-players. Keep the host awake and online throughout the session.
+No demo accounts are created. Register your host account, then share
+`PUBLIC_URL` and the private `BE_REGISTRATION_CODE` with players.
+Keep the host awake and online throughout the session.
 
 ### Stop a session
 
@@ -89,34 +79,41 @@ docker compose -p jpdy-prod --env-file deployment/prod.env \
 Data stays in `jpdy-prod_*` volumes. A fresh clone on another host does not
 transfer accounts, categories, uploads, or the Tailscale identity.
 
-## Configuration and data
+## Development
 
-- Always pass the appropriate `--env-file`. Environment files are gitignored.
-- Keep `POSTGRES_PASSWORD` and `BE_DB_PASSWORD` identical. Changing them does
-  not update an existing database's password.
-- `BE_ALLOWED_HOSTS` must match the browser origin, including its port.
-- PostgreSQL, Redis, and uploaded media persist in Docker volumes. Nginx serves
-  media from a read-only mount; FastAPI validates uploads.
-- To check multiple backend workers, set `BE_WORKERS_COUNT=2` in `local.env`
-  and rerun development startup. Restore `1` afterwards.
+Start Docker, then run from the repository root:
 
-**Destructive reset:** `down -v` deletes the selected stack's volumes.
-For a clean development database, live state, and media storage:
+```bash
+# First setup only:
+cp deployment/local.env.example deployment/local.env
+
+docker compose --env-file deployment/local.env \
+  -f deployment/docker-compose.local.yml up --build -d --wait
+```
+
+Open `http://localhost:8080`. The development stack includes five categories
+with 25 clues and these accounts:
+
+| Role | Username | Password |
+| --- | --- | --- |
+| Host | host | host123 |
+| Player | alice | alice123 |
+| Player | bob | bob123 |
+| Player | carol | carol123 |
+
+Use separate browser profiles for test users. As host, create a lobby and
+select categories, then join from the player profiles.
+
+Stop the development stack with:
 
 ```bash
 docker compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml down -v
+  -f deployment/docker-compose.local.yml down
 ```
 
-Restart with the development command to recreate and seed the stack. Do not
-use `-v` for ordinary shutdown.
+Add `-v` only for a **destructive reset**: it deletes accounts, categories,
+live games, and uploads. Restart to recreate the seeded development data.
 
-## Optional GitHub Actions deployment
-
-A self-hosted runner can run the same Compose command using a manual
-`workflow_dispatch` trigger. Start the runner and Docker first; keep deployment
-secrets outside the Actions checkout and never run untrusted PR code on it.
-
-Actions cannot power on the host; offline jobs
-[fail after 24 hours queued](https://docs.github.com/en/actions/reference/runners/self-hosted-runners#routing-precedence-for-self-hosted-runners).
-For occasional sessions, manual pull-and-start is simpler. No workflow is configured.
+Implementation details are in the [backend README](be/README.md) and
+[frontend README](fe/README.md); contributor conventions are in
+[`AGENTS.md`](AGENTS.md).
