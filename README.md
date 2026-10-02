@@ -18,8 +18,10 @@ cannot join.
 
 ## Deployment
 
-To host sessions, install Docker with Compose and configure
-[Tailscale Funnel](https://tailscale.com/kb/1223/funnel) for public HTTPS access.
+Requires a running Docker engine with Linux containers, Compose v2.24.4+,
+Git, and Bash (Git Bash on Windows). GNU Make is optional.
+Configure [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) for public
+HTTPS access.
 
 ### Configure Tailscale and `prod.env`
 
@@ -49,39 +51,38 @@ Generate secrets with `openssl rand -hex 32`. Keep the environment file private
 and untracked. Changing its database password does not update an existing
 database's password.
 
-### Start a session
+### Manage sessions
 
-Start Docker, then run:
+Run from the repository root:
 
 ```bash
-git pull --ff-only
-docker compose -p jpdy-prod --env-file deployment/prod.env \
-  -f deployment/docker-compose.local.yml \
-  -f deployment/docker-compose.prod.yml up --build -d --wait
+make start   # Start or update
+make status  # Show container state, health, and ports
+make stop    # Stop; keep data
 ```
 
-Verify the device's Tailscale DNS name matches `PUBLIC_URL` and
-`BE_ALLOWED_HOSTS`. For infrequent sessions, consider disabling device key
-expiry. Open the public URL and check sign-in and lobby connectivity.
+Without Make, use `bash deployment/scripts/jpdy.sh start` (or `status` / `stop`).
+The script prefers `docker compose`, falling back to `docker-compose` v2.
 
+Start runs `git pull --ff-only`, builds, and launches `jpdy-prod` in the
+background, waiting for healthy services. A failed pull aborts startup.
+Repeated starts update changed containers; unchanged ones keep running.
+Status is read-only. Stop removes containers, leaving `jpdy-prod_*` data
+volumes and the Docker engine intact; repeated stops are safe.
+
+Verify the Tailscale DNS name matches `PUBLIC_URL` and `BE_ALLOWED_HOSTS`,
+then check sign-in and lobby connectivity at the public URL.
 No demo accounts are created. Register your host account, then share
 `PUBLIC_URL` and the private `BE_REGISTRATION_CODE` with players.
-Keep the host awake and online throughout the session.
+Keep the host awake and online; closing the terminal does not stop the session.
+For infrequent sessions, consider disabling Tailscale device key expiry.
 
-### Stop a session
-
-```bash
-docker compose -p jpdy-prod --env-file deployment/prod.env \
-  -f deployment/docker-compose.local.yml \
-  -f deployment/docker-compose.prod.yml down
-```
-
-Data stays in `jpdy-prod_*` volumes. A fresh clone on another host does not
+A fresh clone on another host does not
 transfer accounts, categories, uploads, or the Tailscale identity.
 
 ## Development
 
-Start Docker, then run from the repository root:
+With Docker running, run from the repository root:
 
 ```bash
 # First setup only:
