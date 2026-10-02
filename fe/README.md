@@ -1,21 +1,10 @@
-# Jeopardy front-end
+# Jeopardy frontend
 
-See the repository [local-play guide](../README.md) for the complete
-Compose-based local runtime, seed data, URLs, Socket.IO path, and multi-user
-browser workflow. [`GAME_FLOW.md`](../GAME_FLOW.md) defines the desired
-server-authoritative voice-answer and answer-reveal experience; the current
-client retains a temporary typed-answer/host-judging UI until that contract is
-implemented.
+React, strict TypeScript, and Vite; dependencies managed with Bun.
+Run through Docker Compose as described in [`README.md`](../README.md).
 
-From this directory:
+Nginx serves the built app and media, proxies REST at `/api/`, and Socket.IO
+at `/ws/`. The client uses same-origin URLs in Compose.
 
-```bash
-bun install
-bun run dev
-```
-
-The Vite server runs on `http://localhost:8080` and proxies REST `/api`
-requests to FastAPI. Socket.IO connects directly to
-`http://localhost:8000/ws`; this avoids Vite's development WebSocket proxy.
-Native development uses `http://localhost:8000` as the backend target;
-Compose sets `VITE_PROXY_TARGET=http://backend:8000`.
+See [`GAME_FLOW.md`](../GAME_FLOW.md) for gameplay and
+[`AGENTS.md`](../AGENTS.md) for contributor conventions.

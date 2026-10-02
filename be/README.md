@@ -1,30 +1,15 @@
-# Jeopardy back-end
+# Jeopardy backend
 
-See the repository [local-play guide](../README.md) for Compose startup,
-seeding, Redis, environment, migration, and database-reset instructions.
-The desired server-authoritative gameplay contract is documented in
-[`GAME_FLOW.md`](../GAME_FLOW.md). Gameplay uses the implemented voice-answer and answer-reveal contract described
-in [`GAME_FLOW.md`](../GAME_FLOW.md).
+FastAPI, Python 3.14, SQLAlchemy, Redis, and Socket.IO; dependencies managed
+with uv. Run through Docker Compose as described in [`README.md`](../README.md).
+PostgreSQL is the runtime database; SQLite is used only for tests. Queries and
+Alembic migrations must support both.
 
-From this directory, the development server command is:
+Compose applies migrations before startup. Only the development stack seeds
+demo users and categories. See [`GAME_FLOW.md`](../GAME_FLOW.md) for gameplay
+and [`AGENTS.md`](../AGENTS.md) for contributor conventions.
 
-```bash
-uv run src/main.py
-```
-
-With the tracked local environment example, the API runs at
-`http://localhost:8000`.
-
-Compose runs `deployment/scripts/seed_local.py` after Alembic and before its
-backend starts.
-For native development, run the same idempotent database seed script after
-Alembic has created the schema:
-
-```bash
-PYTHONPATH=src uv run ../deployment/scripts/seed_local.py
-```
-
-Before handing off back-end changes, run:
+After changes, run from this directory:
 
 ```bash
 ruff format src tests

@@ -1,109 +1,67 @@
-# Jeopardy Web App
+# Jeopardy contributor guide
 
-## Project Overview
+## Stack and deployment
 
-Hobby project: a Jeopardy game implemented as a full-stack web application.
+- `be/`: FastAPI, Python 3.14, Pydantic v2, SQLAlchemy, uv.
+- `fe/`: React, strict TypeScript, Bun.
+- Run the app with Docker Compose and PostgreSQL. SQLite is used only for tests.
+- Redis owns live-game state and timers; Socket.IO delivers updates.
+- Follow [`README.md`](README.md) for startup and Tailscale configuration.
+  Public sessions require MagicDNS, HTTPS, Funnel permissions, and an auth key.
+- The game-night stack uses `deployment/prod.env`, project `jpdy-prod`, and
+  no demo accounts. Keep secrets and environment files untracked.
+- The host may be offline between sessions; do not add automatic deployment
+  without an explicit request.
+- [`GAME_FLOW.md`](GAME_FLOW.md) defines the authoritative gameplay contract.
 
-```
-root/
-├── be/        # FastAPI back-end (Python 3.14, uv)
-└── fe/        # React front-end (TypeScript)
-```
+## Backend
 
----
+- Use async routes, services, and SQLAlchemy sessions.
+- Keep handlers thin, business logic in `services/`, queries in `repos/`, and
+  validated Pydantic models in `schemas/`.
+- Use `database/uow.py` for SQL commit/rollback and repository access.
+  Redis transitions are atomic within Redis; SQL projections follow separately.
+- Manage dependencies with `uv add`, `uv remove`, and `uv sync`.
 
-## Back-End (`be/`)
+### Database compatibility
 
-### Stack
+**All queries, models, and Alembic migrations must work with both SQLite
+(tests) and PostgreSQL (runtime).**
 
-- **Runtime:** Python 3.14
-- **Framework:** FastAPI
-- **Database:** SQLite (local dev) / PostgreSQL (cloud/production)
-- **Redis:** For storing active stage of running Jeopardy games
-- **SIO:** For managing events in websockets
-- **Dependency manager:** `uv`
+- Use SQLAlchemy Core/ORM expressions, not raw SQL. If raw SQL is unavoidable,
+  test it against both dialects.
+- Avoid dialect-specific types (`JSONB`, `ARRAY`, `UUID`, `SERIAL`); use portable
+  types such as `String`, `Integer`, and `Boolean`.
+- Use SQLAlchemy expressions such as `func.now()`, `.ilike()`, and `cast()`,
+  not database-specific SQL syntax.
+- Generate Alembic migrations with `--autogenerate`, review before applying,
+  and keep schema changes compatible with both dialects.
+- Read connections from environment settings in `be/src/configs/settings.py`;
+  do not hardcode a dialect.
 
-### Running the dev server
-
-```bash
-uv run src/main.py --reload
-```
-
-### Dependency management
-
-```bash
-uv add <package>        # add a dependency
-uv remove <package>     # remove a dependency
-uv sync                 # install all deps from lockfile
-```
-
-### After every set of changes — always run:
+After every set of changes, run from `be/` in this order:
 
 ```bash
 ruff format src tests
 ruff check --fix src tests
 ```
 
-Run both commands in this exact order before considering any task complete.
+Do not run the integration-heavy pytest suite unless explicitly requested.
 
-### Database compatibility (SQLite + PostgreSQL)
+## Frontend
 
-All queries and models **must work on both** SQLite (local) and PostgreSQL (cloud). Follow these rules at all times:
+- Use functional components and hooks, with `React.FC<Props>` or explicit
+  return types. No `.js`/`.jsx` files or `any`; narrow `unknown` instead.
+- Prefer `interface` for object shapes and `type` for unions/utilities.
+  Use `satisfies` and const assertions where appropriate.
+- Co-locate component types unless shared; keep components focused.
+- Put API calls in service modules, not components. Use async/await, not
+  `.then()` chains.
 
-- **ORM only:** Use SQLAlchemy Core or ORM expressions. Never write raw SQL strings unless absolutely unavoidable, and
-  if you do, test against both dialects.
-- **No database-specific types:** Avoid `JSONB`, `ARRAY`, `UUID` (use `String` instead), `SERIAL` (use `Integer` with
-  `autoincrement=True`).
-- **No database-specific functions:** Avoid `NOW()`, `ILIKE`, `::cast` syntax. Use SQLAlchemy's `func.now()`, `ilike()`
-  method, and `cast()`.
-- **Booleans:** Use SQLAlchemy `Boolean` type — SQLite stores as 0/1, Postgres as native bool; SQLAlchemy handles the
-  mapping.
-- **Migrations:** Use Alembic. Always generate migrations with `--autogenerate` and review them before applying.
-- **Connection strings:** Injected via environment with defaults specified in `be/src/configs/settings.py`. The app must
-  detect the dialect at runtime - do not hardcode either dialect.
+## General
 
-### Code conventions
-
-- Use `async`/`await` throughout (async SQLAlchemy sessions, async FastAPI routes).
-- Pydantic v2 for all request/response schemas.
-- Keep route handlers thin — business logic goes in a `services/` layer.
-- Keep query logic in a `repos/` layer, separate from business logic, preferably return validated Pydantic models
-  (schemas) defined in `schemas/` rather than raw SQLAlchemy models.
-- Use Unit of Work convention to make operations with database and redis atomic in `datbases/own.py`.
-
----
-
-## Front-End (`fe/`)
-
-### Stack
-
-- **Framework:** React
-- **Language:** Modern TypeScript only — no `.js`/`.jsx` files
-- **Node package manager:** bun
-
-### TypeScript conventions
-
-- Strict mode enabled (`"strict": true` in `tsconfig.json`).
-- No `any` — use `unknown` and narrow, or define proper types/interfaces.
-- Prefer `interface` for object shapes, `type` for unions and utility types.
-- All React components as typed function components: `const Foo: React.FC<Props> = ...` or explicit return-type
-  annotations.
-- Use `const` assertions and `satisfies` where appropriate.
-- Co-locate component types in the same file unless shared across multiple files.
-
-### Code conventions
-
-- Functional components only — no class components.
-- Use React hooks; keep components focused and composable.
-- API calls go in dedicated service modules (e.g. `src/api/`), not inline in components.
-- Use `async`/`await`, not `.then()` chains.
-
----
-
-## General Guidelines
-
-- **Commit hygiene:** One logical change per commit with a clear message.
-- **No secrets in source:** All credentials and environment-specific values in `.env` files (gitignored).
-- **Error handling:** All async operations (both BE and FE) must handle errors explicitly — no silent swallowing.
-- **Naming:** snake_case for Python, camelCase for TypeScript variables/functions, PascalCase for components and classes
-  everywhere.
+- Handle async errors explicitly; do not silently swallow failures.
+- Use snake_case in Python, camelCase in TypeScript, and PascalCase for classes
+  and components.
+- Keep credentials in gitignored environment files.
+- Make one logical change per commit with a clear message.

@@ -1,13 +1,17 @@
 # Jeopardy game flow
 
-This is the normative game contract for the local Jeopardy application.
+This is the normative game contract for the Jeopardy application.
 Redis owns live-game state and timers; SQL owns lobby setup plus
 participant/completion projections. Clients render ordered Socket.IO snapshots
 and do not maintain a parallel game-state machine.
 
-This document describes the intended **voice-answer** game. Players answer
+This document describes the **voice-answer** game. Players answer
 through external voice software such as Discord. They do not type answers into
 the application and do not press an answer-submission button.
+
+For deployment and Tailscale configuration, see the
+[`setup and game-night guide`](README.md). Gameplay rules are the same for
+development and hosted sessions.
 
 ## Core rules
 
@@ -256,9 +260,6 @@ answer_reveal
 finished
 ```
 
-There is intentionally no `host_judging_answer` phase in the desired flow.
-The host judges directly while the active player is answering by voice.
-
 ## Gameplay sequence
 
 ### 1. Wait for players
@@ -454,7 +455,7 @@ Banning always updates both Redis game state and persistent
 
 ## Timers and deadline enforcement
 
-Initial local timing values are:
+Timer durations are:
 
 ```text
 answering timer:     30 seconds
@@ -492,15 +493,6 @@ The server is authoritative:
 | `buzz` | eligible non-host player | `buzz_open` |
 | `advance_answer_reveal` | host | `answer_reveal` |
 | `ban_player` / `unban_player` | host | no phase restriction while host has active lobby socket |
-
-The desired flow removes these old typed-answer concepts:
-
-```text
-submit_answer
-last_submitted_answer
-host_judging_answer
-finish_answering
-```
 
 All rejected events return a structured socket error to the sender. Clients
 must not optimistically mutate game state.

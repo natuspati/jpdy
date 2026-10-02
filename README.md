@@ -1,263 +1,122 @@
-# Jeopardy local-play guide
+# Jeopardy
 
-This repository contains a Jeopardy web app with text, image, audio, and
-video prompts:
+Voice-answer Jeopardy with text, image, audio, and video clues. Players answer
+over an external voice channel; the host judges. See [`GAME_FLOW.md`](GAME_FLOW.md)
+for gameplay rules.
 
-- `be/` — FastAPI, SQLite, Redis, Socket.IO
-- `fe/` — React, TypeScript, Vite
-- `deployment/` — local Compose configuration
+React/TypeScript frontend, FastAPI backend, PostgreSQL for persistent data,
+Redis for live games, and Nginx for the browser entry point. Run the app with
+Docker Compose; SQLite is used only for tests.
 
-The existing JWT sign-in is only a lightweight local identity mechanism. This
-setup is for local development, not production deployment.
+## Development stack
 
-## Game flow
-
-[`GAME_FLOW.md`](GAME_FLOW.md) defines the server-authoritative game contract:
-players answer through an external voice channel, the host judges directly,
-and every resolved clue gets a short public answer-reveal period.
-
-## Prerequisites
-
-- Docker Engine with Compose (Colima is supported; Docker Desktop is not required)
-- Python 3.14 and uv
-- Bun
-
-## Start the app
-
-### 1. Start the complete local stack
-
-From the repository root:
+Start Docker, then run from the repository root:
 
 ```bash
+# First setup only:
 cp deployment/local.env.example deployment/local.env
 
-docker-compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml up --build -d
-docker-compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml ps
+docker compose --env-file deployment/local.env \
+  -f deployment/docker-compose.local.yml up --build -d --wait
 ```
 
-This guide uses the hyphenated `docker-compose` command because it works with
-the local Colima setup. If your Docker CLI has the Compose v2 plugin, use
-`docker compose` in place of `docker-compose`.
+Open `http://localhost:8080`. PostgreSQL (`localhost:5432`) and Redis
+(`localhost:6379`) are also available locally for IDE access.
 
-`deployment/local.env` contains every local runtime and frontend build setting.
-It is injected into the PostgreSQL, migration, and backend containers through
-Compose `env_file`; `--env-file` supplies Compose interpolation and frontend
-Docker build arguments. It is gitignored; `deployment/local.env.example` is
-its tracked template. Always pass the local file with `--env-file` when running
-Compose from the repository root. `BE_ALLOWED_HOSTS` must include the selected
-`NGINX_HOST_PORT`.
+Compose applies Alembic migrations and seeds five categories with 25 clues:
 
-`POSTGRES_PASSWORD` and `BE_DB_PASSWORD` must always have the same value.
-PostgreSQL applies `POSTGRES_*` only when it initializes an empty data volume.
-If an existing local database was initialized with different credentials,
-either restore its original matching password or reset it with `down -v`
-(which permanently deletes local PostgreSQL, Redis, and uploaded-media data)
-before starting Compose.
+| Role | Username | Password |
+| --- | --- | --- |
+| Host | host | host123 |
+| Player | alice | alice123 |
+| Player | bob | bob123 |
+| Player | carol | carol123 |
 
-This starts every local runtime dependency:
+Use separate browser profiles for test users. As host, create a lobby and
+select categories; players join before the host starts. The host does not score.
+Once started, only existing participants can reconnect.
 
-- app, REST API, Socket.IO, built assets, and uploaded media at `http://localhost:8080`
-- PostgreSQL at `localhost:5432` and Redis at `localhost:6379` for IDE data sources
-  (`POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`; bound to this machine only)
-- backend and media storage remain private Compose services
+## Host a game night
 
-Nginx is sole browser entry point. It serves built React `/assets/`, immutable
-uploaded `/media/` files, SPA routes, and proxies `/api/` plus Socket.IO
-`/ws/` to FastAPI. FastAPI validates uploads but does not serve media bytes.
-The `migrate` job applies Alembic, then seeds local users and categories before
-backend starts. Seeding is database-direct and safe to rerun after migrations:
-it retains fixed users and reconciles five host-owned categories to 25 text
-prompts without creating a lobby or game. Redis persists in `jpdy_redis_data`,
-PostgreSQL in `jpdy_postgres_data`, and uploaded prompt media in
-`jpdy_media_data`.
+The game-night overlay skips demo accounts and exposes the app publicly through
+[Tailscale Funnel](https://tailscale.com/kb/1223/funnel). Players do not need
+Tailscale installed.
 
-Seeded credentials are:
+### One-time setup
 
-- host: `host` / `host123`
-- players: `alice` / `alice123`, `bob` / `bob123`, and `carol` / `carol123`
+In the [Tailscale admin console](https://login.tailscale.com/admin):
 
-The API currently has a six-character password minimum, hence the `123`
-suffixes. It has a single `username` field, so `alice`, `bob`, and `carol`
-are also the display identities shown in the app.
-
-### 2. Create and play a local game
-
-1. Open `http://localhost:8080` and sign in as the seeded **host**.
-2. Open three separate browser profiles or incognito windows and sign in as
-   the seeded **players**. Each local test user needs its own browser storage,
-   because an account can only have one socket connection to a lobby.
-3. The host already owns five ready categories—**Space**, **Felids**, **World
-   Capitals**, **Science Basics**, and **Classic Literature**—with exactly five
-   text prompts each.
-4. As the host, return to **Lobbies**, choose **New lobby**, and select one or more ready
-   categories. Ready categories are visible to any signed-in user, while only
-   the category owner can edit them.
-5. In the player windows, join the waiting lobby. The host starts the game
-   and chooses a starting player. Players answer through the agreed voice
-   channel; the host judges each spoken response directly.
-6. Continue until every clue is selected. The server marks the lobby complete
-   and displays the final leaderboard.
-
-The host is a non-scoring judge. Only joined players choose clues and accrue
-points. Once the host starts play, the roster locks: existing players may
-reconnect, but new users cannot join. Banned users cannot reconnect until
-unbanned.
-
-## Prompt media and sound
-
-- Category owners can set question and answer-reveal types independently:
-  text, image, audio, or video.
-- Every prompt still requires canonical answer text. It remains host-private
-  during an active clue and becomes public during answer reveal.
-- Uploaded bytes are validated before storage. Supported formats: JPEG/PNG/WebP
-  images up to 10 MB; MP3/M4A/AAC/Ogg audio up to 20 MB; MP4 video up to 100 MB.
-- Nginx serves immutable public assets at same-origin `/media/{key}` URLs.
-  Supported stored media requests are anonymous and must return `200`; media
-  elements cannot attach API bearer headers. Do not put uploaded files in the
-  database or link arbitrary external URLs.
-- Backend and Nginx share `jpdy_media_data`: backend mounts it read/write at `/media`; Nginx
-  mounts same volume read-only at `/srv/jpdy-media`. New files are mode `0644`, so Nginx can read
-  them but cannot modify them.
-- Game sound starts disabled for every page load. Each browser user enables it
-  independently, then has one **Game volume** control.
-
-## State and answer visibility
-
-Gameplay state is Redis-authoritative. Each live command uses a Redis
-`WATCH`/`MULTI`/`EXEC` transition which atomically writes its incremented
-revision, event-stream record, command dedup result, and timer schedule.
-Clients discard stale state revisions. PostgreSQL stores lobby setup and
-eventually-consistent participant/completion projections.
-
-Visibility rules are specified in [`GAME_FLOW.md`](GAME_FLOW.md):
-
-- players answer through voice software; their answer text is never sent to
-  the application;
-- only the host sees an expected answer while a clue is active;
-- no player receives the expected answer before the host resolves the clue;
-- the correct answer becomes public only during the short `answer_reveal`
-  phase after resolution.
-
-## Host a game night (public, from this Mac)
-
-`deployment/scripts/jpdy.sh` brings the app online at a stable public HTTPS
-URL through [Tailscale Funnel](https://tailscale.com/kb/1223/funnel). No
-domain, router port-forwarding, or certificates needed; your home IP stays
-hidden. Nothing starts on boot; run the script when you want to play.
-
-One-time setup in the [Tailscale admin console](https://login.tailscale.com/admin):
-
-1. Create a free account; under **DNS** enable MagicDNS and HTTPS certificates.
-   Note your tailnet DNS name (e.g. `tail1234.ts.net`).
-2. In **Access controls**, allow Funnel:
+1. Enable MagicDNS and HTTPS certificates; note your tailnet DNS name.
+2. Allow Funnel in **Access controls**:
    `"nodeAttrs": [{"target": ["autogroup:member"], "attr": ["funnel"]}]`.
-3. Under **Settings → Keys**, generate an auth key.
-
-Then, from the repository root:
+3. Generate an auth key under **Settings → Keys**.
 
 ```bash
-./deployment/scripts/jpdy.sh
+cp deployment/prod.env.example deployment/prod.env
+chmod 600 deployment/prod.env
 ```
 
-The first run asks for the auth key and tailnet name and writes
-`deployment/prod.env` (gitignored) with generated secrets and an invite
-code. After the first start, disable key expiry for the `jpdy` machine in
-the admin console. The script prints the URL (`https://jpdy.<tailnet>`) and
-invite code, then keeps the Mac awake until you press Ctrl+C, which stops
-the containers (data is kept in the `jpdy-prod_*` volumes).
+Replace all `__PLACEHOLDERS__` with your tailnet name, auth key, database
+password, JWT secret, and private registration code. Generate secrets with
+`openssl rand -hex 32`. Never commit or share the environment file.
 
-- Friends register with the invite code (`BE_REGISTRATION_CODE`); without
-  it registration is refused. Share it privately. The URL is public.
-- No demo users are seeded. Register your own host account first.
-- Backend runs `BE_REPLICAS` (default 2) instances behind Nginx; Socket.IO
-  fan-out and game state live in Redis, so any replica can serve anyone.
-- A MacBook sleeps when its lid closes (unless an external display is
-  attached), so keep the lid open with the screen dimmed.
+### Start a session
 
-## Native development (without Compose)
-
-If you prefer running FastAPI and Vite directly, start Redis only:
+Start Docker, then run:
 
 ```bash
-docker-compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml up -d redis
+git pull --ff-only
+docker compose -p jpdy-prod --env-file deployment/prod.env \
+  -f deployment/docker-compose.local.yml \
+  -f deployment/docker-compose.prod.yml up --build -d --wait
 ```
 
-Then configure and run the backend:
+Verify the device's Tailscale DNS name matches `PUBLIC_URL` and
+`BE_ALLOWED_HOSTS`. For infrequent sessions, consider disabling device key
+expiry. Open the public URL and check sign-in and lobby connectivity.
+
+Register your host account, then privately share `BE_REGISTRATION_CODE` with
+players. Keep the host awake and online throughout the session.
+
+### Stop a session
 
 ```bash
-cd be
-cp .env.example .env
-uv sync
-uv run src/main.py
+docker compose -p jpdy-prod --env-file deployment/prod.env \
+  -f deployment/docker-compose.local.yml \
+  -f deployment/docker-compose.prod.yml down
 ```
 
-In a second terminal, configure and run the frontend:
+Data stays in `jpdy-prod_*` volumes. A fresh clone on another host does not
+transfer accounts, categories, uploads, or the Tailscale identity.
+
+## Configuration and data
+
+- Always pass the appropriate `--env-file`. Environment files are gitignored.
+- Keep `POSTGRES_PASSWORD` and `BE_DB_PASSWORD` identical. Changing them does
+  not update an existing database's password.
+- `BE_ALLOWED_HOSTS` must match the browser origin, including its port.
+- PostgreSQL, Redis, and uploaded media persist in Docker volumes. Nginx serves
+  media from a read-only mount; FastAPI validates uploads.
+- To check multiple backend workers, set `BE_WORKERS_COUNT=2` in `local.env`
+  and rerun development startup. Restore `1` afterwards.
+
+**Destructive reset:** `down -v` deletes the selected stack's volumes.
+For a clean development database, live state, and media storage:
 
 ```bash
-cd fe
-cp .env.example .env
-bun install
-bun run dev
-```
-
-The example backend environment enables startup migrations. Native Vite
-development uses `VITE_SOCKET_URL=http://localhost:8000`; Compose leaves it
-empty so clients use same-origin Nginx. Native Vite does not serve FastAPI's
-`BE_MEDIA_ROOT`, so test uploaded media through Compose/Nginx unless you add a
-dedicated Vite media-serving configuration.
-
-## Multi-worker local smoke check
-
-Normal Compose deliberately starts one backend worker. To smoke-test shared
-Socket.IO delivery, run this candidate branch with:
-
-```bash
-BE_WORKERS_COUNT=2 docker-compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml up --build
-```
-
-Verify host/private answer key, player public state, reconnect takeover,
-remote ban disconnect, timer expiry, and completion with separate browsers.
-`BE_SOCKETIO_REDIS_URL` is required for this mode and is already configured
-by Compose. Do not use a scaled baseline branch.
-
-## Reset local data
-
-To reset all Compose-managed state (PostgreSQL and Redis):
-
-```bash
-docker-compose --env-file deployment/local.env \
+docker compose --env-file deployment/local.env \
   -f deployment/docker-compose.local.yml down -v
 ```
 
-Then use the complete-stack command above to recreate and seed a clean local
-instance.
+Restart with the development command to recreate and seed the stack. Do not
+use `-v` for ordinary shutdown.
 
-For native development, stop the backend and remove the local SQLite database
-from `be/`:
+## Optional GitHub Actions deployment
 
-```bash
-rm -f be/jpdy.db
-```
+A self-hosted runner can run the same Compose command using a manual
+`workflow_dispatch` trigger. Start the runner and Docker first; keep deployment
+secrets outside the Actions checkout and never run untrusted PR code on it.
 
-To also reset native Redis game state:
-
-```bash
-docker-compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml down -v
-```
-
-Start Redis and the backend again; with the example `be/.env`, Alembic will
-recreate the SQLite schema automatically. Deleting the database also removes
-registered local accounts and authored categories.
-
-## Current scope
-
-Prompt questions and answer reveals each support text, image, audio, or video.
-Every prompt still requires canonical question and expected-answer text for
-instructions, host judgment, and the public reveal. See
-[`GAME_FLOW.md`](GAME_FLOW.md) for gameplay, visibility, media, timer, and
-sound-cue contracts.
+Actions cannot power on the host; offline jobs
+[fail after 24 hours queued](https://docs.github.com/en/actions/reference/runners/self-hosted-runners#routing-precedence-for-self-hosted-runners).
+For occasional sessions, manual pull-and-start is simpler. No workflow is configured.
