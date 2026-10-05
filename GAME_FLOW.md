@@ -172,10 +172,12 @@ including their scores, connection state, and active labels. The server emits
 recipient-specific snapshots to separate host and player Socket.IO rooms; it
 never broadcasts a broad state frame before these recipient-specific frames.
 
-Public prompt data never contains expected-answer field. `question`,
-`question_type`, and `question_media` are populated only for current active
-prompt; other board prompts expose only their identity, order, spent state,
-and value. Canonical correct answer text and optional answer media are public
+Public prompt data never contains expected-answer field. `question` and
+`question_type` are populated only for current active prompt; other board
+prompts expose only their identity, order, spent state, and value. The
+exception is `question_media`, which is present for every board prompt so
+clients can preload images before a clue opens; this trades some secrecy of
+upcoming media for faster loads. Answer media is never sent early. Canonical correct answer text and optional answer media are public
 only while:
 
 ```text

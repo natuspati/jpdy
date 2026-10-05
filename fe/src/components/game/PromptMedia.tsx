@@ -51,6 +51,7 @@ const PromptMedia = ({
       <img
         src={mediaSrc}
         alt={alt}
+        decoding="async"
         className={`max-h-full max-w-full rounded-lg object-contain ${className}`}
       />
     );
