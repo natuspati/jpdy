@@ -75,6 +75,31 @@ describe('PromptMedia', () => {
     expect(endPromptMediaPlayback).toHaveBeenCalledTimes(4);
   });
 
+  it('follows the global volume and sound toggle, including for a replacement element', () => {
+    const renderMedia = (value: GameAudioContextValue, playbackId: string) => (
+      <GameAudioContext.Provider value={value}>
+        <PromptMedia contentType="video" media={media} alt="Video clue" playbackId={playbackId} />
+      </GameAudioContext.Provider>
+    );
+    const { rerender } = render(renderMedia(audioContextValue({ volume: 0.4 }), '101:question'));
+    const first = document.querySelector('video');
+    if (!first) throw new Error('Video element was not rendered');
+    expect(first.volume).toBe(0.4);
+    expect(first.muted).toBe(false);
+
+    rerender(renderMedia(audioContextValue({ volume: 0.4, enabled: false }), '101:question'));
+    expect(first.muted).toBe(true);
+
+    rerender(renderMedia(audioContextValue({ volume: 0 }), '101:question'));
+    expect(first.muted).toBe(true);
+
+    rerender(renderMedia(audioContextValue({ volume: 0.7 }), '101:answer'));
+    const second = document.querySelector('video');
+    expect(second).not.toBe(first);
+    expect(second?.volume).toBe(0.7);
+    expect(second?.muted).toBe(false);
+  });
+
   it('leaves editor-style previews manually playable when no game playback identity is supplied', () => {
     const value = audioContextValue();
     render(
