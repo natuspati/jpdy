@@ -20,6 +20,8 @@ class MediaAssetRepo:
         media_kind: str,
         mime_type: str,
         byte_size: int,
+        width: int | None = None,
+        height: int | None = None,
     ) -> MediaAssetInDBSchema:
         stmt = (
             insert(MediaAsset)
@@ -30,6 +32,8 @@ class MediaAssetRepo:
                 media_kind=media_kind,
                 mime_type=mime_type,
                 byte_size=byte_size,
+                width=width,
+                height=height,
             )
             .returning(MediaAsset)
         )

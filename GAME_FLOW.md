@@ -118,7 +118,8 @@ created → waiting_start → in_progress → completed
   validates bytes and stores file under generated immutable key; it does not
   serve file bytes.
 - Supported media:
-  - image: JPEG, PNG, WebP, maximum 10 MB;
+  - image: JPEG, PNG, WebP, maximum 10 MB upload; stored re-encoded as WebP
+    (quality 85, longest edge capped at 1920 px, EXIF rotation applied);
   - audio: MP3, M4A/AAC, Ogg, maximum 20 MB;
   - video: browser-compatible H.264/AAC MP4, maximum 100 MB.
 - Nginx is browser-facing media server at `/media/{storage_key}`. Prompt data
