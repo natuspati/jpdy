@@ -15,6 +15,7 @@ import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Spinner from '@/components/ui/Spinner';
 import { useAuth } from '@/hooks/useAuth';
+import { useBoardMediaPreload } from '@/hooks/useBoardMediaPreload';
 import { useLobbySocket } from '@/hooks/useLobbySocket';
 import { currentPrompt } from '@/services/game/gameDerivations';
 import { canBuzz } from '@/services/game/phaseGuards';
@@ -34,6 +35,8 @@ const LobbyPage = () => {
       lobbyId: lobbyIdSafe,
       token,
     });
+
+  useBoardMediaPreload(state?.categories);
 
   useEffect(() => {
     syncGameState(state);

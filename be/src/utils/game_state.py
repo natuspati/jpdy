@@ -132,11 +132,7 @@ def build_public_game_state(
                             if prompt.prompt_id == state.current_prompt_id
                             else QuestionTypeEnum.TEXT
                         ),
-                        question_media=(
-                            prompt.question_media
-                            if prompt.prompt_id == state.current_prompt_id
-                            else None
-                        ),
+                        question_media=prompt.question_media,
                         order=prompt.order,
                         is_selected=prompt.is_selected,
                     )

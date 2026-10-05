@@ -7,6 +7,7 @@ from schemas.lobby.game_state import (
     GamePlayerState,
     GamePromptState,
 )
+from schemas.media import MediaReferenceSchema
 from utils.game_state import (
     all_board_prompts_spent,
     build_public_game_state,
@@ -62,6 +63,23 @@ def test_public_projection_exposes_only_active_question() -> None:
 
     assert projected.categories[0].prompts[0].question == "Question"
     assert projected.resolved_answer is None
+
+
+def test_public_projection_exposes_question_media_for_whole_board_for_preload() -> None:
+    state = _state()
+    media = MediaReferenceSchema(
+        asset_id=5,
+        url="/media/abc.webp",
+        mime_type="image/webp",
+        filename="clue.png",
+    )
+    state.categories[0].prompts[0].question_media = media
+
+    prompt = build_public_game_state(state).categories[0].prompts[0]
+
+    assert prompt.question_media == media
+    assert prompt.question == ""
+    assert prompt.question_type == QuestionTypeEnum.TEXT
 
 
 def test_public_projection_reveals_answer_only_during_reveal() -> None:
