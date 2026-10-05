@@ -57,6 +57,7 @@ Run from the repository root:
 
 ```bash
 make start   # Start or update
+make deploy  # Switch to main, pull latest, then start
 make status  # Show container state, health, and ports
 make stop    # Stop; keep data
 ```
