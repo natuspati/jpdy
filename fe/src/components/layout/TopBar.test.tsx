@@ -68,54 +68,66 @@ function authenticate() {
 }
 
 describe('TopBar', () => {
-  it('enables sound when inactive and mutes when active', () => {
+  it('toggles sound from the panel and shows the current state', () => {
     authenticate();
     const inactive = audioValue();
     const { rerender } = renderTopBar(inactive);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enable game sound' }));
-    expect(inactive.enableSound).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Game sound settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sound off' }));
+    expect(inactive.toggleMuted).toHaveBeenCalledOnce();
 
-    const active = audioValue({ enabled: true });
     rerender(
       <MemoryRouter>
-        <GameAudioContext.Provider value={active}>
+        <GameAudioContext.Provider value={audioValue({ enabled: true })}>
           <TopBar />
         </GameAudioContext.Provider>
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Mute game sound' }));
-    expect(active.toggleMuted).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Sound on' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
-  it('shows its vertical volume control on hover or focus, keeps it open while moving to it, and converts 0–100 values', () => {
+  it('opens the volume panel on tap, closes it on outside tap or Escape, and converts 0–100 values', () => {
     authenticate();
     const audio = audioValue({ enabled: true, volume: 0.42 });
     renderTopBar(audio);
 
-    const soundButton = screen.getByRole('button', { name: 'Mute game sound' });
+    const openButton = screen.getByRole('button', { name: 'Game sound settings' });
     const menu = document.getElementById('game-sound-menu');
     if (!menu) throw new Error('Sound settings menu was not rendered');
     expect(menu).toHaveAttribute('aria-hidden', 'true');
-    expect(menu).toHaveClass('left-1/2', '-translate-x-1/2', 'top-full', 'pt-2');
 
-    fireEvent.mouseEnter(soundButton);
+    fireEvent.mouseEnter(openButton);
+    expect(menu).toHaveAttribute('aria-hidden', 'true');
+
+    fireEvent.click(openButton);
     expect(menu).toHaveAttribute('aria-hidden', 'false');
     const slider = screen.getByRole('slider', { name: 'Game volume' });
     expect(slider).toHaveValue('42');
-    expect(slider).toHaveClass('sound-volume-slider');
 
     fireEvent.change(slider, { target: { value: '75' } });
     expect(audio.setVolume).toHaveBeenCalledWith(0.75);
 
-    fireEvent.mouseLeave(soundButton, { relatedTarget: menu });
-    fireEvent.mouseEnter(menu, { relatedTarget: soundButton });
+    fireEvent.pointerDown(slider);
     expect(menu).toHaveAttribute('aria-hidden', 'false');
 
-    fireEvent.mouseLeave(soundButton.parentElement ?? soundButton);
+    fireEvent.pointerDown(document.body);
     expect(menu).toHaveAttribute('aria-hidden', 'true');
-    fireEvent.focus(soundButton);
+
+    fireEvent.click(openButton);
     expect(menu).toHaveAttribute('aria-hidden', 'false');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(menu).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('shows a blocked-sound message outside the panel', () => {
+    authenticate();
+    renderTopBar(audioValue({ blockedMessage: 'Sound could not start.' }));
+
+    expect(screen.getByRole('status')).toHaveTextContent('Sound could not start.');
   });
 
   it('orders lobby and category links after the brand and marks only the matching section active', () => {

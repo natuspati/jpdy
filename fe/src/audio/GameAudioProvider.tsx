@@ -6,7 +6,10 @@ import { gameSoundManifest, type GameSoundName } from './gameSoundManifest';
 
 const STORAGE_KEY = 'jpdy.game-audio-preferences';
 const BACKGROUND_GAIN = 0.1;
+const DUCKED_BACKGROUND_FACTOR = 0.25;
 const EFFECT_GAIN = 0.2;
+const UNLOCK_EVENTS = ['pointerup', 'touchend', 'click', 'keydown'] as const;
+const BLOCKED_MESSAGE = 'Sound could not start. Tap the sound button to try again.';
 
 type BackgroundTrack = 'boardLoop' | 'answeringLoop' | null;
 
@@ -15,66 +18,119 @@ interface StoredAudioPreferences {
   volume: number;
 }
 
+interface AudioGraph {
+  ctx: AudioContext;
+  music: GainNode;
+  effects: GainNode;
+  master: GainNode;
+}
+
 function readPreferences(): StoredAudioPreferences {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { enabled: false, volume: 1 };
+    if (!raw) return { enabled: true, volume: 1 };
     const parsed = JSON.parse(raw) as Partial<StoredAudioPreferences>;
     return {
-      enabled: parsed.enabled === true,
+      enabled: parsed.enabled !== false,
       volume: typeof parsed.volume === 'number' ? Math.min(1, Math.max(0, parsed.volume)) : 1,
     };
   } catch {
-    return { enabled: false, volume: 1 };
+    return { enabled: true, volume: 1 };
   }
 }
 
-const audioFor = (name: GameSoundName, loop = false): HTMLAudioElement => {
-  const audio = new Audio(gameSoundManifest[name]);
-  audio.loop = loop;
-  audio.preload = loop ? 'auto' : 'metadata';
-  return audio;
-};
+const audioContextConstructor = (): typeof AudioContext | undefined =>
+  window.AudioContext ??
+  (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
 
 export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
   const initial = useMemo(readPreferences, []);
-  // Browsers require a fresh user gesture after each page load. Keep volume
-  // preference, but never force playback merely because a prior visit enabled it.
-  const [enabled, setEnabled] = useState(false);
+  // Sound is on by default, but browsers only let audio start after a user gesture.
+  // The first tap or key press anywhere resumes the context (see the unlock effect).
+  const [enabled, setEnabled] = useState(initial.enabled);
   const [volume, setVolumeState] = useState(initial.volume);
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
-  const enabledRef = useRef(false);
+  const enabledRef = useRef(initial.enabled);
   const volumeRef = useRef(initial.volume);
   const desiredBackgroundRef = useRef<BackgroundTrack>(null);
-  const activeBackgroundRef = useRef<BackgroundTrack>(null);
   const activePromptMediaKeysRef = useRef<Set<string>>(new Set());
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const loopsRef = useRef<Record<Exclude<BackgroundTrack, null>, HTMLAudioElement>>({
-    boardLoop: audioFor('boardLoop', true),
-    answeringLoop: audioFor('answeringLoop', true),
-  });
-  const effectsRef = useRef<Set<HTMLAudioElement>>(new Set());
+  const graphRef = useRef<AudioGraph | null>(null);
+  const buffersRef = useRef<Map<GameSoundName, Promise<AudioBuffer>>>(new Map());
+  const loopRef = useRef<{
+    track: Exclude<BackgroundTrack, null>;
+    source: AudioBufferSourceNode;
+  }>();
+  const effectRef = useRef<AudioBufferSourceNode | null>(null);
   const delayedEffectTimerRef = useRef<number | null>(null);
 
   const persist = useCallback((nextEnabled: boolean, nextVolume: number) => {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ enabled: nextEnabled, volume: nextVolume } satisfies StoredAudioPreferences),
-    );
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          enabled: nextEnabled,
+          volume: nextVolume,
+        } satisfies StoredAudioPreferences),
+      );
+    } catch {
+      // Storage can be unavailable (private mode); preferences then last for this visit only.
+    }
   }, []);
 
-  const applyLoopVolume = useCallback((duck = false) => {
-    const gain = BACKGROUND_GAIN * volumeRef.current * (duck ? 0.25 : 1);
-    Object.values(loopsRef.current).forEach((audio) => {
-      audio.volume = gain;
+  const loadBuffer = useCallback((ctx: AudioContext, name: GameSoundName) => {
+    let pending = buffersRef.current.get(name);
+    if (!pending) {
+      pending = fetch(gameSoundManifest[name])
+        .then((response) => response.arrayBuffer())
+        .then((data) => ctx.decodeAudioData(data));
+      buffersRef.current.set(name, pending);
+      // Allow a retry on the next play if the download or decode failed.
+      pending.catch(() => buffersRef.current.delete(name));
+    }
+    return pending;
+  }, []);
+
+  // Must be first called from a user gesture for the context to be allowed to start on iOS.
+  const ensureGraph = useCallback((): AudioGraph => {
+    if (graphRef.current) return graphRef.current;
+    const Constructor = audioContextConstructor();
+    if (!Constructor) throw new Error('Web Audio API unavailable');
+    const ctx = new Constructor();
+    const master = ctx.createGain();
+    master.gain.value = volumeRef.current;
+    master.connect(ctx.destination);
+    const music = ctx.createGain();
+    music.gain.value = BACKGROUND_GAIN;
+    music.connect(master);
+    const effects = ctx.createGain();
+    effects.gain.value = EFFECT_GAIN;
+    effects.connect(master);
+    graphRef.current = { ctx, master, music, effects };
+    (Object.keys(gameSoundManifest) as GameSoundName[]).forEach((name) => {
+      loadBuffer(ctx, name).catch(() => undefined);
     });
+    return graphRef.current;
+  }, [loadBuffer]);
+
+  const applyDuck = useCallback((duck: boolean) => {
+    const graph = graphRef.current;
+    if (graph) {
+      graph.music.gain.value = BACKGROUND_GAIN * (duck ? DUCKED_BACKGROUND_FACTOR : 1);
+    }
   }, []);
 
-  const pauseActiveBackground = useCallback(() => {
-    const activeTrack = activeBackgroundRef.current;
-    if (!activeTrack) return;
-    loopsRef.current[activeTrack].pause();
-    activeBackgroundRef.current = null;
+  const stopBackground = useCallback(() => {
+    const loop = loopRef.current;
+    loopRef.current = undefined;
+    loop?.source.stop();
+    loop?.source.disconnect();
+  }, []);
+
+  const stopEffect = useCallback(() => {
+    const effect = effectRef.current;
+    effectRef.current = null;
+    effect?.stop();
+    effect?.disconnect();
   }, []);
 
   const stopAll = useCallback(() => {
@@ -82,54 +138,47 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
       window.clearTimeout(delayedEffectTimerRef.current);
       delayedEffectTimerRef.current = null;
     }
-    Object.values(loopsRef.current).forEach((audio) => {
-      audio.pause();
-      audio.currentTime = 0;
-    });
-    effectsRef.current.forEach((audio) => {
-      audio.pause();
-      audio.currentTime = 0;
-    });
-    effectsRef.current.clear();
-    activeBackgroundRef.current = null;
-  }, []);
+    stopBackground();
+    stopEffect();
+    applyDuck(false);
+  }, [applyDuck, stopBackground, stopEffect]);
 
   const startBackground = useCallback(
     async (track: BackgroundTrack) => {
       desiredBackgroundRef.current = track;
       if (activePromptMediaKeysRef.current.size > 0) {
-        pauseActiveBackground();
+        stopBackground();
         return;
       }
       if (!enabledRef.current) return;
-      if (track === activeBackgroundRef.current) return;
-      Object.entries(loopsRef.current).forEach(([name, audio]) => {
-        if (name !== track) {
-          audio.pause();
-          audio.currentTime = 0;
-        }
-      });
-      activeBackgroundRef.current = null;
+      if (track === (loopRef.current?.track ?? null)) return;
+      stopBackground();
       if (!track) return;
-      const audio = loopsRef.current[track];
-      applyLoopVolume();
       try {
-        await audio.play();
+        const { ctx, music } = ensureGraph();
+        // Still locked: the unlock effect restarts the desired track on the first gesture.
+        if (ctx.state !== 'running') return;
+        const buffer = await loadBuffer(ctx, track);
         if (
           activePromptMediaKeysRef.current.size > 0 ||
           !enabledRef.current ||
-          desiredBackgroundRef.current !== track
+          desiredBackgroundRef.current !== track ||
+          loopRef.current
         ) {
-          audio.pause();
           return;
         }
-        activeBackgroundRef.current = track;
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        source.connect(music);
+        source.start();
+        loopRef.current = { track, source };
         setBlockedMessage(null);
       } catch {
-        setBlockedMessage('Browser blocked sound. Select Enable sound and try again.');
+        setBlockedMessage(BLOCKED_MESSAGE);
       }
     },
-    [applyLoopVolume, pauseActiveBackground],
+    [ensureGraph, loadBuffer, stopBackground],
   );
 
   const beginPromptMediaPlayback = useCallback(
@@ -137,10 +186,10 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
       const alreadyPlayingPromptMedia = activePromptMediaKeysRef.current.size > 0;
       activePromptMediaKeysRef.current.add(playbackId);
       if (!alreadyPlayingPromptMedia) {
-        pauseActiveBackground();
+        stopBackground();
       }
     },
-    [pauseActiveBackground],
+    [stopBackground],
   );
 
   const endPromptMediaPlayback = useCallback(
@@ -164,64 +213,66 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
   const playEffect = useCallback(
     async (name: GameSoundName, after?: BackgroundTrack) => {
       if (!enabledRef.current) return;
-      const audio = audioFor(name);
-      audio.volume = EFFECT_GAIN * volumeRef.current;
-      effectsRef.current.forEach((effect) => {
-        effect.pause();
-        effect.currentTime = 0;
-      });
-      effectsRef.current.clear();
-      applyLoopVolume(true);
-      effectsRef.current.add(audio);
-      audio.addEventListener(
-        'ended',
-        () => {
-          effectsRef.current.delete(audio);
-          applyLoopVolume();
-          if (after) void startBackground(after);
-        },
-        { once: true },
-      );
       try {
-        await audio.play();
+        const { ctx, effects } = ensureGraph();
+        if (ctx.state !== 'running') return;
+        const buffer = await loadBuffer(ctx, name);
+        if (!enabledRef.current) return;
+        stopEffect();
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(effects);
+        source.onended = () => {
+          if (effectRef.current !== source) return;
+          effectRef.current = null;
+          applyDuck(false);
+          if (after) void startBackground(after);
+        };
+        effectRef.current = source;
+        applyDuck(true);
+        source.start();
       } catch {
-        effectsRef.current.delete(audio);
-        applyLoopVolume();
-        setBlockedMessage('Browser blocked sound. Select Enable sound and try again.');
+        applyDuck(false);
+        setBlockedMessage(BLOCKED_MESSAGE);
       }
     },
-    [applyLoopVolume, startBackground],
+    [applyDuck, ensureGraph, loadBuffer, startBackground, stopEffect],
   );
 
+  // Starts the context inside a user gesture. iOS also wants a buffer played in the same
+  // gesture, so a silent one-sample buffer goes out right after `resume()` is called.
+  const unlock = useCallback(async () => {
+    const { ctx } = ensureGraph();
+    const resumed = ctx.resume();
+    const silent = ctx.createBufferSource();
+    silent.buffer = ctx.createBuffer(1, 1, 22050);
+    silent.connect(ctx.destination);
+    silent.start(0);
+    await resumed;
+  }, [ensureGraph]);
+
   const enableSound = useCallback(async () => {
+    enabledRef.current = true;
+    setEnabled(true);
+    persist(true, volumeRef.current);
     try {
-      const AudioContextConstructor = window.AudioContext;
-      if (!AudioContextConstructor) throw new Error('Web Audio API unavailable');
-      audioContextRef.current ??= new AudioContextConstructor();
-      await audioContextRef.current.resume();
-      enabledRef.current = true;
-      setEnabled(true);
-      persist(true, volumeRef.current);
+      await unlock();
       setBlockedMessage(null);
       await startBackground(desiredBackgroundRef.current);
     } catch {
-      enabledRef.current = false;
-      setEnabled(false);
-      persist(false, volumeRef.current);
-      setBlockedMessage('Sound could not start. Try Enable sound again.');
+      setBlockedMessage(BLOCKED_MESSAGE);
     }
-  }, [persist, startBackground]);
+  }, [persist, startBackground, unlock]);
 
   const toggleMuted = useCallback(() => {
-    const next = !enabledRef.current;
-    enabledRef.current = next;
-    setEnabled(next);
-    persist(next, volumeRef.current);
-    if (!next) {
-      stopAll();
+    if (!enabledRef.current) {
+      void enableSound();
       return;
     }
-    void enableSound();
+    enabledRef.current = false;
+    setEnabled(false);
+    persist(false, volumeRef.current);
+    stopAll();
   }, [enableSound, persist, stopAll]);
 
   const setVolume = useCallback(
@@ -230,9 +281,9 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
       volumeRef.current = clamped;
       setVolumeState(clamped);
       persist(enabledRef.current, clamped);
-      applyLoopVolume();
+      if (graphRef.current) graphRef.current.master.gain.value = clamped;
     },
-    [applyLoopVolume, persist],
+    [persist],
   );
 
   const syncGameState = useCallback(
@@ -280,7 +331,7 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
           break;
         case 'answer_revealed':
           void startBackground(null);
-          if (effectsRef.current.size > 0) {
+          if (effectRef.current) {
             if (delayedEffectTimerRef.current !== null) {
               window.clearTimeout(delayedEffectTimerRef.current);
             }
@@ -301,12 +352,27 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
     [playEffect, startBackground],
   );
 
+  // Autoplay policy: with sound on by default, the first gesture anywhere unlocks audio.
+  useEffect(() => {
+    const onGesture = () => {
+      if (!enabledRef.current || graphRef.current?.ctx.state === 'running') return;
+      unlock()
+        .then(() => startBackground(desiredBackgroundRef.current))
+        .catch(() => setBlockedMessage(BLOCKED_MESSAGE));
+    };
+    UNLOCK_EVENTS.forEach((type) => window.addEventListener(type, onGesture));
+    return () => UNLOCK_EVENTS.forEach((type) => window.removeEventListener(type, onGesture));
+  }, [startBackground, unlock]);
+
   useEffect(() => {
     const activePromptMediaKeys = activePromptMediaKeysRef.current;
+    const buffers = buffersRef.current;
     return () => {
       stopAll();
       activePromptMediaKeys.clear();
-      void audioContextRef.current?.close();
+      buffers.clear();
+      void graphRef.current?.ctx.close();
+      graphRef.current = null;
     };
   }, [stopAll]);
 
