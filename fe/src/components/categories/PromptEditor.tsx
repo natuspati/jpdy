@@ -9,6 +9,7 @@ import { queryKeys } from '@/api/queryKeys';
 import PromptMedia from '@/components/game/PromptMedia';
 import Button from '@/components/ui/Button';
 import Field from '@/components/ui/Field';
+import HelpTip from '@/components/ui/HelpTip';
 import Input from '@/components/ui/Input';
 import { useUploadMedia } from '@/hooks/useMedia';
 import { useCreatePrompt, useDeletePrompt, useUpdatePrompt } from '@/hooks/usePromptCategories';
@@ -214,7 +215,10 @@ const MediaControl = ({
   return (
     <div className="space-y-2 rounded border border-slate-700 bg-slate-950/30 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium text-slate-200">{label} media</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium text-slate-200">{label} media</p>
+          <HelpTip text={rules.guidance} />
+        </div>
         <Button
           type="button"
           size="sm"
@@ -256,10 +260,7 @@ const MediaControl = ({
             <span aria-hidden="true">×</span>
           </button>
         </div>
-      ) : (
-        <p className="text-sm text-slate-400">No uploaded {kind} selected.</p>
-      )}
-      <p className="text-xs text-slate-400">{rules.guidance}</p>
+      ) : null}
       {filename ? <p className="text-xs text-slate-300">{filename}</p> : null}
       {status === 'uploading' ? (
         <p className="text-xs text-amber-300" role="status">
@@ -487,7 +488,7 @@ const PromptEditor = ({ categoryId, order, existing }: Props) => {
 
   return (
     <form
-      className="space-y-3 rounded-md border border-slate-800 bg-slate-900/50 p-3"
+      className="space-y-2 rounded-md border border-slate-800 bg-slate-900/50 p-3"
       onSubmit={onSubmit}
     >
       <div className="flex items-center justify-between">
@@ -498,13 +499,10 @@ const PromptEditor = ({ categoryId, order, existing }: Props) => {
         label="Question instruction / caption"
         htmlFor={`q-${order}`}
         error={errors.question?.message}
+        help="Required. Images need an instruction. For audio/video, keep the clue short and don't reveal the answer."
       >
         <Input id={`q-${order}`} invalid={!!errors.question} {...register('question')} />
       </Field>
-      <p className="text-xs text-slate-400">
-        Images need an instruction. Audio/video should use concise clues without answer-revealing
-        transcripts.
-      </p>
       <Field label="Question type" htmlFor={`question-type-${order}`}>
         <select
           id={`question-type-${order}`}
@@ -540,12 +538,10 @@ const PromptEditor = ({ categoryId, order, existing }: Props) => {
         label="Canonical expected answer"
         htmlFor={`a-${order}`}
         error={errors.answer?.message}
+        help="Required for every reveal type. The host judges answers against this text."
       >
         <Input id={`a-${order}`} invalid={!!errors.answer} {...register('answer')} />
       </Field>
-      <p className="text-xs text-slate-400">
-        Required for every reveal type. Host judgment and answer matching always use this text.
-      </p>
       <Field label="Answer reveal type" htmlFor={`answer-type-${order}`}>
         <select
           id={`answer-type-${order}`}
