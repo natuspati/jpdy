@@ -6,8 +6,7 @@ PostgreSQL is the runtime database; SQLite is used only for tests. Queries and
 Alembic migrations must support both.
 
 Compose applies migrations before startup. Only the development stack seeds
-demo users and categories. See [`GAME_FLOW.md`](../GAME_FLOW.md) for gameplay
-and [`AGENTS.md`](../AGENTS.md) for contributor conventions.
+demo users and categories.
 
 ## Runtime and configuration
 
@@ -25,14 +24,3 @@ and [`AGENTS.md`](../AGENTS.md) for contributor conventions.
   `deployment/local.env` and rerun Compose startup. `BE_SOCKETIO_REDIS_URL`
   is already configured. Check reconnects, host-private answers, bans, timers,
   and completion; restore `BE_WORKERS_COUNT=1` afterwards.
-
-## Checks
-
-After changes, run from this directory:
-
-```bash
-ruff format src tests
-ruff check --fix src tests
-```
-
-Do not run the integration-heavy pytest suite unless explicitly requested.
