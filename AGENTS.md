@@ -25,8 +25,7 @@
 
 ### Database compatibility
 
-**All queries, models, and Alembic migrations must work with both SQLite
-(tests) and PostgreSQL (runtime).**
+**All queries, models, and Alembic migrations must work with both SQLite (tests) and PostgreSQL (runtime).**
 
 - Use SQLAlchemy Core/ORM expressions, not raw SQL. If raw SQL is unavoidable,
   test it against both dialects.
@@ -39,14 +38,19 @@
 - Read connections from environment settings in `be/src/configs/settings.py`;
   do not hardcode a dialect.
 
-After every set of changes, run from `be/` in this order:
+### Linting and testing
+
+Before pushing
+
+If there are changes to back-end, run from `be/`:
 
 ```bash
-ruff format src tests
-ruff check --fix src tests
+uv run ruff format src tests
+uv run ruff check --fix src tests
+uv run pytest
 ```
 
-Do not run the integration-heavy pytest suite unless explicitly requested.
+If there are changes to front-end, run lints and tests.
 
 ## Frontend
 
