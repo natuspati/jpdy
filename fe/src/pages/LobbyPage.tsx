@@ -143,59 +143,52 @@ const LobbyPage = () => {
   }
 
   return (
-    <div data-testid="active-game-layout" className="space-y-4">
-      <ScoreBoard
-        state={state}
-        currentUserId={userId}
-        onBan={(uid) => emit('ban_player', { user_id: uid })}
-        onUnban={(uid) => emit('unban_player', { user_id: uid })}
-      />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(15rem,1fr)]">
-        <div className="min-w-0">
-          {showBoard ? (
-            <GameBoard
-              state={state}
-              currentUserId={userId}
-              onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
-            />
-          ) : null}
-          {showPromptStage && view.currentPrompt ? (
-            <PromptStage
-              prompt={view.currentPrompt}
-              answer={state.phase === 'answer_reveal' ? state.resolved_answer : null}
-              answerType={state.phase === 'answer_reveal' ? state.resolved_answer_type : null}
-              answerMedia={state.phase === 'answer_reveal' ? state.resolved_answer_media : null}
-              resolution={state.phase === 'answer_reveal' ? state.resolution : null}
-            />
+    <div data-testid="active-game-layout" className="flex h-full min-h-0 flex-col gap-2">
+      <header className="flex shrink-0 flex-col gap-2 lg:flex-row lg:items-start">
+        <div className="min-w-0 flex-1">
+          <ScoreBoard
+            state={state}
+            currentUserId={userId}
+            onBan={(uid) => emit('ban_player', { user_id: uid })}
+            onUnban={(uid) => emit('unban_player', { user_id: uid })}
+          />
+        </div>
+        <div data-panel-section="game-status" className="space-y-2 lg:w-72 lg:shrink-0">
+          <PhaseBanner state={state} role={view.role} />
+          {status === 'connecting' ? (
+            <p className="rounded border border-amber-500/50 bg-amber-950/40 px-3 py-1.5 text-xs text-amber-200">
+              {reason ?? 'Connecting…'}
+            </p>
           ) : null}
         </div>
+      </header>
 
-        <aside
-          data-testid="side-panel"
-          className="flex flex-col gap-3 lg:sticky lg:top-4 lg:self-start"
-        >
-          <div data-panel-section="countdown">
-            <TimerBar deadline={state.timer_deadline} totalSeconds={totalSecondsForPhase} />
-          </div>
-          <div data-panel-section="game-status" className="space-y-3">
-            <PhaseBanner state={state} role={view.role} />
-            {status === 'connecting' ? (
-              <p className="rounded border border-amber-500/50 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
-                {reason ?? 'Connecting…'}
-              </p>
-            ) : null}
-          </div>
-          <Card data-panel-section="chat-placeholder" className="space-y-1">
-            <h2 className="text-sm font-semibold text-slate-200">Chat</h2>
-            <p className="text-sm text-slate-400">Coming soon.</p>
-          </Card>
-        </aside>
+      <div data-panel-section="countdown" className="shrink-0 empty:hidden">
+        <TimerBar deadline={state.timer_deadline} totalSeconds={totalSecondsForPhase} />
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {showBoard ? (
+          <GameBoard
+            state={state}
+            currentUserId={userId}
+            onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
+          />
+        ) : null}
+        {showPromptStage && view.currentPrompt ? (
+          <PromptStage
+            prompt={view.currentPrompt}
+            answer={state.phase === 'answer_reveal' ? state.resolved_answer : null}
+            answerType={state.phase === 'answer_reveal' ? state.resolved_answer_type : null}
+            answerMedia={state.phase === 'answer_reveal' ? state.resolved_answer_media : null}
+            resolution={state.phase === 'answer_reveal' ? state.resolution : null}
+          />
+        ) : null}
       </div>
 
       <section
         data-testid="game-actions"
-        className={view.role === 'host' ? 'space-y-3' : 'flex justify-center'}
+        className={`shrink-0 ${view.role === 'host' ? 'space-y-2' : 'flex justify-center'}`}
       >
         {view.role === 'host' ? (
           <>

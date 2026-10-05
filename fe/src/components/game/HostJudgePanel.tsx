@@ -6,10 +6,10 @@ interface Props {
 }
 
 const HostJudgePanel = ({ answeringPlayerName, expectedAnswer }: Props) => (
-  <Card className="space-y-3 border-amber-400/40 p-4">
+  <Card className="mx-auto w-full max-w-xs space-y-2 border-amber-400/40 p-3 text-center sm:max-w-md">
     <div>
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Answering</p>
-      <p className="mt-1 text-sm font-semibold text-slate-100">
+      <p className="text-sm font-semibold text-slate-100">
         Listen to {answeringPlayerName}'s spoken answer.
       </p>
     </div>
