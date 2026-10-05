@@ -1,11 +1,14 @@
+import asyncio
 import os
 import tempfile
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, UploadFile
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from configs import settings
 from configs.constants import MEDIA_MAX_BYTES_BY_KIND
@@ -18,6 +21,9 @@ from utils.media import build_media_response
 
 _UPLOAD_CHUNK_SIZE = 64 * 1024
 _PUBLISHED_MEDIA_MODE = 0o644
+_IMAGE_MAX_EDGE = 1920
+_IMAGE_MAX_PIXELS = 50_000_000
+_IMAGE_WEBP_QUALITY = 85
 
 
 @dataclass(frozen=True)
@@ -25,6 +31,13 @@ class DetectedMedia:
     media_kind: MediaKindEnum
     mime_type: str
     extension: str
+
+
+@dataclass(frozen=True)
+class ProcessedMedia:
+    detected: DetectedMedia
+    width: int | None = None
+    height: int | None = None
 
 
 class MediaService:
@@ -48,6 +61,10 @@ class MediaService:
                     f"Uploaded file is {detected.media_kind.value}, not {media_kind.value}",
                 )
 
+            processed = await asyncio.to_thread(_process_media, temporary_path, detected)
+            detected = processed.detected
+            byte_size = temporary_path.stat().st_size
+
             storage_key = f"{uuid.uuid4().hex}{detected.extension}"
             final_path = settings.media_root / storage_key
             original_filename = _safe_original_filename(
@@ -63,6 +80,8 @@ class MediaService:
                     media_kind=detected.media_kind.value,
                     mime_type=detected.mime_type,
                     byte_size=byte_size,
+                    width=processed.width,
+                    height=processed.height,
                 )
                 os.chmod(temporary_path, _PUBLISHED_MEDIA_MODE)
                 os.replace(temporary_path, final_path)
@@ -158,6 +177,38 @@ def _detect_media(path: Path) -> DetectedMedia:
     raise BadRequestError(
         "Unsupported or invalid media file. Use JPEG, PNG, WebP, MP3, M4A/AAC, Ogg, or MP4",
     )
+
+
+def _compress_image(path: Path, detected: DetectedMedia) -> ProcessedMedia:
+    """Re-encode an uploaded image in place as WebP, capped at _IMAGE_MAX_EDGE."""
+    converted = path.with_name(f"{path.name}.webp")
+    try:
+        with Image.open(path) as source:
+            if source.width * source.height > _IMAGE_MAX_PIXELS:
+                raise BadRequestError("Image dimensions are too large")
+            image = ImageOps.exif_transpose(source)
+            image.thumbnail((_IMAGE_MAX_EDGE, _IMAGE_MAX_EDGE), Image.Resampling.LANCZOS)
+            image = image.convert("RGBA" if image.has_transparency_data else "RGB")
+            image.save(converted, "WEBP", quality=_IMAGE_WEBP_QUALITY)
+            width, height = image.size
+        os.replace(converted, path)
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError) as exc:
+        raise BadRequestError("Image could not be processed") from exc
+    finally:
+        converted.unlink(missing_ok=True)
+    webp = DetectedMedia(detected.media_kind, "image/webp", ".webp")
+    return ProcessedMedia(webp, width, height)
+
+
+# ponytail: only images are compressed (ffmpeg is too heavy); add audio/video entries here later.
+_MEDIA_TRANSFORMS: dict[MediaKindEnum, Callable[[Path, DetectedMedia], ProcessedMedia]] = {
+    MediaKindEnum.IMAGE: _compress_image,
+}
+
+
+def _process_media(path: Path, detected: DetectedMedia) -> ProcessedMedia:
+    transform = _MEDIA_TRANSFORMS.get(detected.media_kind)
+    return transform(path, detected) if transform else ProcessedMedia(detected)
 
 
 def _looks_like_mpeg_audio(header: bytes) -> bool:

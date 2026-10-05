@@ -1,19 +1,22 @@
+import io
 import stat
 from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
+from PIL import Image
 
 from configs.settings import settings
 from fixtures.auth_fixtures import AuthedUser
 
-_MINIMAL_PNG = (
-    b"\x89PNG\r\n\x1a\n"
-    b"\x00\x00\x00\rIHDR"
-    b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
-    b"\x00\x00\x00\x0dIDAT\x08\xd7c\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\x89\x99=\x1d"
-    b"\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+
+def _png_bytes(width: int = 1, height: int = 1) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), "green").save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+_MINIMAL_PNG = _png_bytes()
 
 
 @pytest.fixture
@@ -58,6 +61,47 @@ async def test_upload_media_stores_world_readable_file(
     stored_path = media_root / str(asset["storage_key"])
     assert stored_path.exists()
     assert stat.S_IMODE(stored_path.stat().st_mode) == 0o644
+
+
+async def test_upload_image_is_converted_to_webp_and_capped_at_1920px(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    media_root: Path,
+):
+    response = await http_client.post(
+        "/api/v1/media",
+        data={"kind": "image"},
+        files={"file": ("big.png", _png_bytes(3000, 1000), "image/png")},
+        headers=authed_user["headers"],
+    )
+
+    assert response.status_code == 201, response.text
+    asset = response.json()
+    assert asset["mime_type"] == "image/webp"
+    assert asset["storage_key"].endswith(".webp")
+    assert (asset["width"], asset["height"]) == (1920, 640)
+    stored_path = media_root / asset["storage_key"]
+    assert asset["byte_size"] == stored_path.stat().st_size
+    with Image.open(stored_path) as stored:
+        assert stored.format == "WEBP"
+        assert stored.size == (1920, 640)
+    assert not list(media_root.glob(".upload-*"))
+
+
+async def test_upload_corrupt_image_is_rejected_without_leftovers(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    media_root: Path,
+):
+    response = await http_client.post(
+        "/api/v1/media",
+        data={"kind": "image"},
+        files={"file": ("bad.png", _MINIMAL_PNG[:30], "image/png")},
+        headers=authed_user["headers"],
+    )
+
+    assert response.status_code == 400
+    assert not list(media_root.iterdir())
 
 
 async def test_media_assets_can_only_be_assigned_by_their_owner(
@@ -119,12 +163,12 @@ async def test_category_get_returns_question_and_answer_media_references(
     assert prompt["question_content"]["media"] == {
         "asset_id": question_asset["id"],
         "url": question_asset["url"],
-        "mime_type": "image/png",
+        "mime_type": "image/webp",
         "filename": "sample.png",
     }
     assert prompt["answer_content"]["media"] == {
         "asset_id": answer_asset["id"],
         "url": answer_asset["url"],
-        "mime_type": "image/png",
+        "mime_type": "image/webp",
         "filename": "sample.png",
     }
