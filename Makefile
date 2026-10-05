@@ -1,7 +1,12 @@
-.PHONY: start stop status dev-start dev-stop dev-status
+.PHONY: start deploy stop status dev-start dev-stop dev-status
 
 start:
 	bash deployment/scripts/jpdy.sh start
+
+deploy:
+	git switch main
+	git pull --ff-only
+	$(MAKE) start
 
 stop:
 	bash deployment/scripts/jpdy.sh stop
