@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -24,20 +24,32 @@ const TopBar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { blockedMessage, enableSound, enabled, setVolume, toggleMuted, volume } = useGameAudio();
+  const { blockedMessage, enabled, setVolume, toggleMuted, volume } = useGameAudio();
   const [soundMenuOpen, setSoundMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const soundMenuRef = useRef<HTMLDivElement>(null);
+
+  // Touch screens have no hover or blur, so the panel needs an explicit way to close.
+  useEffect(() => {
+    if (!soundMenuOpen) return;
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!soundMenuRef.current?.contains(event.target as Node)) setSoundMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSoundMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePress);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [soundMenuOpen]);
 
   const handleSignOut = () => {
     signOut();
     queryClient.clear();
     navigate('/');
-  };
-
-  const handleSoundBlur = (event: React.FocusEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget)) {
-      setSoundMenuOpen(false);
-    }
   };
 
   const handleUserBlur = (event: React.FocusEvent<HTMLDivElement>) => {
@@ -87,59 +99,59 @@ const TopBar = () => {
         </div>
         {isAuthed ? (
           <div className="flex items-center gap-2 sm:gap-3">
-            <div
-              className="relative"
-              onMouseEnter={() => setSoundMenuOpen(true)}
-              onMouseLeave={() => setSoundMenuOpen(false)}
-              onFocusCapture={() => setSoundMenuOpen(true)}
-              onBlur={handleSoundBlur}
-            >
+            <div ref={soundMenuRef} className="relative">
               <button
                 type="button"
-                aria-label={enabled ? 'Mute game sound' : 'Enable game sound'}
+                aria-label="Game sound settings"
                 aria-controls="game-sound-menu"
                 aria-expanded={soundMenuOpen}
-                onClick={() => {
-                  if (enabled) {
-                    toggleMuted();
-                    return;
-                  }
-                  void enableSound();
-                }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-800 hover:text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                onClick={() => setSoundMenuOpen((open) => !open)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-300 transition-colors hover:bg-slate-800 hover:text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
               >
                 {soundIsAudible ? <SoundOnIcon /> : <SoundOffIcon />}
               </button>
               <div
                 id="game-sound-menu"
                 role="region"
-                aria-label="Game sound settings"
+                aria-label="Game sound"
                 aria-hidden={!soundMenuOpen}
-                className={`absolute left-1/2 top-full z-50 w-14 -translate-x-1/2 pt-2 ${
+                className={`absolute right-0 top-full z-50 w-56 pt-2 ${
                   soundMenuOpen ? '' : 'pointer-events-none invisible'
                 }`}
               >
-                <div className="flex w-14 flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
-                  <label className="sr-only" htmlFor="game-volume">
-                    Game volume
-                  </label>
-                  <input
-                    id="game-volume"
-                    aria-label="Game volume"
+                <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                  <button
+                    type="button"
                     tabIndex={soundMenuOpen ? 0 : -1}
-                    className="sound-volume-slider accent-amber-400"
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={volumePercent}
-                    onChange={(event) => setVolume(Number(event.target.value) / 100)}
-                  />
-                  <span className="text-xs font-semibold tabular-nums text-slate-300">
-                    {volumePercent}
-                  </span>
-                  {blockedMessage ? (
-                    <p className="w-40 text-center text-xs text-rose-300">{blockedMessage}</p>
-                  ) : null}
+                    aria-pressed={enabled}
+                    onClick={toggleMuted}
+                    className={`w-full rounded-md px-3 py-2.5 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400 ${
+                      enabled
+                        ? 'bg-amber-400 text-slate-950 hover:bg-amber-300'
+                        : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                    }`}
+                  >
+                    {enabled ? 'Sound on' : 'Sound off'}
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <label className="sr-only" htmlFor="game-volume">
+                      Game volume
+                    </label>
+                    <input
+                      id="game-volume"
+                      aria-label="Game volume"
+                      tabIndex={soundMenuOpen ? 0 : -1}
+                      className="h-8 min-w-0 flex-1 accent-amber-400"
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={volumePercent}
+                      onChange={(event) => setVolume(Number(event.target.value) / 100)}
+                    />
+                    <span className="w-8 text-right text-xs font-semibold tabular-nums text-slate-300">
+                      {volumePercent}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -184,6 +196,11 @@ const TopBar = () => {
           </div>
         ) : null}
       </div>
+      {isAuthed && blockedMessage ? (
+        <p role="status" className="bg-rose-950/60 px-4 py-1 text-center text-xs text-rose-200">
+          {blockedMessage}
+        </p>
+      ) : null}
     </header>
   );
 };
