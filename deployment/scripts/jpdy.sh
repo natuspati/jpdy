@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# Manage the detached production stack; data is kept.
+# Manage the detached production stack (dev-* for the local dev stack); data is kept.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-env_file=deployment/prod.env
 action=${1:-start}
+dev=false
+if [[ $action == dev-* ]]; then
+  dev=true
+  action=${action#dev-}
+fi
 
 if [[ $# -gt 1 || ( $action != start && $action != stop && $action != status ) ]]; then
-  echo "Usage: $0 [start|stop|status]" >&2
+  echo "Usage: $0 [start|stop|status|dev-start|dev-stop|dev-status]" >&2
   exit 1
 fi
+
+if $dev; then env_file=deployment/local.env stop_cmd=dev-stop; else env_file=deployment/prod.env stop_cmd=stop; fi
 
 if [[ ! -f $env_file ]]; then
   echo "Configure $env_file first; see README.md." >&2
@@ -30,14 +36,19 @@ else
 fi
 
 # Separate project name keeps prod volumes apart from the local dev stack.
-compose+=(-p jpdy-prod --env-file "$env_file"
-  -f deployment/docker-compose.local.yml -f deployment/docker-compose.prod.yml)
+# Dev keeps Compose's default project so it matches the README commands and volumes.
+if $dev; then
+  compose+=(--env-file "$env_file" -f deployment/docker-compose.local.yml)
+else
+  compose+=(-p jpdy-prod --env-file "$env_file"
+    -f deployment/docker-compose.local.yml -f deployment/docker-compose.prod.yml)
+fi
 
 case $action in
   start)
-    git pull --ff-only
+    $dev || git pull --ff-only
     "${compose[@]}" up --build -d --wait
-    echo "jpdy is running in the background. Stop with: bash deployment/scripts/jpdy.sh stop"
+    echo "jpdy is running in the background. Stop with: bash deployment/scripts/jpdy.sh $stop_cmd"
     ;;
   stop)
     "${compose[@]}" down

@@ -15,6 +15,3 @@ at `/ws/`. The client uses same-origin URLs in Compose.
   game-state machine. Keep the host's private answer key separate from public state.
 - Images, audio, and video use native browser elements. Game sound is opt-in
   on every page load; media controls remain usable when autoplay is blocked.
-
-See [`GAME_FLOW.md`](../GAME_FLOW.md) for gameplay and
-[`AGENTS.md`](../AGENTS.md) for contributor conventions.

@@ -19,7 +19,7 @@ cannot join.
 ## Deployment
 
 Requires a running Docker engine with Linux containers, Compose v2.24.4+,
-Git, and Bash (Git Bash on Windows). GNU Make is optional.
+Git, GNU Make, and Bash (Git Bash on Windows).
 Configure [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) for public
 HTTPS access.
 
@@ -61,9 +61,6 @@ make status  # Show container state, health, and ports
 make stop    # Stop; keep data
 ```
 
-Without Make, use `bash deployment/scripts/jpdy.sh start` (or `status` / `stop`).
-The script prefers `docker compose`, falling back to `docker-compose` v2.
-
 Start runs `git pull --ff-only`, builds, and launches `jpdy-prod` in the
 background, waiting for healthy services. A failed pull aborts startup.
 Repeated starts update changed containers; unchanged ones keep running.
@@ -88,8 +85,9 @@ With Docker running, run from the repository root:
 # First setup only:
 cp deployment/local.env.example deployment/local.env
 
-docker compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml up --build -d --wait
+make dev-start   # Start or update
+make dev-status  # Show container state, health, and ports
+make dev-stop    # Stop; keep data
 ```
 
 Open `http://localhost:8080`. The development stack includes five categories
@@ -104,16 +102,6 @@ with 25 clues and these accounts:
 
 Use separate browser profiles for test users. As host, create a lobby and
 select categories, then join from the player profiles.
-
-Stop the development stack with:
-
-```bash
-docker compose --env-file deployment/local.env \
-  -f deployment/docker-compose.local.yml down
-```
-
-Add `-v` only for a **destructive reset**: it deletes accounts, categories,
-live games, and uploads. Restart to recreate the seeded development data.
 
 Implementation details are in the [backend README](be/README.md) and
 [frontend README](fe/README.md); contributor conventions are in
