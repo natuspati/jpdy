@@ -28,9 +28,16 @@ const HostControls = ({
   const canAdvance = canAdvanceAnswerReveal(state, currentUserId);
   if (state.phase === 'waiting_for_players') {
     return (
-      <Button fullWidth size="lg" disabled={!canStartGame(state, currentUserId)} onClick={onStart}>
-        Start game
-      </Button>
+      <div className="mx-auto w-full max-w-xs sm:max-w-md">
+        <Button
+          fullWidth
+          size="lg"
+          disabled={!canStartGame(state, currentUserId)}
+          onClick={onStart}
+        >
+          Start game
+        </Button>
+      </div>
     );
   }
   if (state.phase === 'host_selecting_starting_player' && canSelectStarter(state, currentUserId)) {
@@ -38,8 +45,8 @@ const HostControls = ({
       (p) => !p.is_banned && p.connection_status === 'connected',
     );
     return (
-      <div className="space-y-2">
-        <p className="text-sm font-semibold text-slate-300">Choose starting player</p>
+      <div className="mx-auto w-full max-w-xs space-y-2 sm:max-w-md">
+        <p className="text-center text-sm font-semibold text-slate-300">Choose starting player</p>
         {eligible.length === 0 ? (
           <p className="text-sm text-slate-400">
             Waiting for a player to reconnect or be unbanned.
@@ -60,16 +67,16 @@ const HostControls = ({
   }
 
   return (
-    <div>
-      <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+    <div className="mx-auto w-full max-w-xs sm:max-w-md">
+      <p className="mb-1 text-center text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
         Host controls
       </p>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
         <button
           type="button"
           disabled={!canJudgeAnswer}
           onClick={() => onJudge(true)}
-          className="rounded-md bg-emerald-500 px-2 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
+          className="rounded-md bg-emerald-500 px-2 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
         >
           Accept
         </button>
@@ -77,7 +84,7 @@ const HostControls = ({
           type="button"
           disabled={!canJudgeAnswer}
           onClick={() => onJudge(false)}
-          className="rounded-md bg-rose-600 px-2 py-3 text-sm font-bold text-white transition-colors hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
+          className="rounded-md bg-rose-600 px-2 py-2.5 text-sm font-bold text-white transition-colors hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
         >
           Decline
         </button>
@@ -85,7 +92,7 @@ const HostControls = ({
           type="button"
           disabled={!canAdvance}
           onClick={onAdvanceAnswerReveal}
-          className="rounded-md bg-amber-400 px-2 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
+          className="rounded-md bg-amber-400 px-2 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
         >
           Next
         </button>

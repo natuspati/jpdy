@@ -43,25 +43,25 @@ const PromptStage = ({
     <section
       aria-label="Prompt stage"
       data-resolution={resolution ?? undefined}
-      className={`relative flex min-h-[20rem] overflow-hidden rounded-xl border p-6 shadow-2xl shadow-slate-950/30 sm:min-h-[28rem] sm:p-10 ${resolutionTone}`}
+      className={`relative flex min-h-0 flex-1 overflow-hidden rounded-xl border p-3 shadow-2xl shadow-slate-950/30 sm:p-4 ${resolutionTone}`}
     >
       <div
         aria-label={`${prompt.score_value} points`}
-        className={`absolute right-4 top-4 text-xs font-bold uppercase tracking-[0.2em] sm:right-6 sm:top-6 ${scoreTone}`}
+        className={`absolute right-3 top-2 text-xs font-bold uppercase tracking-[0.2em] ${scoreTone}`}
       >
         {prompt.score_value}
       </div>
       <div
         data-testid="prompt-stage-content"
-        className={`flex min-h-0 w-full flex-1 flex-col items-center gap-5 ${
-          hasMedia ? 'justify-start pt-8' : 'justify-center'
+        className={`flex min-h-0 w-full flex-1 flex-col items-center gap-2 ${
+          hasMedia ? 'justify-start' : 'justify-center'
         }`}
       >
         <p
           className={`text-balance text-center font-semibold leading-tight ${
             hasMedia
-              ? 'max-w-4xl text-[clamp(1.25rem,3vw,2.25rem)]'
-              : 'max-w-5xl text-[clamp(1.5rem,4.5vw,3.25rem)]'
+              ? 'max-w-4xl px-10 text-[clamp(1.25rem,3vw,2.25rem)]'
+              : 'max-w-5xl px-10 text-[clamp(1.5rem,4.5vw,3.25rem)]'
           }`}
         >
           {text}

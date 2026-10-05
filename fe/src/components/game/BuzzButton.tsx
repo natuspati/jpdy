@@ -11,7 +11,7 @@ const BuzzerIcon = () => (
 );
 
 const BuzzButton = ({ enabled, onBuzz, disabledReason }: Props) => (
-  <div className="flex flex-col items-center gap-2">
+  <div className="mx-auto flex flex-col items-center gap-1">
     <button
       type="button"
       disabled={!enabled}

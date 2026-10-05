@@ -57,7 +57,7 @@ const renderLobby = () =>
   );
 
 describe('LobbyPage active-game layout', () => {
-  it('places player tiles above a board, status-only side panel, and a buzzer below both', () => {
+  it('places player tiles and status in a header above the board, with the buzzer below', () => {
     socketState.state = buildGameState({
       phase: 'player_selecting_prompt',
       selectingPlayerId: 2,
@@ -66,19 +66,13 @@ describe('LobbyPage active-game layout', () => {
     renderLobby();
 
     const layout = screen.getByTestId('active-game-layout');
-    const players = screen.getByRole('region', { name: 'Players' });
-    expect(layout.firstElementChild).toBe(players);
+    const header = layout.firstElementChild;
+    expect(header).toContainElement(screen.getByRole('region', { name: 'Players' }));
+    expect(header).toContainElement(screen.getByText(/pick a prompt|picking a prompt/));
+    expect(screen.getByTestId('game-actions')).toHaveTextContent('Wait for a clue to be selected.');
     expect(screen.getByRole('button', { name: /buzz/i })).toBeDisabled();
-    expect(screen.getByText('Wait for a clue to be selected.')).toBeInTheDocument();
-
-    const sidePanel = screen.getByTestId('side-panel');
-    const sections = Array.from(sidePanel.children).map((child) =>
-      child.getAttribute('data-panel-section'),
-    );
-    expect(sections).toEqual(['countdown', 'game-status', 'chat-placeholder']);
-    expect(screen.getByText('Chat')).toBeInTheDocument();
-    expect(screen.getByText('Coming soon.')).toBeInTheDocument();
-    expect(screen.getByTestId('game-actions').previousElementSibling).toBe(sidePanel.parentElement);
+    expect(screen.queryByText('Chat')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('side-panel')).not.toBeInTheDocument();
   });
 
   it('keeps the buzzer rendered and enables it only during buzz_open', () => {

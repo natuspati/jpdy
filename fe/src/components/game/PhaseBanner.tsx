@@ -16,7 +16,7 @@ function messageFor(state: GameLobbyState, role: Role): string {
   switch (state.phase) {
     case 'waiting_for_players':
       return role === 'host'
-        ? 'Waiting for players. Start the game when ready.'
+        ? 'Waiting for players. Start when ready.'
         : 'Waiting for the host to start the game…';
     case 'host_selecting_starting_player':
       return role === 'host'
@@ -29,7 +29,7 @@ function messageFor(state: GameLobbyState, role: Role): string {
     case 'player_answering': {
       const who = personFor(state, state.answering_player_id);
       return role === 'answerer'
-        ? 'Answer aloud in voice chat. Host will judge.'
+        ? 'Answer aloud. Host will judge.'
         : role === 'host'
           ? `Listen to ${who}'s spoken answer and judge it.`
           : `${who} is answering…`;
@@ -38,8 +38,8 @@ function messageFor(state: GameLobbyState, role: Role): string {
       return role === 'buzzer' ? 'Buzz to answer!' : 'Buzz open…';
     case 'answer_reveal':
       return role === 'host'
-        ? 'Answer revealed. Advance to the next prompt whenever you are ready.'
-        : 'Answer revealed. Waiting for the host to advance…';
+        ? 'Answer revealed. Advance when ready.'
+        : 'Answer revealed. Waiting for the host…';
     case 'finished':
       return 'Game over.';
     default:
@@ -48,7 +48,7 @@ function messageFor(state: GameLobbyState, role: Role): string {
 }
 
 const PhaseBanner = ({ state, role }: Props) => (
-  <div className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-200">
+  <div className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-200 sm:text-sm">
     {messageFor(state, role)}
   </div>
 );

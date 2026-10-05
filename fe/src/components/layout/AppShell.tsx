@@ -4,9 +4,11 @@ import Toaster from '@/components/ui/Toaster';
 import TopBar from './TopBar';
 
 const AppShell = ({ children }: { children: ReactNode }) => (
-  <div className="flex min-h-full flex-col">
+  <div className="flex h-dvh flex-col">
     <TopBar />
-    <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">{children}</main>
+    <main className="mx-auto min-h-0 w-full max-w-7xl flex-1 overflow-y-auto p-3 sm:p-4">
+      {children}
+    </main>
     <Toaster />
   </div>
 );
