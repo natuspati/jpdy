@@ -20,13 +20,13 @@ const PromptMedia = ({
   playbackId,
   className = '',
 }: Props) => {
-  const { beginPromptMediaPlayback, enabled, endPromptMediaPlayback } = useContext(
-    GameAudioContext,
-  ) ?? {
+  const audio = useContext(GameAudioContext);
+  const { beginPromptMediaPlayback, enabled, endPromptMediaPlayback } = audio ?? {
     beginPromptMediaPlayback: undefined,
     enabled: false,
     endPromptMediaPlayback: undefined,
   };
+  const volume = audio?.volume;
   const mediaElementRef = useRef<HTMLMediaElement | null>(null);
   const mediaSrc = src ?? media?.url;
   const isPlayableMedia = contentType === 'audio' || contentType === 'video';
@@ -34,6 +34,15 @@ const PromptMedia = ({
   const setMediaElement = useCallback((element: HTMLMediaElement | null) => {
     mediaElementRef.current = element;
   }, []);
+
+  // The navbar sound controls are global: mirror them onto the element. iOS Safari ignores
+  // `volume` (always 1) but honors `muted`, so sound off and volume 0 still silence it there.
+  useEffect(() => {
+    const mediaElement = mediaElementRef.current;
+    if (!mediaElement || volume === undefined) return;
+    mediaElement.volume = volume;
+    mediaElement.muted = !enabled || volume === 0;
+  }, [enabled, mediaIdentity, volume]);
 
   useEffect(() => {
     if (!isPlayableMedia) return;
