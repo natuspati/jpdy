@@ -12,7 +12,7 @@ const TimerBar = ({ deadline, totalSeconds = 30 }: Props) => {
   const tone = remaining <= 3 ? 'bg-rose-500' : remaining <= 10 ? 'bg-amber-400' : 'bg-emerald-400';
   return (
     <div className="flex items-center gap-2 text-xs text-slate-400">
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-800">
+      <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-800">
         <div
           className={`h-full transition-[width] duration-200 ease-linear ${tone}`}
           style={{ width: `${pct}%` }}
