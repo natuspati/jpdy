@@ -20,6 +20,7 @@ export const GamePlayerState = z.object({
   connection_status: PlayerConnectionStatusEnum.default('disconnected'),
   is_selected: z.boolean().default(false),
   is_banned: z.boolean().default(false),
+  assets_loaded: z.boolean().default(false),
 });
 export type GamePlayerState = z.infer<typeof GamePlayerState>;
 
@@ -31,6 +32,7 @@ export const GamePromptState = z
     question: z.string(),
     question_type: PromptContentType.optional(),
     question_media: MediaReference.nullable().optional(),
+    answer_media: MediaReference.nullable().optional(),
     order: z.number().int(),
     is_selected: z.boolean().default(false),
     score_value: z.number().int(),

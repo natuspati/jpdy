@@ -10,6 +10,7 @@ interface BuildArgs {
     score?: number;
     is_banned?: boolean;
     is_selected?: boolean;
+    assets_loaded?: boolean;
     connection_status?: 'connected' | 'disconnected';
   }>;
   selectingPlayerId?: number | null;
@@ -55,6 +56,7 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
       connection_status: p.connection_status ?? 'connected',
       is_selected: p.is_selected ?? false,
       is_banned: p.is_banned ?? false,
+      assets_loaded: p.assets_loaded ?? false,
     })),
     categories: [
       {

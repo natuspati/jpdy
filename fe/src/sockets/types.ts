@@ -6,6 +6,8 @@ import type {
   JudgeAnswerPayload,
   SelectPromptPayload,
   SelectStarterPayload,
+  SetAssetsLoadedPayload,
+  StartGamePayload,
   SocketErrorPayload,
   LobbyDeletedPayload,
   UnbanPlayerPayload,
@@ -21,7 +23,8 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  start_game: () => void;
+  start_game: (p?: StartGamePayload) => void;
+  set_assets_loaded: (p: SetAssetsLoadedPayload) => void;
   select_starter: (p: SelectStarterPayload) => void;
   select_prompt: (p: SelectPromptPayload) => void;
   judge_answer: (p: JudgeAnswerPayload) => void;

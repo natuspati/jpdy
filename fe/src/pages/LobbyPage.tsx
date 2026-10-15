@@ -36,7 +36,17 @@ const LobbyPage = () => {
       token,
     });
 
-  useBoardMediaPreload(state?.categories);
+  const { loaded, total } = useBoardMediaPreload(state?.categories);
+  const allLoaded = loaded === total;
+  const myLoadedFlag = state?.players.find((player) => player.user_id === userId)?.assets_loaded;
+  const phase = state?.phase;
+
+  // Server resets the flag on every (re)connect, so this converges after a reconnect too.
+  useEffect(() => {
+    if (status !== 'open' || phase !== 'waiting_for_players') return;
+    if (myLoadedFlag === undefined || myLoadedFlag === allLoaded) return;
+    emit('set_assets_loaded', { loaded: allLoaded });
+  }, [allLoaded, emit, myLoadedFlag, phase, status]);
 
   useEffect(() => {
     syncGameState(state);

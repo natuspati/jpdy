@@ -4,6 +4,7 @@ import type {
   MediaReference,
   PromptContentType,
 } from '@/schemas';
+import { preloadedSrc } from '@/hooks/useBoardMediaPreload';
 import PromptMedia from './PromptMedia';
 
 interface Props {
@@ -81,6 +82,7 @@ const PromptStage = ({
             <PromptMedia
               contentType={contentType}
               media={media}
+              src={preloadedSrc(media)}
               alt={isReveal ? `Answer: ${text}` : text}
               playbackId={`${prompt.prompt_id}:${isReveal ? 'answer' : 'question'}`}
             />

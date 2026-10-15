@@ -25,6 +25,18 @@ export const BanPlayerPayload = z.object({
 });
 export type BanPlayerPayload = z.infer<typeof BanPlayerPayload>;
 
+export const StartGamePayload = z.object({
+  force: z.boolean().optional(),
+  command_id: z.string().uuid().optional(),
+});
+export type StartGamePayload = z.infer<typeof StartGamePayload>;
+
+export const SetAssetsLoadedPayload = z.object({
+  loaded: z.boolean(),
+  command_id: z.string().uuid().optional(),
+});
+export type SetAssetsLoadedPayload = z.infer<typeof SetAssetsLoadedPayload>;
+
 export const UnbanPlayerPayload = z.object({
   user_id: z.number().int(),
   command_id: z.string().uuid().optional(),

@@ -5,6 +5,8 @@ import {
   JudgeAnswerPayload,
   SelectPromptPayload,
   SelectStarterPayload,
+  SetAssetsLoadedPayload,
+  StartGamePayload,
   UnbanPlayerPayload,
 } from '@/schemas';
 import { toastError } from '@/store/toastStore';
@@ -12,6 +14,8 @@ import type { LobbySocket } from './client';
 import type { ClientEventName, ClientToServerEvents } from './types';
 
 const payloadSchemas: Partial<Record<ClientEventName, z.ZodTypeAny>> = {
+  start_game: StartGamePayload.optional(),
+  set_assets_loaded: SetAssetsLoadedPayload,
   select_starter: SelectStarterPayload,
   select_prompt: SelectPromptPayload,
   judge_answer: JudgeAnswerPayload,
