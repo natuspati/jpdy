@@ -30,7 +30,11 @@ In the [Tailscale admin console](https://login.tailscale.com/admin):
 1. Enable MagicDNS and HTTPS certificates; note your tailnet DNS name.
 2. Allow Funnel in **Access controls**:
    `"nodeAttrs": [{"target": ["autogroup:member"], "attr": ["funnel"]}]`.
-3. Generate an auth key under **Settings → Keys**.
+3. Generate an auth key under **Settings → Keys**. Make it **reusable**,
+   **non-ephemeral**, and pre-approved if your tailnet requires device approval.
+   An ephemeral key lets Tailscale purge the machine while the stack is down.
+4. After the first start, open the `jpdy` machine and choose **Disable key
+   expiry**. Check that it is named exactly `jpdy` (not `jpdy-1`).
 
 ```bash
 cp deployment/prod.env.example deployment/prod.env
@@ -72,11 +76,33 @@ Verify the Tailscale DNS name matches `PUBLIC_URL` and `BE_ALLOWED_HOSTS`,
 then check sign-in and lobby connectivity at the public URL.
 No demo accounts are created. Register your host account, then share
 `PUBLIC_URL` and the private `BE_REGISTRATION_CODE` with players.
-Keep the host awake and online; closing the terminal does not stop the session.
-For infrequent sessions, consider disabling Tailscale device key expiry.
+Closing the terminal does not stop the session. On macOS, `make start` also runs
+the built-in `caffeinate` so the host does not sleep until `make stop`
+(`make status` shows whether it is running). That does not stop a closed lid on
+battery: keep the Mac plugged in with the lid open or an external display, and
+use wired Ethernet when you can. Do not run `make deploy` during a game; it can
+recreate nginx and Tailscale and drop every player for a moment.
 
 A fresh clone on another host does not
 transfer accounts, categories, uploads, or the Tailscale identity.
+
+### Tailscale recovery
+
+`make start` ends by requesting `PUBLIC_URL/api/health` and warns if it does not
+answer. The admin console showing the machine as connected does not prove the
+public path works, so confirm from a phone on cellular. If the container is
+healthy and localhost works but the public URL does not:
+
+1. In the admin console, delete the `jpdy` machine (and any `jpdy-1`).
+2. Generate a new reusable, non-ephemeral auth key and put it in
+   `deployment/prod.env` as `TS_AUTHKEY`.
+3. Run `make start`. Tailscale ignores `TS_AUTHKEY` while it holds saved state,
+   so if it still does not register, run `make stop`, delete the
+   `jpdy-prod_jpdy_tailscale_state` volume, and start again.
+
+Never run `docker volume prune` or `docker system prune --volumes` while the
+stack is stopped: the state volume looks unused and the node would re-register
+under a new name that no longer matches `PUBLIC_URL`.
 
 ## Development
 
