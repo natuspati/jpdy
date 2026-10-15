@@ -7,6 +7,7 @@ from sockets.events.game import (
     on_judge_answer,
     on_select_prompt,
     on_select_starter,
+    on_set_assets_loaded,
     on_start_game,
     on_unban_player,
 )
@@ -16,6 +17,7 @@ def register_socket_handlers() -> None:
     """Register Socket.IO handlers during explicit application setup."""
     sio.on("connect", handler=on_connect, namespace="*")
     sio.on("disconnect", handler=on_disconnect, namespace="*")
+    sio.on("set_assets_loaded", handler=on_set_assets_loaded, namespace="*")
     sio.on("start_game", handler=on_start_game, namespace="*")
     sio.on("select_starter", handler=on_select_starter, namespace="*")
     sio.on("select_prompt", handler=on_select_prompt, namespace="*")

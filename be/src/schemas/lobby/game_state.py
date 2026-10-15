@@ -25,6 +25,7 @@ class GamePlayerState(BaseSchema):
         description="Whether player is active for current game phase.",
     )
     is_banned: bool = False
+    assets_loaded: bool = False
 
 
 class GamePromptState(BaseSchema):

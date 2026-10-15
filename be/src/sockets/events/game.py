@@ -14,6 +14,7 @@ from schemas.socket.events import (
     JudgeAnswerPayload,
     SelectPromptPayload,
     SelectStarterPayload,
+    SetAssetsLoadedPayload,
     UnbanPlayerPayload,
 )
 from services.game import GameService
@@ -127,6 +128,25 @@ async def _emit_sound_cue(lobby_id: int, cue: GameSoundCueName) -> None:
         await broadcast_sound_cue(lobby_id, payload)
     except Exception:
         _logger.exception(f"Failed to emit {cue} sound cue for lobby {lobby_id}")
+
+
+async def on_set_assets_loaded(namespace: str, sid: str, data: Any = None) -> None:
+    async def _action(
+        service: GameService,
+        lobby_id: int,
+        user_id: int,
+        payload: SetAssetsLoadedPayload | None,
+        command_id: str,
+    ) -> GameLobbyState:
+        assert payload is not None
+        return await service.set_assets_loaded(
+            lobby_id=lobby_id,
+            user_id=user_id,
+            payload=payload,
+            command_id=command_id,
+        )
+
+    await _run_event(namespace, sid, data, SetAssetsLoadedPayload, _action)
 
 
 async def on_start_game(namespace: str, sid: str, _data: Any = None) -> None:

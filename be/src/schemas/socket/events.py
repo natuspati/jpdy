@@ -31,6 +31,11 @@ class UnbanPlayerPayload(BaseSchema):
     command_id: UUID | None = None
 
 
+class SetAssetsLoadedPayload(BaseSchema):
+    loaded: bool
+    command_id: UUID | None = None
+
+
 class SocketErrorPayload(BaseSchema):
     code: str
     detail: str

@@ -14,6 +14,7 @@ from schemas.socket.events import (
     JudgeAnswerPayload,
     SelectPromptPayload,
     SelectStarterPayload,
+    SetAssetsLoadedPayload,
     UnbanPlayerPayload,
 )
 from schemas.user.base import UserPublicSchema
@@ -62,6 +63,26 @@ class GameService:
             )
         except NotFoundError:
             return None
+
+    async def set_assets_loaded(
+        self,
+        lobby_id: int,
+        user_id: int,
+        payload: SetAssetsLoadedPayload,
+        command_id: str | None = None,
+    ) -> GameLobbyState:
+        state = await self._executor.execute(
+            lobby_id,
+            command_id,
+            "set_assets_loaded",
+            partial(
+                self._state_machine.set_assets_loaded,
+                user_id=user_id,
+                loaded=payload.loaded,
+            ),
+        )
+        assert state is not None
+        return state
 
     async def start_game(
         self,

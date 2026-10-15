@@ -86,6 +86,26 @@ def test_connect_user_enforces_roster_lock_and_ban() -> None:
         machine.connect_user(state, PLAYER_ONE_ID, "one")
 
 
+def test_assets_loaded_is_per_player_waiting_only_and_reset_on_reconnect() -> None:
+    machine = _machine()
+    state = _state()
+
+    machine.set_assets_loaded(state, PLAYER_ONE_ID, True)
+    assert [p.assets_loaded for p in state.players] == [True, False]
+    with pytest.raises(ForbiddenError, match="Only lobby players"):
+        machine.set_assets_loaded(state, HOST_ID, True)
+
+    machine.disconnect_user(state, PLAYER_ONE_ID)
+    assert state.players[0].assets_loaded is False
+    machine.set_assets_loaded(state, PLAYER_TWO_ID, True)
+    machine.connect_user(state, PLAYER_TWO_ID, "two")
+    assert state.players[1].assets_loaded is False
+
+    state.phase = GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
+    with pytest.raises(BadRequestError):
+        machine.set_assets_loaded(state, PLAYER_ONE_ID, True)
+
+
 def test_start_and_selection_require_authorized_eligible_players() -> None:
     machine = _machine()
     state = _state(player_count=1)

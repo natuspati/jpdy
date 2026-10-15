@@ -52,6 +52,7 @@ class GameStateMachine:
                 if player.is_banned:
                     raise ForbiddenError("Player is banned from this lobby")
                 player.connection_status = PlayerConnectionStatusEnum.CONNECTED
+                player.assets_loaded = False
         return GameCommandOutcome(state=state, result=state, reason="user_connected")
 
     def disconnect_user(self, state: GameLobbyState, user_id: int) -> GameCommandOutcome:
@@ -62,7 +63,21 @@ class GameStateMachine:
             if player is None:
                 return GameCommandOutcome(state=None, result=state, reason="unknown_disconnect")
             player.connection_status = PlayerConnectionStatusEnum.DISCONNECTED
+            player.assets_loaded = False
         return GameCommandOutcome(state=state, result=state, reason="user_disconnected")
+
+    def set_assets_loaded(
+        self,
+        state: GameLobbyState,
+        user_id: int,
+        loaded: bool,
+    ) -> GameCommandOutcome:
+        self._require_phase(state, GamePhaseEnum.WAITING_FOR_PLAYERS)
+        player = find_game_player(state, user_id)
+        if player is None:
+            raise ForbiddenError("Only lobby players report loaded assets")
+        player.assets_loaded = loaded
+        return GameCommandOutcome(state=state, result=state, reason="assets_loaded_set")
 
     def start_game(self, state: GameLobbyState, user_id: int) -> GameCommandOutcome:
         self._require_host(state, user_id)
