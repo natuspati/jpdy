@@ -44,11 +44,24 @@ else
     -f deployment/docker-compose.local.yml -f deployment/docker-compose.prod.yml)
 fi
 
+# Keep the prod Mac awake while the stack runs (macOS built-in; skipped elsewhere and for dev).
+awake_pid_file=${TMPDIR:-/tmp}/jpdy-prod-caffeinate.pid
+awake_running() {
+  [[ -f $awake_pid_file ]] || return 1
+  local pid; pid=$(<"$awake_pid_file")
+  [[ $(ps -p "$pid" -o comm= 2>/dev/null) == *caffeinate ]]
+}
+
 case $action in
   start)
     $dev || git pull --ff-only
     "${compose[@]}" up --build -d --wait
     echo "jpdy is running in the background. Stop with: bash deployment/scripts/jpdy.sh $stop_cmd"
+    if ! $dev && command -v caffeinate >/dev/null && ! awake_running; then
+      nohup caffeinate -dimsu >/dev/null 2>&1 &
+      echo $! >"$awake_pid_file"
+      echo "Keeping this Mac awake until stop (caffeinate)."
+    fi
     if ! $dev; then
       # A healthy container does not prove Funnel works; ask the public URL itself.
       public_url=$(sed -n 's/^PUBLIC_URL=//p' "$env_file" | head -n 1)
@@ -66,9 +79,12 @@ case $action in
     ;;
   stop)
     "${compose[@]}" down
+    if ! $dev && awake_running; then kill "$(<"$awake_pid_file")"; fi
+    rm -f "$awake_pid_file"
     echo "jpdy is stopped; data volumes are kept."
     ;;
   status)
     "${compose[@]}" ps --all
+    if ! $dev; then awake_running && echo "Keep-awake: running" || echo "Keep-awake: not running"; fi
     ;;
 esac
