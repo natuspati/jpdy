@@ -50,7 +50,16 @@ uv run ruff check --fix src tests
 uv run pytest
 ```
 
-If there are changes to front-end, run lints and tests.
+If there are changes to front-end, run from `fe/`:
+
+```bash
+bun run lint
+bun run test
+bun run build
+```
+
+`bun run build` runs `tsc -b`, which type-checks test files too. The `typecheck`
+script alone does not catch those errors, and the Docker image build fails on them.
 
 ## Frontend
 
