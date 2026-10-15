@@ -363,7 +363,8 @@ one answers that clue correctly.
 If the answering deadline expires before the host judges:
 
 1. Record the active answerer in `attempted_player_ids`.
-2. Do not change that player's score.
+2. Subtract the clue value from that player's score, exactly as a host Wrong
+   judgment does.
 3. Clear `answering_player_id`.
 4. Open buzz if an eligible player remains.
 5. Otherwise enter `answer_reveal` with `resolution=expired`.

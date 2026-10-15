@@ -162,12 +162,27 @@ def test_expire_timer_noops_are_fenced_and_timed_phases_progress() -> None:
     assert expired.reason == "timer_expired"
     assert state.phase == GamePhaseEnum.BUZZ_OPEN
     assert state.attempted_player_ids == [PLAYER_ONE_ID]
+    assert state.players[0].score == -100
 
     state.phase = GamePhaseEnum.WAITING_FOR_PLAYERS
     state.timer_deadline = NOW
     assert machine.expire_timer(state, None, None).reason == "timer_phase_not_timed"
     state.timer_deadline = None
     assert machine.expire_timer(state, None, None).reason == "no_timer"
+
+
+def test_buzz_winner_timing_out_loses_points() -> None:
+    machine = _machine()
+    state = _answering_state()
+    machine.judge_answer(state, HOST_ID, correct=False)
+    machine.buzz(state, PLAYER_TWO_ID)
+    state.timer_deadline = NOW
+
+    machine.expire_timer(state, None, None)
+
+    assert state.players[0].score == -100
+    assert state.players[1].score == -100
+    assert state.attempted_player_ids == [PLAYER_ONE_ID, PLAYER_TWO_ID]
 
 
 def test_expire_timer_progresses_buzz_and_answer_reveal() -> None:

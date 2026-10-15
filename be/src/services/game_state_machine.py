@@ -230,6 +230,14 @@ class GameStateMachine:
                 expired = find_game_player(state, state.answering_player_id)
                 if expired is not None:
                     expired.is_selected = False
+                    # Timing out counts as a host decline.
+                    prompt = (
+                        find_game_prompt(state, state.current_prompt_id)
+                        if state.current_prompt_id is not None
+                        else None
+                    )
+                    if prompt is not None:
+                        expired.score -= prompt.score_value
             state.answering_player_id = None
             if get_eligible_buzzers(state):
                 state.phase = GamePhaseEnum.BUZZ_OPEN

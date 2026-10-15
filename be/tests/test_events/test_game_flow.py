@@ -298,6 +298,7 @@ async def test_expired_clue_without_eligible_buzzer_reveals_answer(
     assert result.phase == GamePhaseEnum.ANSWER_REVEAL
     assert result.resolution == GameResolutionEnum.EXPIRED
     assert result.resolved_answer == "Category 1 A1"
+    assert result.players[0].score == (-100 if phase == GamePhaseEnum.PLAYER_ANSWERING else 0)
 
 
 async def test_final_clue_finishes_only_after_answer_reveal(
