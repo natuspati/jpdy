@@ -4,11 +4,14 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createLobbySocket, type LobbySocket } from '@/sockets/client';
+import { toastError } from '@/store/toastStore';
 import { useLobbySocket } from './useLobbySocket';
 
 vi.mock('@/sockets/client', () => ({
   createLobbySocket: vi.fn(),
 }));
+
+vi.mock('@/store/toastStore', () => ({ toastError: vi.fn() }));
 
 function createSocket(): LobbySocket {
   const socket = {
@@ -83,5 +86,35 @@ describe('useLobbySocket', () => {
 
     expect(result.current.status).toBe('closed');
     expect(result.current.reason).toBe('Opened in another tab or device');
+  });
+
+  it('keeps retrying quietly on transport errors and fails only on server rejection', () => {
+    const socket = createSocket();
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+    vi.mocked(socket.on).mockImplementation(((event: string, handler: never) => {
+      handlers.set(event, handler);
+      return socket;
+    }) as never);
+    vi.mocked(createLobbySocket).mockReturnValue(socket);
+    vi.mocked(toastError).mockClear();
+
+    const queryClient = new QueryClient();
+    const Wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useLobbySocket({ lobbyId: 7, token: 'test-token' }), {
+      wrapper: Wrapper,
+    });
+
+    Object.assign(socket, { active: true });
+    act(() => handlers.get('connect_error')?.(new Error('websocket error')));
+    expect(result.current.status).toBe('connecting');
+    expect(result.current.reason).toBe('websocket error');
+    expect(toastError).not.toHaveBeenCalled();
+
+    Object.assign(socket, { active: false });
+    act(() => handlers.get('connect_error')?.(new Error('Player is banned from this lobby')));
+    expect(result.current.status).toBe('failed');
+    expect(toastError).toHaveBeenCalledWith('Player is banned from this lobby');
   });
 });

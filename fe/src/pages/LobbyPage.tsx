@@ -112,7 +112,7 @@ const LobbyPage = () => {
     return (
       <div className="flex items-center gap-2 text-slate-400">
         <Spinner />
-        Connecting…
+        {reason ?? 'Connecting…'}
       </div>
     );
   }
@@ -224,8 +224,8 @@ const LobbyPage = () => {
           </>
         ) : (
           <BuzzButton
-            enabled={canBuzz(state, userId)}
-            disabledReason={buzzDisabledReason}
+            enabled={status === 'open' && canBuzz(state, userId)}
+            disabledReason={status === 'open' ? buzzDisabledReason : 'Reconnecting…'}
             onBuzz={() => emit('buzz')}
           />
         )}

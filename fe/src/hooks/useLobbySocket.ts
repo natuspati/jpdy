@@ -96,9 +96,15 @@ export function useLobbySocket({ lobbyId, token }: UseLobbySocketArgs): UseLobby
       if (typeof r === 'string') setReason(r);
     });
     socket.on('connect_error', (err) => {
-      setStatus('failed');
       const message = err instanceof Error ? err.message : 'Socket connection failed';
       setReason(message);
+      // Transport errors (network or proxy blips) are retried by the client: keep the game on
+      // screen with a reconnecting banner. Only a server rejection ends the retries.
+      if (socket.active) {
+        setStatus('connecting');
+        return;
+      }
+      setStatus('failed');
       toastError(message);
     });
     socket.on('state_changed', (raw: unknown) => {
