@@ -53,4 +53,15 @@ describe('GameBoard', () => {
     expect(container.querySelectorAll('.grid-rows-\\[4\\.5rem_auto\\]')).toHaveLength(2);
     expect(screen.getByText(/long enough/i)).toHaveClass('line-clamp-2');
   });
+
+  it('flashes the just-picked tile with its value instead of an em-dash', () => {
+    const state = buildGameState({ phase: 'player_answering', selectingPlayerId: 2 });
+    state.categories[0].prompts[0].is_selected = true;
+    render(
+      <GameBoard state={state} currentUserId={2} onSelect={() => undefined} flashPromptId={101} />,
+    );
+    const tile = screen.getByRole('button', { name: '100' });
+    expect(tile).toHaveClass('animate-prompt-flash');
+    expect(tile).toBeDisabled();
+  });
 });

@@ -14,9 +14,11 @@ interface Props {
   state: GameLobbyState;
   currentUserId: number;
   onSelect: (promptId: number) => void;
+  /** Tile that was just picked: flashes (showing its value) instead of reading as spent. */
+  flashPromptId?: number | null;
 }
 
-const GameBoard = ({ state, currentUserId, onSelect }: Props) => {
+const GameBoard = ({ state, currentUserId, onSelect, flashPromptId = null }: Props) => {
   if (state.categories.length === 0) {
     return <p className="text-slate-400">No categories.</p>;
   }
@@ -35,20 +37,23 @@ const GameBoard = ({ state, currentUserId, onSelect }: Props) => {
               .sort((a, b) => a.order - b.order)
               .map((prompt) => {
                 const selectable = canSelectPrompt(state, currentUserId, prompt.prompt_id);
+                const flashing = prompt.prompt_id === flashPromptId;
                 return (
                   <button
                     key={prompt.prompt_id}
                     disabled={!selectable}
                     onClick={() => onSelect(prompt.prompt_id)}
                     className={`h-16 w-full rounded-md text-lg font-bold tabular-nums transition-colors sm:h-20 sm:text-2xl ${
-                      prompt.is_selected
-                        ? 'bg-(--color-board-tile-spent) text-slate-600'
-                        : selectable
-                          ? 'bg-(--color-board-tile) text-amber-300 hover:bg-amber-400 hover:text-slate-900'
-                          : 'bg-(--color-board-tile) text-amber-300 opacity-90'
+                      flashing
+                        ? 'animate-prompt-flash bg-amber-400 text-slate-900 motion-reduce:animate-none'
+                        : prompt.is_selected
+                          ? 'bg-(--color-board-tile-spent) text-slate-600'
+                          : selectable
+                            ? 'bg-(--color-board-tile) text-amber-300 hover:bg-amber-400 hover:text-slate-900'
+                            : 'bg-(--color-board-tile) text-amber-300 opacity-90'
                     }`}
                   >
-                    {prompt.is_selected ? '—' : prompt.score_value}
+                    {prompt.is_selected && !flashing ? '—' : prompt.score_value}
                   </button>
                 );
               })}

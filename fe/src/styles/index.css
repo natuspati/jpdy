@@ -4,6 +4,19 @@
   --color-board-bg: #0b1437;
   --color-board-tile: #0d4ea6;
   --color-board-tile-spent: #1e293b;
+  --animate-prompt-flash: prompt-flash 250ms ease-in-out 4;
+
+  @keyframes prompt-flash {
+    0%,
+    100% {
+      background-color: #fbbf24;
+      color: #0f172a;
+    }
+    50% {
+      background-color: var(--color-board-tile);
+      color: #fcd34d;
+    }
+  }
 }
 
 html,

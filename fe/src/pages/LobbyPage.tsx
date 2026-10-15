@@ -17,6 +17,7 @@ import Spinner from '@/components/ui/Spinner';
 import { useAuth } from '@/hooks/useAuth';
 import { useBoardMediaPreload } from '@/hooks/useBoardMediaPreload';
 import { useLobbySocket } from '@/hooks/useLobbySocket';
+import { useSelectionReveal } from '@/hooks/useSelectionReveal';
 import { currentCategoryName, currentPrompt } from '@/services/game/gameDerivations';
 import { canBuzz } from '@/services/game/phaseGuards';
 import { roleFor } from '@/services/game/roleFor';
@@ -40,6 +41,7 @@ const LobbyPage = () => {
   const allLoaded = loaded === total;
   const myLoadedFlag = state?.players.find((player) => player.user_id === userId)?.assets_loaded;
   const phase = state?.phase;
+  const revealingPromptId = useSelectionReveal(state);
 
   // Server resets the flag on every (re)connect, so this converges after a reconnect too.
   useEffect(() => {
@@ -123,9 +125,10 @@ const LobbyPage = () => {
     'waiting_for_players',
     'host_selecting_starting_player',
     'player_selecting_prompt',
-  ].includes(state.phase);
+  ].includes(state.phase) || revealingPromptId !== null;
   const showPromptStage =
     !!view.currentPrompt &&
+    revealingPromptId === null &&
     ['player_answering', 'buzz_open', 'answer_reveal'].includes(state.phase);
   const answerer = state.answering_player_id
     ? state.players.find((player) => player.user_id === state.answering_player_id)
@@ -178,7 +181,8 @@ const LobbyPage = () => {
       </header>
 
       <div data-panel-section="countdown" className="shrink-0 empty:hidden">
-        <TimerBar deadline={state.timer_deadline} totalSeconds={totalSecondsForPhase} />
+        <TimerBar
+          deadline={revealingPromptId === null ? state.timer_deadline : null} totalSeconds={totalSecondsForPhase} />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -186,6 +190,7 @@ const LobbyPage = () => {
           <GameBoard
             state={state}
             currentUserId={userId}
+            flashPromptId={revealingPromptId}
             onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
           />
         ) : null}
@@ -207,15 +212,17 @@ const LobbyPage = () => {
       >
         {view.role === 'host' ? (
           <>
-            <HostControls
-              state={state}
-              currentUserId={userId}
-              onStart={(force) => (force ? emit('start_game', { force }) : emit('start_game'))}
-              onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
-              onAdvanceAnswerReveal={() => emit('advance_answer_reveal')}
-              onJudge={(correct) => emit('judge_answer', { correct })}
-            />
-            {state.phase === 'player_answering' && answerer ? (
+            {revealingPromptId === null ? (
+              <HostControls
+                state={state}
+                currentUserId={userId}
+                onStart={(force) => (force ? emit('start_game', { force }) : emit('start_game'))}
+                onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
+                onAdvanceAnswerReveal={() => emit('advance_answer_reveal')}
+                onJudge={(correct) => emit('judge_answer', { correct })}
+              />
+            ) : null}
+            {state.phase === 'player_answering' && answerer && revealingPromptId === null ? (
               <HostJudgePanel
                 answeringPlayerName={answerer.username}
                 expectedAnswer={hostAnswerKey?.expected_answer}
