@@ -1,7 +1,12 @@
 # Public game-night overlay: run via scripts/jpdy.sh, not directly.
 # Exposes nginx through Tailscale Funnel; nothing listens on the LAN/WAN.
 services:
+  # Come back on their own after a Docker or host restart; `make stop` still removes them.
+  redis:
+    restart: unless-stopped
+
   postgres:
+    restart: unless-stopped
     env_file: !override
       - prod.env
 
@@ -11,23 +16,38 @@ services:
     # No seed: it creates demo accounts with known passwords.
     command: ["uv", "run", "alembic", "upgrade", "head"]
 
+  nginx:
+    restart: unless-stopped
+
   backend:
+    restart: unless-stopped
     env_file: !override
       - prod.env
     deploy:
       replicas: ${BE_REPLICAS:-2}
 
   tailscale:
-    image: tailscale/tailscale:stable
+    # Pinned so a pull between sessions cannot change versions under us; bump deliberately.
+    image: tailscale/tailscale:v1.104.1
+    restart: unless-stopped
     hostname: jpdy
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY}
       TS_HOSTNAME: jpdy
       TS_STATE_DIR: /var/lib/tailscale
       TS_SERVE_CONFIG: /config/serve.json
+      # Serves /healthz, which reports whether the node is actually up on the tailnet.
+      TS_ENABLE_HEALTH_CHECK: "true"
+      TS_LOCAL_ADDR_PORT: 0.0.0.0:9002
     volumes:
       - jpdy_tailscale_state:/var/lib/tailscale
       - ./tailscale/serve.json:/config/serve.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:9002/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
     depends_on:
       nginx:
         condition: service_healthy

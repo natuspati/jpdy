@@ -49,6 +49,20 @@ case $action in
     $dev || git pull --ff-only
     "${compose[@]}" up --build -d --wait
     echo "jpdy is running in the background. Stop with: bash deployment/scripts/jpdy.sh $stop_cmd"
+    if ! $dev; then
+      # A healthy container does not prove Funnel works; ask the public URL itself.
+      public_url=$(sed -n 's/^PUBLIC_URL=//p' "$env_file" | head -n 1)
+      for _ in {1..12}; do
+        curl -fsS -m 10 -o /dev/null "$public_url/api/health" 2>/dev/null && reachable=true && break
+        sleep 5
+      done
+      if [[ ${reachable:-false} == true ]]; then
+        echo "Public URL is reachable: $public_url"
+      else
+        echo "WARNING: $public_url did not answer. Check it from a phone on cellular; if it is" >&2
+        echo "down, see 'Tailscale recovery' in README.md (new auth key, delete the old machine)." >&2
+      fi
+    fi
     ;;
   stop)
     "${compose[@]}" down
