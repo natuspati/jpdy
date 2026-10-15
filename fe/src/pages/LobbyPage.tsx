@@ -17,7 +17,7 @@ import Spinner from '@/components/ui/Spinner';
 import { useAuth } from '@/hooks/useAuth';
 import { useBoardMediaPreload } from '@/hooks/useBoardMediaPreload';
 import { useLobbySocket } from '@/hooks/useLobbySocket';
-import { currentPrompt } from '@/services/game/gameDerivations';
+import { currentCategoryName, currentPrompt } from '@/services/game/gameDerivations';
 import { canBuzz } from '@/services/game/phaseGuards';
 import { roleFor } from '@/services/game/roleFor';
 import { timerSecondsForPhase } from '@/services/game/gameTiming';
@@ -58,6 +58,7 @@ const LobbyPage = () => {
     return {
       role: roleFor(state, userId),
       currentPrompt: currentPrompt(state),
+      categoryName: currentCategoryName(state),
     };
   }, [state, userId]);
 
@@ -181,6 +182,7 @@ const LobbyPage = () => {
         {showPromptStage && view.currentPrompt ? (
           <PromptStage
             prompt={view.currentPrompt}
+            categoryName={view.categoryName}
             answer={state.phase === 'answer_reveal' ? state.resolved_answer : null}
             answerType={state.phase === 'answer_reveal' ? state.resolved_answer_type : null}
             answerMedia={state.phase === 'answer_reveal' ? state.resolved_answer_media : null}

@@ -8,6 +8,7 @@ import PromptMedia from './PromptMedia';
 
 interface Props {
   prompt: GamePromptState;
+  categoryName?: string;
   answer?: string | null;
   answerType?: PromptContentType | null;
   answerMedia?: MediaReference | null;
@@ -16,6 +17,7 @@ interface Props {
 
 const PromptStage = ({
   prompt,
+  categoryName,
   answer = null,
   answerType = null,
   answerMedia = null,
@@ -45,6 +47,14 @@ const PromptStage = ({
       data-resolution={resolution ?? undefined}
       className={`relative flex min-h-0 flex-1 overflow-hidden rounded-xl border p-3 shadow-2xl shadow-slate-950/30 sm:p-4 ${resolutionTone}`}
     >
+      {categoryName ? (
+        <div
+          aria-label={`Category ${categoryName}`}
+          className="absolute left-3 top-2 max-w-[40%] truncate text-xs font-bold uppercase tracking-[0.2em] text-amber-300"
+        >
+          {categoryName}
+        </div>
+      ) : null}
       <div
         aria-label={`${prompt.score_value} points`}
         className={`absolute right-3 top-2 text-xs font-bold uppercase tracking-[0.2em] ${scoreTone}`}

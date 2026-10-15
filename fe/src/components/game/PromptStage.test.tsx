@@ -13,6 +13,15 @@ describe('PromptStage', () => {
     expect(screen.getByLabelText('100 points')).toBeInTheDocument();
   });
 
+  it('shows the category name only when provided', () => {
+    const prompt = buildGameState().categories[0].prompts[0];
+    const { rerender } = render(<PromptStage prompt={prompt} categoryName="History" />);
+    expect(screen.getByLabelText('Category History')).toHaveTextContent('History');
+
+    rerender(<PromptStage prompt={prompt} />);
+    expect(screen.queryByLabelText(/^Category /)).not.toBeInTheDocument();
+  });
+
   it('renders question media during clue and places media below the question text', () => {
     const prompt = {
       ...buildGameState().categories[0].prompts[0],

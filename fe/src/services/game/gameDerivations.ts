@@ -16,6 +16,12 @@ export function currentPrompt(state: GameLobbyState): GamePromptState | undefine
   return findPromptById(state, state.current_prompt_id);
 }
 
+export function currentCategoryName(state: GameLobbyState): string | undefined {
+  return state.categories.find((cat) =>
+    cat.prompts.some((p) => p.prompt_id === state.current_prompt_id),
+  )?.name;
+}
+
 export function totalConnectedPlayers(state: GameLobbyState): number {
   return state.players.filter((p) => !p.is_banned && p.connection_status === 'connected').length;
 }
