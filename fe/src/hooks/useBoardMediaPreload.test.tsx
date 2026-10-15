@@ -13,7 +13,7 @@ const media = (url: string, mime_type = 'video/mp4'): MediaReference => ({
 });
 
 const categories = (
-  ...items: [MediaReference | null, MediaReference | null?][]
+  ...items: [MediaReference | null, (MediaReference | null)?][]
 ): GameCategoryState[] => [
   {
     category_id: 1,
