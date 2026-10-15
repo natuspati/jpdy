@@ -60,6 +60,7 @@ class PublicGamePromptState(BaseSchema):
     question: str
     question_type: QuestionTypeEnum = QuestionTypeEnum.TEXT
     question_media: MediaReferenceSchema | None = None
+    answer_media: MediaReferenceSchema | None = None
     order: int
     is_selected: bool = False
 

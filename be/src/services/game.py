@@ -15,6 +15,7 @@ from schemas.socket.events import (
     SelectPromptPayload,
     SelectStarterPayload,
     SetAssetsLoadedPayload,
+    StartGamePayload,
     UnbanPlayerPayload,
 )
 from schemas.user.base import UserPublicSchema
@@ -88,13 +89,14 @@ class GameService:
         self,
         lobby_id: int,
         user_id: int,
+        payload: StartGamePayload,
         command_id: str | None = None,
     ) -> GameLobbyState:
         state = await self._executor.execute(
             lobby_id,
             command_id,
             "start_game",
-            partial(self._state_machine.start_game, user_id=user_id),
+            partial(self._state_machine.start_game, user_id=user_id, force=payload.force),
         )
         assert state is not None
         await self._projections.project_game_started(state)

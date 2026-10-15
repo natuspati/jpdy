@@ -106,13 +106,32 @@ def test_assets_loaded_is_per_player_waiting_only_and_reset_on_reconnect() -> No
         machine.set_assets_loaded(state, PLAYER_ONE_ID, True)
 
 
+def test_start_waits_for_loaded_players_unless_forced() -> None:
+    machine = _machine()
+    state = _state()
+
+    with pytest.raises(BadRequestError, match="finish loading"):
+        machine.start_game(state, HOST_ID)
+    state.players[0].assets_loaded = True
+    with pytest.raises(BadRequestError, match="finish loading"):
+        machine.start_game(state, HOST_ID)
+
+    state.players[1].connection_status = PlayerConnectionStatusEnum.DISCONNECTED
+    machine.start_game(state, HOST_ID)
+    assert state.phase == GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
+
+    forced = _state()
+    machine.start_game(forced, HOST_ID, force=True)
+    assert forced.phase == GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
+
+
 def test_start_and_selection_require_authorized_eligible_players() -> None:
     machine = _machine()
     state = _state(player_count=1)
 
     with pytest.raises(ForbiddenError, match="Only the host"):
         machine.start_game(state, PLAYER_ONE_ID)
-    machine.start_game(state, HOST_ID)
+    machine.start_game(state, HOST_ID, force=True)
     assert state.phase == GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
 
     with pytest.raises(BadRequestError, match="not in this lobby"):

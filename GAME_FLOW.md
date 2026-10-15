@@ -175,10 +175,10 @@ never broadcasts a broad state frame before these recipient-specific frames.
 Public prompt data never contains expected-answer field. `question` and
 `question_type` are populated only for current active prompt; other board
 prompts expose only their identity, order, spent state, and value. The
-exception is `question_media`, which is present for every board prompt so
-clients can preload images before a clue opens; this trades some secrecy of
-upcoming media for faster loads. Answer media is never sent early. Canonical correct answer text and optional answer media are public
-only while:
+exception is media: `question_media` and `answer_media` are present for every
+board prompt so clients can preload all media during the lobby; this trades some
+secrecy of upcoming media for faster loads. Answer text is never sent early.
+Canonical correct answer text and `resolved_answer_media` are public only while:
 
 ```text
 phase = answer_reveal
@@ -274,7 +274,11 @@ waiting_for_players
 ```
 
 - The host can start only when at least one connected, non-banned player is
-  present.
+  present and every connected, non-banned player has `assets_loaded=true`.
+  `start_game` with `{"force": true}` skips the loaded check (host override).
+- Each player's client preloads all question and answer media and reports it
+  with `set_assets_loaded`. The flag resets whenever that player's socket
+  connects or disconnects, so a reconnecting client must report again.
 - Players wait for the host.
 - The host is the active actor in the UI.
 
@@ -490,6 +494,7 @@ The server is authoritative:
 
 | Event | Allowed sender | Required phase |
 | --- | --- | --- |
+| `set_assets_loaded` | lobby player | `waiting_for_players` |
 | `start_game` | host | `waiting_for_players` |
 | `select_starter` | host | `host_selecting_starting_player` |
 | `select_prompt` | current selector | `player_selecting_prompt` |
@@ -504,7 +509,7 @@ must not optimistically mutate game state.
 Payload-bearing events accept an optional UUID `command_id`; a repeated
 accepted ID returns its cached result without a second state mutation. The
 web client emits a UUID for every gameplay event, but the current server reads
-it only from payload-bearing events. `start_game`, `buzz`, and
+it only from payload-bearing events. `buzz` and
 `advance_answer_reveal` currently receive a server-generated ID, so retries
 of those payload-free events are not client-idempotent. Older clients without
 a payload command ID also receive a server-generated ID.

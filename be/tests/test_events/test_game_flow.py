@@ -57,7 +57,7 @@ async def _start_on_first_prompt(
     players: list[SocketClient],
 ) -> None:
     namespace = f"/lobbies/{seeded.lobby_id}"
-    await host.client.emit("start_game", namespace=namespace)
+    await host.client.emit("start_game", {"force": True}, namespace=namespace)
     await _drain(host, 1)
     for player in players:
         await _drain(player, 1)
@@ -86,7 +86,9 @@ async def test_start_game_transitions_db_and_phase(
     seeded = await seed_lobby(player_count=1)
     host_socket, _ = await _connect_all(seeded, connect_socket, player_count=1)
 
-    await host_socket.client.emit("start_game", namespace=f"/lobbies/{seeded.lobby_id}")
+    await host_socket.client.emit(
+        "start_game", {"force": True}, namespace=f"/lobbies/{seeded.lobby_id}",
+    )
     state = await host_socket.expect("state_changed")
 
     assert state["phase"] == GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER.value

@@ -133,6 +133,7 @@ def build_public_game_state(
                             else QuestionTypeEnum.TEXT
                         ),
                         question_media=prompt.question_media,
+                        answer_media=prompt.answer_media,
                         order=prompt.order,
                         is_selected=prompt.is_selected,
                     )

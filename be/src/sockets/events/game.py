@@ -15,6 +15,7 @@ from schemas.socket.events import (
     SelectPromptPayload,
     SelectStarterPayload,
     SetAssetsLoadedPayload,
+    StartGamePayload,
     UnbanPlayerPayload,
 )
 from services.game import GameService
@@ -149,25 +150,27 @@ async def on_set_assets_loaded(namespace: str, sid: str, data: Any = None) -> No
     await _run_event(namespace, sid, data, SetAssetsLoadedPayload, _action)
 
 
-async def on_start_game(namespace: str, sid: str, _data: Any = None) -> None:
+async def on_start_game(namespace: str, sid: str, data: Any = None) -> None:
     async def _action(
         service: GameService,
         lobby_id: int,
         user_id: int,
-        _payload: pydantic.BaseModel | None,
+        payload: StartGamePayload | None,
         command_id: str,
     ) -> GameLobbyState:
+        assert payload is not None
         return await service.start_game(
             lobby_id=lobby_id,
             user_id=user_id,
+            payload=payload,
             command_id=command_id,
         )
 
     await _run_event(
         namespace,
         sid,
-        None,
-        None,
+        data,
+        StartGamePayload,
         _action,
         lambda _state, _payload: [GameSoundCueName.GAME_STARTED],
     )

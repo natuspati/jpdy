@@ -79,11 +79,20 @@ class GameStateMachine:
         player.assets_loaded = loaded
         return GameCommandOutcome(state=state, result=state, reason="assets_loaded_set")
 
-    def start_game(self, state: GameLobbyState, user_id: int) -> GameCommandOutcome:
+    def start_game(
+        self,
+        state: GameLobbyState,
+        user_id: int,
+        force: bool = False,
+    ) -> GameCommandOutcome:
         self._require_host(state, user_id)
         self._require_phase(state, GamePhaseEnum.WAITING_FOR_PLAYERS)
         if not any(is_eligible_game_player(player) for player in state.players):
             raise BadRequestError("At least one connected, non-banned player is required")
+        if not force and not all(
+            player.assets_loaded for player in state.players if is_eligible_game_player(player)
+        ):
+            raise BadRequestError("Wait for all players to finish loading")
         state.phase = GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
         return GameCommandOutcome(state=state, result=state, reason="game_started")
 
