@@ -99,6 +99,10 @@ created → waiting_start → in_progress → completed
 - Redis fences SID cleanup: a disconnect removes connection ownership only
   when its SID is still the recorded owner, so an old disconnected socket
   cannot mark a newer reconnect as offline.
+- A dropped socket is shown as `disconnected` only after a 15-second grace
+  period (`DISCONNECT_GRACE_SECONDS`), and only if the user has not reconnected
+  by then, so a brief network blip changes neither buzz eligibility nor the
+  host's view. The grace timer is process-local.
 - The host may reconnect and resume judging/control duties.
 - Lobby discovery lists a waiting lobby as active only for users who are not
   its host or participant. **My lobbies** offers **Join** to the host and

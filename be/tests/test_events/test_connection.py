@@ -1,3 +1,5 @@
+import asyncio
+import time
 from collections.abc import Awaitable, Callable
 
 import pytest
@@ -8,8 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from enums.game import GamePhaseEnum, PlayerConnectionStatusEnum
 from fixtures.game_fixtures import SeededLobby, SocketClient
 from models.lobby import LobbyParticipant
-from schemas.lobby.game_state import GamePlayerState
+from schemas.lobby.game_state import GameLobbyState, GamePlayerState
+from sockets.events import connection
 from utils.game_state import game_state_key
+
+
+@pytest.fixture(autouse=True)
+def no_disconnect_grace(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(connection, "DISCONNECT_GRACE_SECONDS", 0)
 
 
 async def test_connect_with_invalid_token_is_rejected(
@@ -129,6 +137,42 @@ async def test_player_disconnect_flips_state(
     final_state = await host_socket.expect("state_changed")
     player_row = next(p for p in final_state["players"] if p["user_id"] == player.id)
     assert player_row["connection_status"] == PlayerConnectionStatusEnum.DISCONNECTED.value
+
+
+async def test_disconnect_is_delayed_and_cancelled_by_reconnect(
+    seed_lobby: Callable[..., Awaitable[SeededLobby]],
+    connect_socket: Callable[[int, str], Awaitable[SocketClient]],
+    redis_client,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    grace = 0.5
+    monkeypatch.setattr(connection, "DISCONNECT_GRACE_SECONDS", grace)
+    seeded = await seed_lobby(player_count=2)
+    dropper, stayer = seeded.players
+    host = await connect_socket(seeded.lobby_id, seeded.host.token)
+    await host.expect("state_changed")
+    stayer_socket = await connect_socket(seeded.lobby_id, stayer.token)
+    await host.expect("state_changed")
+    dropper_socket = await connect_socket(seeded.lobby_id, dropper.token)
+    await host.expect("state_changed")
+
+    # A player who never comes back is flagged only after the grace period.
+    started = time.monotonic()
+    await stayer_socket.client.disconnect()
+    final_state = await host.expect("state_changed")
+    row = next(p for p in final_state["players"] if p["user_id"] == stayer.id)
+    assert row["connection_status"] == PlayerConnectionStatusEnum.DISCONNECTED.value
+    assert time.monotonic() - started >= grace
+
+    # A player who reconnects inside the window is never flagged.
+    await dropper_socket.client.disconnect()
+    reconnected = await connect_socket(seeded.lobby_id, dropper.token)
+    await reconnected.expect("state_changed")
+    await asyncio.sleep(grace + 0.5)
+    raw = await redis_client.get(game_state_key(seeded.lobby_id))
+    stored = GameLobbyState.model_validate_json(raw)
+    stored_row = next(p for p in stored.players if p.user_id == dropper.id)
+    assert stored_row.connection_status == PlayerConnectionStatusEnum.CONNECTED
 
 
 async def test_existing_player_can_reconnect_after_game_start(

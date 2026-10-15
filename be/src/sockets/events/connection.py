@@ -1,9 +1,11 @@
+import asyncio
 import logging
 from typing import Any
 from uuid import uuid4
 
 from socketio.exceptions import ConnectionRefusedError as SocketConnectionRefusedError
 
+from configs.constants import DISCONNECT_GRACE_SECONDS
 from errors.base import BaseError
 from schemas.user.base import UserPublicSchema
 from services.game import GameService
@@ -21,6 +23,9 @@ from sockets.timer_hooks import arm_timer_if_needed, cancel_timer
 from sockets.uow import build_uow
 
 _logger = logging.getLogger(__name__)
+
+# Strong references so pending grace tasks are not garbage collected mid-sleep.
+_pending_disconnects: set[asyncio.Task[None]] = set()
 
 
 async def on_connect(
@@ -93,7 +98,39 @@ async def on_disconnect(namespace: str, sid: str, reason: Any = None) -> None:
     if not owns_connection:
         return
 
+    # ponytail: process-local grace timer; a server restart inside the window leaves the
+    # player shown as connected until they rejoin or the host bans them.
+    task = asyncio.create_task(
+        _finalize_disconnect(lobby_id, user_id, session["username"], sid, reason),
+    )
+    _pending_disconnects.add(task)
+    task.add_done_callback(_pending_disconnects.discard)
+
+
+async def _finalize_disconnect(
+    lobby_id: int,
+    user_id: int,
+    username: str,
+    sid: str,
+    reason: Any,
+) -> None:
+    try:
+        await asyncio.sleep(DISCONNECT_GRACE_SECONDS)
+        await _mark_disconnected(lobby_id, user_id, username, sid, reason)
+    except Exception:
+        _logger.exception(f"Failed to mark user {user_id} disconnected in lobby {lobby_id}")
+
+
+async def _mark_disconnected(
+    lobby_id: int,
+    user_id: int,
+    username: str,
+    sid: str,
+    reason: Any,
+) -> None:
     async with build_uow() as uow:
+        if await uow.game_state_repo.get_connection_sid(lobby_id, user_id):
+            return  # Reconnected during the grace period; nothing to flip.
         state = await GameService(uow).disconnect_user(
             lobby_id=lobby_id,
             user_id=user_id,
@@ -104,7 +141,7 @@ async def on_disconnect(namespace: str, sid: str, reason: Any = None) -> None:
         if state is not None and await uow.game_state_repo.get_connection_sid(lobby_id, user_id):
             state = await GameService(uow).connect_user(
                 lobby_id=lobby_id,
-                user=UserPublicSchema(id=user_id, username=session["username"]),
+                user=UserPublicSchema(id=user_id, username=username),
                 command_id=f"reconnect:{sid}:{uuid4().hex}",
             )
 
