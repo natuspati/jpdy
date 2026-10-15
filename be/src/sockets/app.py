@@ -16,4 +16,7 @@ sio = socketio.AsyncServer(
     cors_allowed_origins=settings.allowed_hosts,
     namespaces="*",
     client_manager=_manager,
+    # Tolerate a ~30s network stall (e.g. a Tailscale Funnel blip) before dropping clients.
+    ping_interval=10,
+    ping_timeout=30,
 )

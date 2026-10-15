@@ -87,7 +87,9 @@ async def test_start_game_transitions_db_and_phase(
     host_socket, _ = await _connect_all(seeded, connect_socket, player_count=1)
 
     await host_socket.client.emit(
-        "start_game", {"force": True}, namespace=f"/lobbies/{seeded.lobby_id}",
+        "start_game",
+        {"force": True},
+        namespace=f"/lobbies/{seeded.lobby_id}",
     )
     state = await host_socket.expect("state_changed")
 

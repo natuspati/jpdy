@@ -144,7 +144,9 @@ async def test_existing_player_can_reconnect_after_game_start(
     await first_connection.expect("state_changed")
 
     await host_socket.client.emit(
-        "start_game", {"force": True}, namespace=f"/lobbies/{seeded.lobby_id}",
+        "start_game",
+        {"force": True},
+        namespace=f"/lobbies/{seeded.lobby_id}",
     )
     await host_socket.expect("state_changed")
     await first_connection.expect("state_changed")
@@ -232,7 +234,9 @@ async def test_new_player_is_rejected_after_game_start(
     await player_socket.expect("state_changed")
 
     await host_socket.client.emit(
-        "start_game", {"force": True}, namespace=f"/lobbies/{seeded.lobby_id}",
+        "start_game",
+        {"force": True},
+        namespace=f"/lobbies/{seeded.lobby_id}",
     )
     await host_socket.expect("state_changed")
     await player_socket.expect("state_changed")
