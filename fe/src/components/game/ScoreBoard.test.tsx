@@ -20,6 +20,24 @@ describe('ScoreBoard', () => {
     expect(screen.getByTestId('player-tile-2')).toHaveTextContent('alice0');
   });
 
+  it("shows each player's media loading state only while waiting for players", () => {
+    const state = buildGameState({
+      players: [
+        { user_id: 2, username: 'alice', assets_loaded: true },
+        { user_id: 3, username: 'bob' },
+      ],
+    });
+    const { rerender } = render(<ScoreBoard state={state} currentUserId={1} />);
+
+    expect(screen.getByTestId('player-tile-2')).toHaveTextContent('✓ Ready');
+    expect(screen.getByTestId('player-tile-3')).toHaveTextContent('Loading…');
+
+    rerender(
+      <ScoreBoard state={{ ...state, phase: 'player_selecting_prompt' }} currentUserId={1} />,
+    );
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+  });
+
   it('highlights the selected clue picker without status labels', () => {
     const state = buildGameState({
       phase: 'player_selecting_prompt',

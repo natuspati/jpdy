@@ -15,11 +15,31 @@ describe('HostControls', () => {
     onJudge: vi.fn(),
   });
 
-  it('shows only Start game while the lobby is waiting for players', () => {
+  it('blocks Start game until players load, with a Start anyway override', async () => {
     const props = controls();
     render(<HostControls {...props} />);
 
+    expect(screen.getByRole('button', { name: 'Start game' })).toBeDisabled();
+    expect(screen.getByText(/Waiting for 2 players to load media/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Start anyway' }));
+    expect(props.onStart).toHaveBeenCalledWith(true);
+  });
+
+  it('shows only Start game while the lobby is waiting for players', async () => {
+    const props = controls(
+      buildGameState({
+        players: [
+          { user_id: 2, username: 'alice', assets_loaded: true },
+          { user_id: 3, username: 'bob', assets_loaded: true },
+        ],
+      }),
+    );
+    render(<HostControls {...props} />);
+
     expect(screen.getByRole('button', { name: 'Start game' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Start anyway' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Start game' }));
+    expect(props.onStart).toHaveBeenCalledWith();
     expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();

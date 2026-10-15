@@ -19,16 +19,28 @@ describe('phaseGuards', () => {
     expect(isHost(state, 2)).toBe(false);
   });
 
-  it('canStartGame requires host, waiting phase, and a connected player', () => {
-    const ok = buildGameState({ phase: 'waiting_for_players' });
+  it('canStartGame requires host, waiting phase, and loaded connected players unless forced', () => {
+    const ok = buildGameState({
+      phase: 'waiting_for_players',
+      players: [
+        { user_id: 2, username: 'alice', assets_loaded: true },
+        { user_id: 3, username: 'bob', assets_loaded: true },
+      ],
+    });
     expect(canStartGame(ok, 1)).toBe(true);
     expect(canStartGame(ok, 2)).toBe(false);
+
+    const loading = buildGameState({ phase: 'waiting_for_players' });
+    expect(canStartGame(loading, 1)).toBe(false);
+    expect(canStartGame(loading, 1, true)).toBe(true);
+    expect(canStartGame(loading, 2, true)).toBe(false);
 
     const noPlayers = buildGameState({
       phase: 'waiting_for_players',
       players: [{ user_id: 2, username: 'alice', connection_status: 'disconnected' }],
     });
     expect(canStartGame(noPlayers, 1)).toBe(false);
+    expect(canStartGame(noPlayers, 1, true)).toBe(false);
   });
 
   it('canSelectStarter only for host during host_selecting_starting_player', () => {

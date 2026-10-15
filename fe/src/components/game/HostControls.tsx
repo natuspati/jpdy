@@ -5,12 +5,13 @@ import {
   canJudge,
   canSelectStarter,
   canStartGame,
+  playersStillLoading,
 } from '@/services/game/phaseGuards';
 
 interface Props {
   state: GameLobbyState;
   currentUserId: number;
-  onStart: () => void;
+  onStart: (force?: boolean) => void;
   onSelectStarter: (userId: number) => void;
   onAdvanceAnswerReveal: () => void;
   onJudge: (correct: boolean) => void;
@@ -27,16 +28,32 @@ const HostControls = ({
   const canJudgeAnswer = canJudge(state, currentUserId);
   const canAdvance = canAdvanceAnswerReveal(state, currentUserId);
   if (state.phase === 'waiting_for_players') {
+    const loading = playersStillLoading(state);
     return (
-      <div className="mx-auto w-full max-w-xs sm:max-w-md">
+      <div className="mx-auto w-full max-w-xs space-y-2 sm:max-w-md">
         <Button
           fullWidth
           size="lg"
           disabled={!canStartGame(state, currentUserId)}
-          onClick={onStart}
+          onClick={() => onStart()}
         >
           Start game
         </Button>
+        {loading > 0 ? (
+          <div className="flex items-center justify-between gap-2 text-sm text-slate-400">
+            <span>
+              Waiting for {loading} {loading === 1 ? 'player' : 'players'} to load media…
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!canStartGame(state, currentUserId, true)}
+              onClick={() => onStart(true)}
+            >
+              Start anyway
+            </Button>
+          </div>
+        ) : null}
       </div>
     );
   }

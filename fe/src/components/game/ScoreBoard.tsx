@@ -51,6 +51,15 @@ const ScoreBoard = ({ state, currentUserId, onBan, onUnban }: Props) => {
         >
           {player.username}
         </span>
+        {state.phase === 'waiting_for_players' && !isMuted ? (
+          <span
+            aria-label={player.assets_loaded ? 'Media loaded' : 'Loading media'}
+            title={player.assets_loaded ? 'Media loaded' : 'Loading media'}
+            className={`text-xs font-semibold ${player.assets_loaded ? 'text-emerald-300' : 'text-amber-300'}`}
+          >
+            {player.assets_loaded ? '✓ Ready' : 'Loading…'}
+          </span>
+        ) : null}
         <span className="text-lg font-bold tabular-nums">{player.score}</span>
         {isHost ? (
           <button

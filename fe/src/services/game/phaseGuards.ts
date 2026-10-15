@@ -8,10 +8,18 @@ const isConnectedPlayer = (state: GameLobbyState, userId: number): boolean => {
 export const isHost = (state: GameLobbyState, userId: number): boolean =>
   state.host.user_id === userId;
 
-export const canStartGame = (state: GameLobbyState, userId: number): boolean =>
+const eligiblePlayers = (state: GameLobbyState): GameLobbyState['players'] =>
+  state.players.filter((p) => !p.is_banned && p.connection_status === 'connected');
+
+export const playersStillLoading = (state: GameLobbyState): number =>
+  eligiblePlayers(state).filter((p) => !p.assets_loaded).length;
+
+// `force` is the host override that ignores players who have not finished loading.
+export const canStartGame = (state: GameLobbyState, userId: number, force = false): boolean =>
   isHost(state, userId) &&
   state.phase === 'waiting_for_players' &&
-  state.players.some((p) => !p.is_banned && p.connection_status === 'connected');
+  eligiblePlayers(state).length > 0 &&
+  (force || playersStillLoading(state) === 0);
 
 export const canSelectStarter = (state: GameLobbyState, userId: number): boolean =>
   isHost(state, userId) && state.phase === 'host_selecting_starting_player';

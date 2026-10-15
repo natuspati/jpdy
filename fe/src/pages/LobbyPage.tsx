@@ -210,7 +210,7 @@ const LobbyPage = () => {
             <HostControls
               state={state}
               currentUserId={userId}
-              onStart={() => emit('start_game')}
+              onStart={(force) => (force ? emit('start_game', { force }) : emit('start_game'))}
               onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
               onAdvanceAnswerReveal={() => emit('advance_answer_reveal')}
               onJudge={(correct) => emit('judge_answer', { correct })}
