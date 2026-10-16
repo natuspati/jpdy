@@ -10,6 +10,7 @@ import Spinner from '@/components/ui/Spinner';
 import { useAvailableCategories } from '@/hooks/usePromptCategories';
 import { useCreateLobby, useUpdateLobby } from '@/hooks/useLobbies';
 import {
+  BETTING_PROMPT_DEFAULT_PERCENT,
   MAX_BETTING_PROMPTS_PER_ROUND,
   MAX_CATEGORIES_PER_ROUND,
   MAX_ROUNDS_IN_LOBBY,
@@ -88,6 +89,20 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
   const busy = createLobby.isPending || updateLobby.isPending;
   const categories = data?.contents ?? [];
 
+  // Mirrors the server: an explicit count is clamped to the round's size, else a percent of it.
+  const bettingPreview = bettingInvalid
+    ? []
+    : rounds.map((ids, index) => {
+        const promptCount = categories
+          .filter((c) => ids.includes(c.id))
+          .reduce((sum, c) => sum + c.prompts.length, 0);
+        const count =
+          bettingCount === ''
+            ? Math.floor((promptCount * BETTING_PROMPT_DEFAULT_PERCENT) / 100)
+            : Math.min(bettingValue, promptCount);
+        return { round: index + 1, promptCount, count };
+      });
+
   return (
     <Modal open={open} onClose={onClose} title="New lobby">
       <div className="space-y-3">
@@ -161,9 +176,9 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
           </div>
         )}
         <Field
-          label="Betting prompts per round"
+          label="Betting prompts in each round"
           htmlFor="betting-prompt-count"
-          hint="Blank uses 10% of each round's prompts, rounded down."
+          hint={`A number of prompts, not a percent. 0 = none. Blank = automatic: ${BETTING_PROMPT_DEFAULT_PERCENT}% of a round's prompts, rounded down.`}
           error={
             bettingInvalid
               ? `Enter a whole number from 0 to ${MAX_BETTING_PROMPTS_PER_ROUND}.`
@@ -176,12 +191,23 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
             min={0}
             max={MAX_BETTING_PROMPTS_PER_ROUND}
             step={1}
-            placeholder="Default (10%)"
+            placeholder="Auto"
             value={bettingCount}
             invalid={bettingInvalid}
             onChange={(event) => setBettingCount(event.target.value)}
           />
         </Field>
+        {bettingPreview.some((r) => r.promptCount > 0) ? (
+          <ul aria-label="Betting prompts preview" className="space-y-0.5 text-xs text-slate-400">
+            {bettingPreview
+              .filter((r) => r.promptCount > 0)
+              .map((r) => (
+                <li key={r.round}>
+                  Round {r.round}: {r.count} of {r.promptCount} prompts will be betting prompts
+                </li>
+              ))}
+          </ul>
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button
             type="button"

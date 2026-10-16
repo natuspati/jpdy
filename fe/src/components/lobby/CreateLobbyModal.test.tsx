@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 const categories = Array.from({ length: 7 }, (_, index) => ({
   id: index + 1,
   name: `Cat ${index + 1}`,
-  prompts: [],
+  prompts: Array.from({ length: 5 }, (_, order) => ({ id: index * 10 + order })),
 }));
 
 vi.mock('@/hooks/usePromptCategories', () => ({
@@ -93,7 +93,7 @@ describe('CreateLobbyModal rounds editor', () => {
     expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, { id: 42, payload: { rounds: [[1]] } });
 
     mocks.updateLobby.mockClear();
-    await userEvent.type(screen.getByLabelText('Betting prompts per round'), '3');
+    await userEvent.type(screen.getByLabelText('Betting prompts in each round'), '3');
     await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
     expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
       id: 42,
@@ -104,9 +104,27 @@ describe('CreateLobbyModal rounds editor', () => {
   it('disables create for an out-of-range betting count', async () => {
     renderModal();
     await userEvent.click(box('Cat 1 in round 1'));
-    await userEvent.type(screen.getByLabelText('Betting prompts per round'), '26');
+    await userEvent.type(screen.getByLabelText('Betting prompts in each round'), '26');
 
     expect(screen.getByRole('button', { name: 'Create & open' })).toBeDisabled();
+  });
+
+  it('previews betting prompts per round for the default and a custom count', async () => {
+    renderModal();
+    await userEvent.click(box('Cat 1 in round 1'));
+    expect(screen.getByText(/Round 1: 0 of 5 prompts/)).toBeInTheDocument();
+
+    for (const n of [2, 3]) await userEvent.click(box(`Cat ${n} in round 1`));
+    expect(screen.getByText(/Round 1: 1 of 15 prompts/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Betting prompts in each round'), '4');
+    expect(screen.getByText(/Round 1: 4 of 15 prompts/)).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText('Betting prompts in each round'));
+    await userEvent.type(screen.getByLabelText('Betting prompts in each round'), '9');
+    await userEvent.click(box('Cat 1 in round 1'));
+    await userEvent.click(box('Cat 3 in round 1'));
+    expect(screen.getByText(/Round 1: 5 of 5 prompts/)).toBeInTheDocument();
   });
 
   it('sends the rounds payload and then promotes the lobby', async () => {
