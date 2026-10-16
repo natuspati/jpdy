@@ -302,6 +302,23 @@ async def on_advance_answer_reveal(namespace: str, sid: str, _data: Any = None) 
     )
 
 
+async def on_advance_round(namespace: str, sid: str, _data: Any = None) -> None:
+    async def _action(
+        service: GameService,
+        lobby_id: int,
+        user_id: int,
+        _payload: pydantic.BaseModel | None,
+        command_id: str,
+    ) -> GameLobbyState:
+        return await service.advance_round(
+            lobby_id=lobby_id,
+            user_id=user_id,
+            command_id=command_id,
+        )
+
+    await _run_event(namespace, sid, None, None, _action)
+
+
 async def on_ban_player(namespace: str, sid: str, data: Any = None) -> None:
     async def _action(
         service: GameService,

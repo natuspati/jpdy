@@ -1,7 +1,10 @@
-import type { GameLobbyState, GamePhaseEnum } from '@/schemas';
+import type { GameLobbyState, GamePhaseEnum, GameRoundResult } from '@/schemas';
 
 interface BuildArgs {
   phase?: GamePhaseEnum;
+  currentRound?: number;
+  totalRounds?: number;
+  roundResults?: GameRoundResult[];
   hostId?: number;
   hostName?: string;
   players?: Array<{
@@ -26,6 +29,9 @@ interface BuildArgs {
 export function buildGameState(args: BuildArgs = {}): GameLobbyState {
   const {
     phase = 'waiting_for_players',
+    currentRound = 1,
+    totalRounds = 1,
+    roundResults = [],
     hostId = 1,
     hostName = 'hosty',
     players = [
@@ -62,6 +68,7 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
       {
         category_id: 10,
         name: 'Animals',
+        round_number: 1,
         prompts: [
           { prompt_id: 101, question: 'Q1', order: 1, is_selected: false, score_value: 100 },
           { prompt_id: 102, question: 'Q2', order: 2, is_selected: false, score_value: 200 },
@@ -69,6 +76,9 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
       },
     ],
     phase,
+    current_round: currentRound,
+    total_rounds: totalRounds,
+    round_results: roundResults,
     current_prompt_id: currentPromptId,
     selecting_player_id: selectingPlayerId,
     answering_player_id: answeringPlayerId,

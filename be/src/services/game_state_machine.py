@@ -5,14 +5,17 @@ from configs.constants import (
     ANSWER_REVEAL_TIME_SECONDS,
     ANSWERING_TIME_SECONDS,
     BUZZING_TIME_SECONDS,
+    ROUND_SUMMARY_TIME_SECONDS,
 )
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from errors.request import BadRequestError, ForbiddenError
 from schemas.lobby.game_state import GameLobbyState, GamePlayerState
 from utils.game_state import (
     GameCommandOutcome,
-    all_board_prompts_spent,
+    build_round_result,
     clear_game_player_selection_flags,
+    current_round_prompts_spent,
+    find_game_category_of_prompt,
     find_game_player,
     find_game_prompt,
     get_eligible_buzzers,
@@ -129,6 +132,9 @@ class GameStateMachine:
         prompt = find_game_prompt(state, prompt_id)
         if prompt is None:
             raise BadRequestError(f"Prompt {prompt_id} is not in this lobby")
+        category = find_game_category_of_prompt(state, prompt_id)
+        if category is not None and category.round_number != state.current_round:
+            raise BadRequestError("Prompt belongs to another round")
         if prompt.is_selected:
             raise BadRequestError("Prompt has already been used")
         prompt.is_selected = True
@@ -205,6 +211,12 @@ class GameStateMachine:
         self._advance_after_reveal(state)
         return GameCommandOutcome(state=state, result=state, reason="answer_reveal_advanced")
 
+    def advance_round(self, state: GameLobbyState, user_id: int) -> GameCommandOutcome:
+        self._require_host(state, user_id)
+        self._require_phase(state, GamePhaseEnum.ROUND_SUMMARY)
+        self._start_next_round(state)
+        return GameCommandOutcome(state=state, result=state, reason="round_advanced")
+
     def ban_player(
         self,
         state: GameLobbyState,
@@ -272,6 +284,8 @@ class GameStateMachine:
             self._enter_answer_reveal(state, GameResolutionEnum.EXPIRED)
         elif state.phase == GamePhaseEnum.ANSWER_REVEAL:
             self._advance_after_reveal(state)
+        elif state.phase == GamePhaseEnum.ROUND_SUMMARY:
+            self._start_next_round(state)
         else:
             return GameCommandOutcome(state=None, result=None, reason="timer_phase_not_timed")
         return GameCommandOutcome(state=state, result=state, reason="timer_expired")
@@ -287,7 +301,7 @@ class GameStateMachine:
         state.timer_deadline = None
         self._clear_resolution(state)
         clear_game_player_selection_flags(state)
-        if not all_board_prompts_spent(state):
+        if not current_round_prompts_spent(state):
             selector = find_game_player(state, state.selecting_player_id)
             if is_eligible_game_player(selector):
                 state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
@@ -295,8 +309,28 @@ class GameStateMachine:
             else:
                 self._enter_host_player_selection(state)
             return
-        state.phase = GamePhaseEnum.FINISHED
+        state.round_results.append(build_round_result(state))
         state.selecting_player_id = None
+        if state.current_round < state.total_rounds:
+            state.phase = GamePhaseEnum.ROUND_SUMMARY
+            state.timer_deadline = self._deadline(ROUND_SUMMARY_TIME_SECONDS)
+        else:
+            state.phase = GamePhaseEnum.FINISHED
+
+    def _start_next_round(self, state: GameLobbyState) -> None:
+        state.current_round += 1
+        state.timer_deadline = None
+        clear_game_player_selection_flags(state)
+        eligible = [player for player in state.players if is_eligible_game_player(player)]
+        lowest = min((player.score for player in eligible), default=None)
+        lowest_players = [player for player in eligible if player.score == lowest]
+        if len(lowest_players) != 1:
+            self._enter_host_player_selection(state)
+            return
+        selector = lowest_players[0]
+        selector.is_selected = True
+        state.selecting_player_id = selector.user_id
+        state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
 
     def _enter_host_player_selection(self, state: GameLobbyState) -> None:
         clear_game_player_selection_flags(state)

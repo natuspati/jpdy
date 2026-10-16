@@ -7,6 +7,7 @@ from schemas.lobby.game_state import (
     GamePromptState,
 )
 from schemas.lobby.nested import LobbyWithCategoryPromptsInDBSchema
+from utils.game_state import round_score_value
 from utils.media import build_media_reference
 
 
@@ -20,21 +21,33 @@ class GameStateMaterializer:
         lobby = await self._uow.lobby_repo.select_lobby_with_prompts(lobby_id=lobby_id)
         if lobby is None:
             raise NotFoundError(f"Lobby {lobby_id} not found")
-        return await self._uow.game_state_repo.initialize_state(self.build_game_lobby_state(lobby))
+        category_rounds = await self._uow.lobby_repo.select_category_rounds(lobby_id)
+        return await self._uow.game_state_repo.initialize_state(
+            self.build_game_lobby_state(lobby, category_rounds),
+        )
 
     @staticmethod
-    def build_game_lobby_state(lobby: LobbyWithCategoryPromptsInDBSchema) -> GameLobbyState:
+    def build_game_lobby_state(
+        lobby: LobbyWithCategoryPromptsInDBSchema,
+        category_rounds: dict[int, int],
+    ) -> GameLobbyState:
         """Build an immutable SQL lobby snapshot into initial Redis game state."""
         if lobby.owner is None:
             raise BadRequestError("Lobby has no owner; cannot start a game")
 
+        categories = sorted(
+            lobby.prompt_categories,
+            key=lambda category: (category_rounds.get(category.id, 1), category.id),
+        )
         return GameLobbyState(
             lobby_id=lobby.id,
             host=GameHostState(user_id=lobby.owner.id, username=lobby.owner.username),
+            total_rounds=max((category_rounds.get(c.id, 1) for c in categories), default=1),
             categories=[
                 GameCategoryState(
                     category_id=category.id,
                     name=category.name,
+                    round_number=category_rounds.get(category.id, 1),
                     prompts=[
                         GamePromptState(
                             prompt_id=prompt.id,
@@ -53,10 +66,14 @@ class GameStateMaterializer:
                                 else None
                             ),
                             order=prompt.order or 0,
+                            score_value=round_score_value(
+                                prompt.order or 0,
+                                category_rounds.get(category.id, 1),
+                            ),
                         )
                         for prompt in category.prompts
                     ],
                 )
-                for category in lobby.prompt_categories
+                for category in categories
             ],
         )

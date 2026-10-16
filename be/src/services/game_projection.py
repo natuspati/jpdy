@@ -46,6 +46,22 @@ class GameProjectionService:
                     for player in state.players
                 ],
             )
+            banned_ids = {player.user_id for player in state.players if player.is_banned}
+            await uow.lobby_repo.replace_round_results(
+                lobby_id=state.lobby_id,
+                results=[
+                    (
+                        result.round_number,
+                        score.user_id,
+                        score.username,
+                        score.score,
+                        score.score_delta,
+                        score.user_id in banned_ids,
+                    )
+                    for result in state.round_results
+                    for score in result.scores
+                ],
+            )
             await uow.lobby_repo.update_lobby_state(
                 lobby_id=state.lobby_id,
                 state=LobbyStateEnum.COMPLETED,

@@ -82,4 +82,27 @@ describe('LobbyPage active-game layout', () => {
 
     expect(screen.getByRole('button', { name: /buzz/i })).toBeEnabled();
   });
+
+  it('shows the round leaderboard instead of the board during round_summary', () => {
+    socketState.state = buildGameState({
+      phase: 'round_summary',
+      currentRound: 1,
+      totalRounds: 2,
+      roundResults: [
+        {
+          round_number: 1,
+          scores: [
+            { user_id: 2, username: 'alice', score: 300, score_delta: 300, is_banned: false },
+          ],
+        },
+      ],
+    });
+    socketState.status = 'open';
+    renderLobby();
+
+    expect(screen.getByRole('heading', { name: 'Round 1 complete' })).toBeInTheDocument();
+    expect(screen.getByText('Round 1 of 2')).toBeInTheDocument();
+    expect(screen.queryByText('Animals')).not.toBeInTheDocument();
+    expect(screen.getByText('Next round starts automatically')).toBeInTheDocument();
+  });
 });

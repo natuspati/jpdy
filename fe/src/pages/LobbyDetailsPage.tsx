@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 
+import RoundRecap from '@/components/game/RoundRecap';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Spinner from '@/components/ui/Spinner';
@@ -58,16 +59,31 @@ const LobbyDetailsPage = () => {
       </dl>
       <div>
         <h2 className="mb-2 font-semibold text-slate-100">Category list</h2>
-        {data.prompt_categories.length === 0 ? (
+        {data.rounds.length === 0 ? (
           <p className="text-sm text-slate-400">No categories attached.</p>
         ) : (
-          <ul className="space-y-2">
-            {data.prompt_categories.map((category) => (
-              <li key={category.id} className="rounded border border-slate-800 bg-slate-950/50 p-3">
-                {category.name}
-              </li>
+          <div className="space-y-3">
+            {data.rounds.map((round) => (
+              <div
+                key={round.round_number}
+                className="rounded border border-slate-800 bg-slate-950/50 p-3"
+              >
+                <RoundRecap
+                  roundNumber={round.round_number}
+                  categoryNames={round.categories.map((category) => category.name)}
+                  standings={
+                    round.results?.map((result) => ({
+                      key: `${result.user_id ?? 'deleted'}-${result.username}`,
+                      username: result.username,
+                      score: result.score,
+                      scoreDelta: result.score_delta,
+                      isBanned: result.is_banned,
+                    })) ?? null
+                  }
+                />
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
       {data.final_rankings ? (

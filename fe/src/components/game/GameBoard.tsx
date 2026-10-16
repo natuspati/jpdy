@@ -19,15 +19,17 @@ interface Props {
 }
 
 const GameBoard = ({ state, currentUserId, onSelect, flashPromptId = null }: Props) => {
-  if (state.categories.length === 0) {
+  // `state.categories` holds every round (so media can preload); the board shows only this one.
+  const categories = state.categories.filter((cat) => cat.round_number === state.current_round);
+  if (categories.length === 0) {
     return <p className="text-slate-400">No categories.</p>;
   }
   // Tailwind JIT requires static class names — pick from a fixed map rather
   // than concatenating into the class string.
-  const colsClass = COLS_CLASS_BY_COUNT[Math.min(state.categories.length, 6)];
+  const colsClass = COLS_CLASS_BY_COUNT[Math.min(categories.length, 6)];
   return (
     <div className={`grid gap-2 ${colsClass}`}>
-      {state.categories.map((cat) => (
+      {categories.map((cat) => (
         <div key={cat.category_id} className="grid grid-rows-[4.5rem_auto] gap-2">
           <div className="flex min-h-[4.5rem] items-center justify-center overflow-hidden rounded-md bg-(--color-board-bg) p-2 text-center text-sm font-semibold uppercase tracking-wide text-amber-300">
             <span className="line-clamp-2">{cat.name}</span>

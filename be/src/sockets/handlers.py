@@ -2,6 +2,7 @@ from sockets.app import sio
 from sockets.events.connection import on_connect, on_disconnect
 from sockets.events.game import (
     on_advance_answer_reveal,
+    on_advance_round,
     on_ban_player,
     on_buzz,
     on_judge_answer,
@@ -24,5 +25,6 @@ def register_socket_handlers() -> None:
     sio.on("judge_answer", handler=on_judge_answer, namespace="*")
     sio.on("buzz", handler=on_buzz, namespace="*")
     sio.on("advance_answer_reveal", handler=on_advance_answer_reveal, namespace="*")
+    sio.on("advance_round", handler=on_advance_round, namespace="*")
     sio.on("ban_player", handler=on_ban_player, namespace="*")
     sio.on("unban_player", handler=on_unban_player, namespace="*")

@@ -31,7 +31,9 @@ export const canSelectPrompt = (
 ): boolean => {
   if (state.phase !== 'player_selecting_prompt') return false;
   if (state.selecting_player_id !== userId) return false;
-  const prompt = state.categories.flatMap((c) => c.prompts).find((p) => p.prompt_id === promptId);
+  const category = state.categories.find((c) => c.prompts.some((p) => p.prompt_id === promptId));
+  if (!category || category.round_number !== state.current_round) return false;
+  const prompt = category.prompts.find((p) => p.prompt_id === promptId);
   return !!prompt && !prompt.is_selected;
 };
 
@@ -40,6 +42,9 @@ export const canJudge = (state: GameLobbyState, userId: number): boolean =>
 
 export const canAdvanceAnswerReveal = (state: GameLobbyState, userId: number): boolean =>
   isHost(state, userId) && state.phase === 'answer_reveal';
+
+export const canAdvanceRound = (state: GameLobbyState, userId: number): boolean =>
+  isHost(state, userId) && state.phase === 'round_summary';
 
 export const canBuzz = (state: GameLobbyState, userId: number): boolean => {
   if (state.phase !== 'buzz_open') return false;

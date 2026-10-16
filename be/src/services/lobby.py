@@ -18,12 +18,13 @@ from services import game_timers
 from services.game_state_materializer import GameStateMaterializer
 from sockets.lobby_lifecycle import notify_lobby_deleted_and_disconnect
 from utils.lobby import (
+    build_lobby_rounds,
     ensure_owned_lobby,
     get_player_count,
     rank_final_scores,
-    validate_category_ids,
     validate_lifecycle_transition,
     validate_lobby_categories_for_start,
+    validate_rounds,
 )
 
 
@@ -80,6 +81,12 @@ class LobbyService:
                 final_rankings = rank_final_scores(
                     await uow.lobby_repo.select_final_rankings(lobby_id),
                 )
+            category_rounds = await uow.lobby_repo.select_category_rounds(lobby_id)
+            round_results = (
+                await uow.lobby_repo.select_round_results(lobby_id)
+                if lobby.state == LobbyStateEnum.COMPLETED
+                else None
+            )
 
         return LobbyDetailsSchema.model_validate(
             lobby.model_dump()
@@ -88,6 +95,11 @@ class LobbyService:
                 "is_owner": is_owner,
                 "is_participant": is_participant,
                 "final_rankings": final_rankings,
+                "rounds": build_lobby_rounds(
+                    lobby.prompt_categories,
+                    category_rounds,
+                    round_results,
+                ),
             },
         )
 
@@ -104,19 +116,16 @@ class LobbyService:
         async with self._uow as uow:
             lobby = await ensure_owned_lobby(uow, lobby_id, user)
 
-            if schema.prompt_category_ids is not None:
+            if schema.rounds is not None:
                 if lobby.state != LobbyStateEnum.CREATED:
                     raise BadRequestError(
                         "Prompt categories can only be modified while the lobby "
                         "is in the CREATED state",
                     )
-                category_ids = await validate_category_ids(
-                    uow,
-                    schema.prompt_category_ids,
-                )
+                rounds = await validate_rounds(uow, schema.rounds)
                 await uow.lobby_repo.replace_lobby_categories(
                     lobby_id=lobby_id,
-                    category_ids=category_ids,
+                    rounds=rounds,
                 )
 
             if schema.state is not None:

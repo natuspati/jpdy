@@ -40,13 +40,31 @@ export const GamePromptState = z
   .strict();
 export type GamePromptState = z.infer<typeof GamePromptState>;
 
-// Mirrors GameCategoryState
+// Mirrors PublicGameCategoryState
 export const GameCategoryState = z.object({
   category_id: z.number().int(),
   name: z.string(),
+  round_number: z.number().int().positive().default(1),
   prompts: z.array(GamePromptState),
 });
 export type GameCategoryState = z.infer<typeof GameCategoryState>;
+
+// Mirrors GameRoundScore: cumulative score after the round plus what the round earned.
+export const GameRoundScore = z.object({
+  user_id: z.number().int(),
+  username: z.string(),
+  score: z.number().int(),
+  score_delta: z.number().int(),
+  is_banned: z.boolean().default(false),
+});
+export type GameRoundScore = z.infer<typeof GameRoundScore>;
+
+// Mirrors GameRoundResult
+export const GameRoundResult = z.object({
+  round_number: z.number().int().positive(),
+  scores: z.array(GameRoundScore).default([]),
+});
+export type GameRoundResult = z.infer<typeof GameRoundResult>;
 
 // Mirrors GameLobbyState
 export const GameLobbyState = z
@@ -57,6 +75,9 @@ export const GameLobbyState = z
     players: z.array(GamePlayerState).default([]),
     categories: z.array(GameCategoryState).default([]),
     phase: GamePhaseEnum.default('waiting_for_players'),
+    current_round: z.number().int().positive().default(1),
+    total_rounds: z.number().int().positive().default(1),
+    round_results: z.array(GameRoundResult).default([]),
     current_prompt_id: z.number().int().nullable().default(null),
     selecting_player_id: z.number().int().nullable().default(null),
     answering_player_id: z.number().int().nullable().default(null),

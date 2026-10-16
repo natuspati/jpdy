@@ -1,8 +1,7 @@
 from datetime import datetime
 
-from pydantic import Field, computed_field
+from pydantic import Field
 
-from configs.constants import SCORE_MULTIPLIER
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
 from schemas.base import BaseSchema
@@ -39,17 +38,14 @@ class GamePromptState(BaseSchema):
     question_media: MediaReferenceSchema | None = None
     answer_media: MediaReferenceSchema | None = None
     order: int
+    score_value: int = Field(description="Round-scaled points, set when the lobby is materialized.")
     is_selected: bool = False
-
-    @computed_field
-    @property
-    def score_value(self) -> int:
-        return self.order * SCORE_MULTIPLIER
 
 
 class GameCategoryState(BaseSchema):
     category_id: int
     name: str
+    round_number: int = 1
     prompts: list[GamePromptState]
 
 
@@ -62,18 +58,28 @@ class PublicGamePromptState(BaseSchema):
     question_media: MediaReferenceSchema | None = None
     answer_media: MediaReferenceSchema | None = None
     order: int
+    score_value: int
     is_selected: bool = False
-
-    @computed_field
-    @property
-    def score_value(self) -> int:
-        return self.order * SCORE_MULTIPLIER
 
 
 class PublicGameCategoryState(BaseSchema):
     category_id: int
     name: str
+    round_number: int
     prompts: list[PublicGamePromptState]
+
+
+class GameRoundScore(BaseSchema):
+    user_id: int
+    username: str
+    score: int = Field(description="Cumulative score after the round.")
+    score_delta: int = Field(description="Points earned during the round.")
+    is_banned: bool = False
+
+
+class GameRoundResult(BaseSchema):
+    round_number: int
+    scores: list[GameRoundScore] = Field(default_factory=list)
 
 
 class PublicGameLobbyState(BaseSchema):
@@ -89,6 +95,9 @@ class PublicGameLobbyState(BaseSchema):
     players: list[GamePlayerState] = Field(default_factory=list)
     categories: list[PublicGameCategoryState] = Field(default_factory=list)
     phase: GamePhaseEnum = GamePhaseEnum.WAITING_FOR_PLAYERS
+    current_round: int = 1
+    total_rounds: int = 1
+    round_results: list[GameRoundResult] = Field(default_factory=list)
     current_prompt_id: int | None = None
     selecting_player_id: int | None = None
     answering_player_id: int | None = None
@@ -141,6 +150,9 @@ class GameLobbyState(BaseSchema):
     players: list[GamePlayerState] = Field(default_factory=list)
     categories: list[GameCategoryState] = Field(default_factory=list)
     phase: GamePhaseEnum = GamePhaseEnum.WAITING_FOR_PLAYERS
+    current_round: int = 1
+    total_rounds: int = 1
+    round_results: list[GameRoundResult] = Field(default_factory=list)
     current_prompt_id: int | None = None
     selecting_player_id: int | None = None
     answering_player_id: int | None = None

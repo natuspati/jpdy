@@ -6,16 +6,19 @@ from schemas.lobby.game_state import (
     GameLobbyState,
     GamePlayerState,
     GamePromptState,
+    GameRoundResult,
+    GameRoundScore,
 )
 from schemas.media import MediaReferenceSchema
 from utils.game_state import (
-    all_board_prompts_spent,
     build_public_game_state,
     clear_game_player_selection_flags,
+    current_round_prompts_spent,
     find_game_player,
     find_game_prompt,
     get_eligible_buzzers,
     is_eligible_game_player,
+    round_score_value,
 )
 
 
@@ -40,6 +43,7 @@ def _state() -> GameLobbyState:
                         question_type=QuestionTypeEnum.TEXT,
                         answer_type=AnswerTypeEnum.TEXT,
                         order=1,
+                        score_value=100,
                     ),
                 ],
             ),
@@ -112,6 +116,35 @@ def test_shared_state_helpers_find_and_filter_live_entities() -> None:
 
     clear_game_player_selection_flags(state)
     assert not any(player.is_selected for player in state.players)
-    assert all_board_prompts_spent(state) is False
+    assert current_round_prompts_spent(state) is False
     state.categories[0].prompts[0].is_selected = True
-    assert all_board_prompts_spent(state) is True
+    assert current_round_prompts_spent(state) is True
+
+
+def test_round_score_value_doubles_each_round() -> None:
+    assert [round_score_value(order, 1) for order in (1, 5)] == [100, 500]
+    assert [round_score_value(order, 2) for order in (1, 5)] == [200, 1000]
+    assert [round_score_value(order, 3) for order in (1, 5)] == [400, 2000]
+
+
+def test_public_projection_hides_banned_scores_in_round_results_for_players_only() -> None:
+    state = _state()
+    state.total_rounds = 2
+    state.round_results = [
+        GameRoundResult(
+            round_number=1,
+            scores=[
+                GameRoundScore(user_id=2, username="visible", score=100, score_delta=100),
+                GameRoundScore(user_id=3, username="banned", score=300, score_delta=300),
+            ],
+        ),
+    ]
+
+    player_view = build_public_game_state(state)
+    host_view = build_public_game_state(state, include_banned_players=True)
+
+    assert [s.user_id for s in player_view.round_results[0].scores] == [2]
+    assert [s.user_id for s in host_view.round_results[0].scores] == [2, 3]
+    assert player_view.total_rounds == 2
+    assert player_view.categories[0].prompts[0].score_value == 100
+    assert len(state.round_results[0].scores) == 2

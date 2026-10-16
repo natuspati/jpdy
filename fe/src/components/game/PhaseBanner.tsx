@@ -40,6 +40,10 @@ function messageFor(state: GameLobbyState, role: Role): string {
       return role === 'host'
         ? 'Answer revealed. Advance when ready.'
         : 'Answer revealed. Waiting for the host…';
+    case 'round_summary':
+      return role === 'host'
+        ? 'Round complete. Start the next round when ready.'
+        : 'Round complete. The next round starts soon…';
     case 'finished':
       return 'Game over.';
     default:
@@ -49,7 +53,12 @@ function messageFor(state: GameLobbyState, role: Role): string {
 
 const PhaseBanner = ({ state, role }: Props) => (
   <div className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-200 sm:text-sm">
-    {messageFor(state, role)}
+    {state.total_rounds > 1 ? (
+      <p className="font-semibold text-amber-300">
+        Round {state.current_round} of {state.total_rounds}
+      </p>
+    ) : null}
+    <p>{messageFor(state, role)}</p>
   </div>
 );
 

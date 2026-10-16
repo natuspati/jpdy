@@ -6,6 +6,7 @@ from configs.constants import (
     ANSWER_REVEAL_TIME_SECONDS,
     ANSWERING_TIME_SECONDS,
     BUZZING_TIME_SECONDS,
+    ROUND_SUMMARY_TIME_SECONDS,
 )
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from errors.request import BadRequestError, ForbiddenError
@@ -38,6 +39,7 @@ def _state(*, player_count: int = 2, prompt_count: int = 2) -> GameLobbyState:
             question=f"Question {prompt_id}",
             answer=f"Answer {prompt_id}",
             order=index,
+            score_value=index * 100,
         )
         for index, prompt_id in enumerate([PROMPT_ONE_ID, PROMPT_TWO_ID][:prompt_count], start=1)
     ]
@@ -339,3 +341,188 @@ def test_sound_cue_increments_with_existing_reason_name() -> None:
 
     assert outcome.reason == "sound_cue:game_started"
     assert state.sound_cue_id == 1
+
+
+ROUND_TWO_PROMPT_ID = 20
+
+
+def _round_reveal_state(*, current_round: int = 1, total_rounds: int = 2) -> GameLobbyState:
+    """Last prompt of ``current_round`` resolved and in answer reveal."""
+    state = _state()
+    state.categories[0].prompts = state.categories[0].prompts[:1]
+    state.categories.append(
+        GameCategoryState(
+            category_id=2,
+            name="Round two",
+            round_number=2,
+            prompts=[
+                GamePromptState(
+                    prompt_id=ROUND_TWO_PROMPT_ID,
+                    question="Q",
+                    answer="A",
+                    order=1,
+                    score_value=200,
+                ),
+            ],
+        ),
+    )
+    state.total_rounds = total_rounds
+    state.current_round = current_round
+    state.phase = GamePhaseEnum.PLAYER_ANSWERING
+    state.selecting_player_id = PLAYER_ONE_ID
+    state.answering_player_id = PLAYER_ONE_ID
+    state.timer_deadline = NOW + timedelta(seconds=ANSWERING_TIME_SECONDS)
+    prompt_id = PROMPT_ONE_ID if current_round == 1 else ROUND_TWO_PROMPT_ID
+    state.current_prompt_id = prompt_id
+    for category in state.categories:
+        for prompt in category.prompts:
+            prompt.is_selected = category.round_number <= current_round
+    return state
+
+
+def test_end_of_non_final_round_enters_round_summary_with_scores_and_deltas() -> None:
+    machine = _machine()
+    state = _round_reveal_state()
+    machine.judge_answer(state, HOST_ID, correct=True)
+    state.players[1].score = 40
+
+    machine.advance_answer_reveal(state, HOST_ID)
+
+    assert state.phase == GamePhaseEnum.ROUND_SUMMARY
+    assert state.selecting_player_id is None
+    assert not any(player.is_selected for player in state.players)
+    assert state.timer_deadline == NOW + timedelta(seconds=ROUND_SUMMARY_TIME_SECONDS)
+    [result] = state.round_results
+    assert result.round_number == 1
+    assert [(s.user_id, s.score, s.score_delta) for s in result.scores] == [
+        (PLAYER_ONE_ID, 100, 100),
+        (PLAYER_TWO_ID, 40, 40),
+    ]
+
+
+def test_round_two_delta_is_relative_to_round_one() -> None:
+    machine = _machine()
+    state = _round_reveal_state()
+    machine.judge_answer(state, HOST_ID, correct=True)
+    machine.advance_answer_reveal(state, HOST_ID)
+    machine.advance_round(state, HOST_ID)
+
+    state.categories[1].prompts[0].is_selected = True
+    state.phase = GamePhaseEnum.ANSWER_REVEAL
+    state.players[0].score = 100 + 200
+    state.players[1].score = -50
+    machine.advance_answer_reveal(state, HOST_ID)
+
+    assert state.phase == GamePhaseEnum.FINISHED
+    last = state.round_results[-1]
+    assert last.round_number == 2
+    assert [(s.score, s.score_delta) for s in last.scores] == [(300, 200), (-50, -50)]
+
+
+def test_final_round_goes_straight_to_finished_and_records_result() -> None:
+    machine = _machine()
+    state = _round_reveal_state(current_round=2)
+    state.round_results = []
+
+    machine.judge_answer(state, HOST_ID, correct=True)
+    assert state.players[0].score == 200
+    machine.advance_answer_reveal(state, HOST_ID)
+
+    assert state.phase == GamePhaseEnum.FINISHED
+    assert state.selecting_player_id is None
+    assert state.timer_deadline is None
+    assert [r.round_number for r in state.round_results] == [2]
+
+
+def test_single_round_game_still_finishes_directly() -> None:
+    machine = _machine()
+    state = _round_reveal_state(total_rounds=1)
+    state.categories = state.categories[:1]
+
+    machine.judge_answer(state, HOST_ID, correct=True)
+    machine.advance_answer_reveal(state, HOST_ID)
+
+    assert state.phase == GamePhaseEnum.FINISHED
+    assert len(state.round_results) == 1
+
+
+def test_round_summary_expiry_starts_next_round_with_lowest_scorer() -> None:
+    machine = _machine()
+    state = _round_reveal_state()
+    machine.judge_answer(state, HOST_ID, correct=True)
+    machine.advance_answer_reveal(state, HOST_ID)
+    state.timer_deadline = NOW
+
+    machine.expire_timer(state, state.timer_revision, state.timer_deadline)
+
+    assert state.phase == GamePhaseEnum.PLAYER_SELECTING_PROMPT
+    assert state.current_round == 2
+    assert state.selecting_player_id == PLAYER_TWO_ID
+    assert state.players[1].is_selected is True
+    assert state.timer_deadline is None
+
+
+def test_advance_round_is_host_only_and_phase_gated() -> None:
+    machine = _machine()
+    state = _round_reveal_state()
+
+    with pytest.raises(ForbiddenError, match="Only the host"):
+        machine.advance_round(state, PLAYER_ONE_ID)
+    with pytest.raises(BadRequestError, match="Action not allowed during phase"):
+        machine.advance_round(state, HOST_ID)
+
+    machine.judge_answer(state, HOST_ID, correct=True)
+    machine.advance_answer_reveal(state, HOST_ID)
+    machine.advance_round(state, HOST_ID)
+    assert state.phase == GamePhaseEnum.PLAYER_SELECTING_PROMPT
+    assert state.current_round == 2
+
+
+def test_next_round_selector_falls_back_to_host_on_tied_lowest_score() -> None:
+    machine = _machine()
+    state = _round_reveal_state()
+    machine.judge_answer(state, HOST_ID, correct=False)
+    state.phase = GamePhaseEnum.ANSWER_REVEAL
+    machine.advance_answer_reveal(state, HOST_ID)
+    state.players[0].score = 0
+    state.players[1].score = 0
+
+    machine.advance_round(state, HOST_ID)
+
+    assert state.phase == GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
+    assert state.selecting_player_id is None
+    assert state.current_round == 2
+
+
+def test_next_round_selector_ignores_ineligible_and_falls_back_without_players() -> None:
+    machine = _machine()
+    state = _round_reveal_state()
+    machine.judge_answer(state, HOST_ID, correct=True)
+    machine.advance_answer_reveal(state, HOST_ID)
+    state.players[1].is_banned = True  # lowest scorer is banned
+
+    machine.advance_round(state, HOST_ID)
+    assert state.phase == GamePhaseEnum.PLAYER_SELECTING_PROMPT
+    assert state.selecting_player_id == PLAYER_ONE_ID
+
+    state = _round_reveal_state()
+    machine.judge_answer(state, HOST_ID, correct=True)
+    machine.advance_answer_reveal(state, HOST_ID)
+    for player in state.players:
+        player.connection_status = PlayerConnectionStatusEnum.DISCONNECTED
+    machine.advance_round(state, HOST_ID)
+    assert state.phase == GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
+
+
+def test_select_prompt_rejects_prompt_from_another_round() -> None:
+    machine = _machine()
+    state = _round_reveal_state()
+    machine.judge_answer(state, HOST_ID, correct=True)
+    machine.advance_answer_reveal(state, HOST_ID)
+    machine.advance_round(state, HOST_ID)
+
+    with pytest.raises(BadRequestError, match="another round"):
+        machine.select_prompt(state, PLAYER_TWO_ID, PROMPT_ONE_ID)
+
+    machine.select_prompt(state, PLAYER_TWO_ID, ROUND_TWO_PROMPT_ID)
+    assert state.phase == GamePhaseEnum.PLAYER_ANSWERING

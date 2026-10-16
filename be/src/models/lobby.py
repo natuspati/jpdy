@@ -17,6 +17,20 @@ class LobbyPromptCategory(Base):
         ForeignKey("prompt_category.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    round_number: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
+
+class LobbyRoundResult(Base):
+    __tablename__ = "lobby_round_result"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    lobby_id: Mapped[int] = mapped_column(ForeignKey("lobby.id", ondelete="CASCADE"))
+    round_number: Mapped[int] = mapped_column(Integer)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"))
+    username_snapshot: Mapped[str] = mapped_column()
+    score: Mapped[int] = mapped_column(Integer)
+    score_delta: Mapped[int] = mapped_column(Integer)
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 class Lobby(Base):

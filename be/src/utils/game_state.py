@@ -1,11 +1,15 @@
 from dataclasses import dataclass
 
+from configs.constants import ROUND_SCORE_MULTIPLIER, SCORE_MULTIPLIER
 from enums.game import GamePhaseEnum, PlayerConnectionStatusEnum
 from enums.prompt import QuestionTypeEnum
 from schemas.lobby.game_state import (
+    GameCategoryState,
     GameLobbyState,
     GamePlayerState,
     GamePromptState,
+    GameRoundResult,
+    GameRoundScore,
     PublicGameCategoryState,
     PublicGameLobbyState,
     PublicGamePromptState,
@@ -94,8 +98,49 @@ def get_eligible_buzzers(state: GameLobbyState) -> list[GamePlayerState]:
     ]
 
 
-def all_board_prompts_spent(state: GameLobbyState) -> bool:
-    return all(prompt.is_selected for category in state.categories for prompt in category.prompts)
+def round_score_value(order: int, round_number: int) -> int:
+    return order * SCORE_MULTIPLIER * ROUND_SCORE_MULTIPLIER ** (round_number - 1)
+
+
+def find_game_category_of_prompt(state: GameLobbyState, prompt_id: int) -> GameCategoryState | None:
+    return next(
+        (
+            category
+            for category in state.categories
+            if any(prompt.prompt_id == prompt_id for prompt in category.prompts)
+        ),
+        None,
+    )
+
+
+def current_round_prompts_spent(state: GameLobbyState) -> bool:
+    return all(
+        prompt.is_selected
+        for category in state.categories
+        if category.round_number == state.current_round
+        for prompt in category.prompts
+    )
+
+
+def build_round_result(state: GameLobbyState) -> GameRoundResult:
+    """Snapshot every player's cumulative score and this round's delta."""
+    previous = {
+        score.user_id: score.score
+        for score in (state.round_results[-1].scores if state.round_results else [])
+    }
+    return GameRoundResult(
+        round_number=state.current_round,
+        scores=[
+            GameRoundScore(
+                user_id=player.user_id,
+                username=player.username,
+                score=player.score,
+                score_delta=player.score - previous.get(player.user_id, 0),
+                is_banned=player.is_banned,
+            )
+            for player in state.players
+        ],
+    )
 
 
 def build_public_game_state(
@@ -111,6 +156,19 @@ def build_public_game_state(
         else [player for player in state.players if not player.is_banned]
     )
     visible_player_ids = {player.user_id for player in players}
+    banned_ids = {player.user_id for player in state.players if player.is_banned}
+    round_results = [
+        result.model_copy(
+            update={
+                "scores": [
+                    score
+                    for score in result.scores
+                    if include_banned_players or score.user_id not in banned_ids
+                ],
+            },
+        )
+        for result in state.round_results
+    ]
 
     return PublicGameLobbyState(
         lobby_id=state.lobby_id,
@@ -121,6 +179,7 @@ def build_public_game_state(
             PublicGameCategoryState(
                 category_id=category.category_id,
                 name=category.name,
+                round_number=category.round_number,
                 prompts=[
                     PublicGamePromptState(
                         prompt_id=prompt.prompt_id,
@@ -135,6 +194,7 @@ def build_public_game_state(
                         question_media=prompt.question_media,
                         answer_media=prompt.answer_media,
                         order=prompt.order,
+                        score_value=prompt.score_value,
                         is_selected=prompt.is_selected,
                     )
                     for prompt in category.prompts
@@ -143,6 +203,9 @@ def build_public_game_state(
             for category in state.categories
         ],
         phase=state.phase,
+        current_round=state.current_round,
+        total_rounds=state.total_rounds,
+        round_results=round_results,
         current_prompt_id=state.current_prompt_id,
         selecting_player_id=(
             state.selecting_player_id if state.selecting_player_id in visible_player_ids else None

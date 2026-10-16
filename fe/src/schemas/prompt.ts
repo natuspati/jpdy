@@ -5,6 +5,12 @@ import { MediaReference } from './media';
 
 // NUM_PROMPTS_IN_CATEGORY mirrors be constants
 export const NUM_PROMPTS_IN_CATEGORY = 5;
+// Round limits and value scaling mirror be constants too.
+export const MIN_ROUNDS_IN_LOBBY = 1;
+export const MAX_ROUNDS_IN_LOBBY = 3;
+export const MIN_CATEGORIES_PER_ROUND = 1;
+export const MAX_CATEGORIES_PER_ROUND = 5;
+export const ROUND_SCORE_MULTIPLIER = 2;
 export const PromptContentType = z.enum(['text', 'image', 'audio', 'video']);
 export type PromptContentType = z.infer<typeof PromptContentType>;
 

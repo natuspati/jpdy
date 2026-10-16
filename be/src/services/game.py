@@ -189,6 +189,21 @@ class GameService:
         await self._projections.project_completion(state)
         return state
 
+    async def advance_round(
+        self,
+        lobby_id: int,
+        user_id: int,
+        command_id: str | None = None,
+    ) -> GameLobbyState:
+        state = await self._executor.execute(
+            lobby_id,
+            command_id,
+            "advance_round",
+            partial(self._state_machine.advance_round, user_id=user_id),
+        )
+        assert state is not None
+        return state
+
     async def ban_player(
         self,
         lobby_id: int,

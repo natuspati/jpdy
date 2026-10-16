@@ -55,10 +55,29 @@ export const LobbyFinalRanking = z.object({
 });
 export type LobbyFinalRanking = z.infer<typeof LobbyFinalRanking>;
 
+// LobbyRoundResultSchema
+export const LobbyRoundResult = z.object({
+  user_id: z.number().int().nullable(),
+  username: z.string(),
+  score: z.number().int(),
+  score_delta: z.number().int(),
+  is_banned: z.boolean(),
+});
+export type LobbyRoundResult = z.infer<typeof LobbyRoundResult>;
+
+// LobbyRoundSchema; `results` is null until the lobby is completed.
+export const LobbyRound = z.object({
+  round_number: z.number().int().positive(),
+  categories: z.array(PromptCategoryInDB),
+  results: z.array(LobbyRoundResult).nullable(),
+});
+export type LobbyRound = z.infer<typeof LobbyRound>;
+
 export const LobbyDetails = LobbyWithCategories.extend({
   is_owner: z.boolean(),
   is_participant: z.boolean(),
   final_rankings: z.array(LobbyFinalRanking).nullable(),
+  rounds: z.array(LobbyRound).default([]),
 });
 export type LobbyDetails = z.infer<typeof LobbyDetails>;
 
@@ -66,7 +85,8 @@ export type LobbyDetails = z.infer<typeof LobbyDetails>;
 export const LobbyUpdate = z
   .object({
     state: LobbyStateEnum.optional(),
-    prompt_category_ids: z.array(z.number().int()).optional(),
+    // Category ids per round; list index + 1 is the round number.
+    rounds: z.array(z.array(z.number().int())).optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: 'No fields to update' });
 export type LobbyUpdate = z.infer<typeof LobbyUpdate>;

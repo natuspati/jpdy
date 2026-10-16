@@ -4,6 +4,7 @@ import {
   ANSWERING_TIME_SECONDS,
   ANSWER_REVEAL_TIME_SECONDS,
   BUZZING_TIME_SECONDS,
+  ROUND_SUMMARY_TIME_SECONDS,
   timerSecondsForPhase,
 } from './gameTiming';
 
@@ -15,5 +16,7 @@ describe('timerSecondsForPhase', () => {
     expect(ANSWERING_TIME_SECONDS).toBe(30);
     expect(timerSecondsForPhase('answer_reveal')).toBe(ANSWER_REVEAL_TIME_SECONDS);
     expect(ANSWER_REVEAL_TIME_SECONDS).toBe(30);
+    expect(timerSecondsForPhase('round_summary')).toBe(ROUND_SUMMARY_TIME_SECONDS);
+    expect(ROUND_SUMMARY_TIME_SECONDS).toBe(10);
   });
 });

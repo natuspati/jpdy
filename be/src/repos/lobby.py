@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.selectable import ScalarSelect
 
 from enums.lobby import LobbyStateEnum
-from models.lobby import Lobby, LobbyParticipant, LobbyPromptCategory
+from models.lobby import Lobby, LobbyParticipant, LobbyPromptCategory, LobbyRoundResult
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
 from models.user import User
@@ -16,7 +16,7 @@ from schemas.lobby.nested import (
     LobbyWithCategoryPromptsInDBSchema,
     PaginatedLobbyWithCategoriesInDBSchema,
 )
-from schemas.lobby.participant import LobbyParticipantInDBSchema
+from schemas.lobby.participant import LobbyParticipantInDBSchema, LobbyRoundResultInDBSchema
 from schemas.user.base import UserPublicSchema
 from utils.model_validation import validate_model
 
@@ -358,6 +358,9 @@ class LobbyRepo:
             delete(LobbyParticipant).where(LobbyParticipant.lobby_id == lobby_id),
         )
         await self._session.execute(
+            delete(LobbyRoundResult).where(LobbyRoundResult.lobby_id == lobby_id),
+        )
+        await self._session.execute(
             delete(LobbyPromptCategory).where(LobbyPromptCategory.lobby_id == lobby_id),
         )
         stmt = delete(Lobby).where(Lobby.id == lobby_id)
@@ -382,27 +385,81 @@ class LobbyRepo:
     async def replace_lobby_categories(
         self,
         lobby_id: int,
-        category_ids: list[int],
+        rounds: list[list[int]],
     ) -> None:
         """
-        Replace the full set of categories attached to ``lobby_id`` with
-        ``category_ids``. Wipes existing associations first, then inserts the
-        new ones in a single statement (skipped when ``category_ids`` is empty).
+        Replace the full set of categories attached to ``lobby_id``. Wipes the
+        existing associations first, then inserts one row per category with
+        ``round_number`` set to its list index + 1 (skipped when there are none).
 
         :param lobby_id: lobby primary key
-        :param category_ids: ids to associate; duplicates should be removed by
-            the caller
+        :param rounds: category ids per round; the caller validates uniqueness
         """
         await self._session.execute(
             delete(LobbyPromptCategory).where(
                 LobbyPromptCategory.lobby_id == lobby_id,
             ),
         )
-        if category_ids:
+        rows = [
+            {"lobby_id": lobby_id, "prompt_category_id": cid, "round_number": number}
+            for number, category_ids in enumerate(rounds, start=1)
+            for cid in category_ids
+        ]
+        if rows:
+            await self._session.execute(insert(LobbyPromptCategory), rows)
+
+    async def select_category_rounds(self, lobby_id: int) -> dict[int, int]:
+        """Map each category attached to ``lobby_id`` to its round number."""
+        query = select(
+            LobbyPromptCategory.prompt_category_id,
+            LobbyPromptCategory.round_number,
+        ).where(LobbyPromptCategory.lobby_id == lobby_id)
+        return dict((await self._session.execute(query)).all())
+
+    async def replace_round_results(
+        self,
+        lobby_id: int,
+        results: list[tuple[int, int, str, int, int, bool]],
+    ) -> None:
+        """
+        Delete then insert every round result of ``lobby_id`` so a retried
+        completion projection stays idempotent.
+
+        :param results: ``(round_number, user_id, username, score, score_delta, is_banned)``
+        """
+        await self._session.execute(
+            delete(LobbyRoundResult).where(LobbyRoundResult.lobby_id == lobby_id),
+        )
+        if results:
             await self._session.execute(
-                insert(LobbyPromptCategory),
-                [{"lobby_id": lobby_id, "prompt_category_id": cid} for cid in category_ids],
+                insert(LobbyRoundResult),
+                [
+                    {
+                        "lobby_id": lobby_id,
+                        "round_number": round_number,
+                        "user_id": user_id,
+                        "username_snapshot": username,
+                        "score": score,
+                        "score_delta": score_delta,
+                        "is_banned": is_banned,
+                    }
+                    for round_number, user_id, username, score, score_delta, is_banned in results
+                ],
             )
+
+    async def select_round_results(self, lobby_id: int) -> list[LobbyRoundResultInDBSchema]:
+        query = (
+            select(LobbyRoundResult)
+            .where(LobbyRoundResult.lobby_id == lobby_id)
+            .order_by(
+                LobbyRoundResult.round_number.asc(),
+                LobbyRoundResult.score.desc(),
+                LobbyRoundResult.username_snapshot.asc(),
+                LobbyRoundResult.id.asc(),
+            )
+        )
+        rows = (await self._session.execute(query)).scalars().all()
+        return validate_model(rows, LobbyRoundResultInDBSchema)
 
 
 def _eligible_player_count_query() -> ScalarSelect[int]:

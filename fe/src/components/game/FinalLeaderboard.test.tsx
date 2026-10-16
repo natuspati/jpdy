@@ -47,4 +47,46 @@ describe('FinalLeaderboard', () => {
 
     expect(screen.getByText(/no players finished/i)).toBeInTheDocument();
   });
+
+  it('breaks results down per round for multi-round games', () => {
+    const state = buildGameState({
+      phase: 'finished',
+      totalRounds: 2,
+      currentRound: 2,
+      roundResults: [
+        {
+          round_number: 1,
+          scores: [
+            { user_id: 2, username: 'alice', score: 300, score_delta: 300, is_banned: false },
+          ],
+        },
+        {
+          round_number: 2,
+          scores: [
+            { user_id: 2, username: 'alice', score: 500, score_delta: 200, is_banned: false },
+          ],
+        },
+      ],
+    });
+    state.categories.push({
+      category_id: 11,
+      name: 'Second round topic',
+      round_number: 2,
+      prompts: [],
+    });
+    render(<FinalLeaderboard state={state} />);
+
+    const roundOne = screen.getByRole('region', { name: 'Round 1' });
+    expect(roundOne).toHaveTextContent('Animals');
+    expect(roundOne).toHaveTextContent('300+300');
+    const roundTwo = screen.getByRole('region', { name: 'Round 2' });
+    expect(roundTwo).toHaveTextContent('Second round topic');
+    expect(roundTwo).toHaveTextContent('500+200');
+  });
+
+  it('shows no round recap for a single-round game', () => {
+    render(<FinalLeaderboard state={buildGameState({ phase: 'finished' })} />);
+
+    expect(screen.queryByRole('region', { name: 'Round 1' })).not.toBeInTheDocument();
+  });
 });

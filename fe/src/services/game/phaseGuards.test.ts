@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildGameState } from '@/test/fixtures/gameState';
 import {
   canAdvanceAnswerReveal,
+  canAdvanceRound,
   canBan,
   canBuzz,
   canJudge,
@@ -57,6 +58,25 @@ describe('phaseGuards', () => {
     expect(canSelectPrompt(ok, 2, 101)).toBe(true);
     expect(canSelectPrompt(ok, 3, 101)).toBe(false);
     expect(canSelectPrompt(ok, 2, 999)).toBe(false);
+  });
+
+  it('canSelectPrompt rejects prompts that belong to another round', () => {
+    const state = buildGameState({
+      phase: 'player_selecting_prompt',
+      selectingPlayerId: 2,
+      currentRound: 2,
+      totalRounds: 2,
+    });
+    expect(canSelectPrompt(state, 2, 101)).toBe(false);
+    state.categories[0].round_number = 2;
+    expect(canSelectPrompt(state, 2, 101)).toBe(true);
+  });
+
+  it('canAdvanceRound only for host during round_summary', () => {
+    const summary = buildGameState({ phase: 'round_summary', totalRounds: 2 });
+    expect(canAdvanceRound(summary, 1)).toBe(true);
+    expect(canAdvanceRound(summary, 2)).toBe(false);
+    expect(canAdvanceRound(buildGameState({ phase: 'answer_reveal' }), 1)).toBe(false);
   });
 
   it('canJudge only for host while a player is answering', () => {

@@ -16,6 +16,7 @@ _TIMED_PHASES = {
     GamePhaseEnum.PLAYER_ANSWERING,
     GamePhaseEnum.BUZZ_OPEN,
     GamePhaseEnum.ANSWER_REVEAL,
+    GamePhaseEnum.ROUND_SUMMARY,
 }
 
 

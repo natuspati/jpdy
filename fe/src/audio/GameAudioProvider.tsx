@@ -288,7 +288,12 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
 
   const syncGameState = useCallback(
     (state: GameLobbyState | null) => {
-      if (!state || state.phase === 'finished' || state.phase === 'answer_reveal') {
+      if (
+        !state ||
+        state.phase === 'finished' ||
+        state.phase === 'answer_reveal' ||
+        state.phase === 'round_summary'
+      ) {
         void startBackground(null);
         return;
       }

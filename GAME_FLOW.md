@@ -71,9 +71,14 @@ created → waiting_start → in_progress → completed
 
 ### Category requirements
 
-- A lobby must have between one and ten attached categories.
+- A lobby has between one and three **rounds**, and each round has between one
+  and five categories. The host assigns categories to rounds when creating the
+  lobby (`rounds`: one list of category ids per round; list index + 1 is the
+  round number).
+- A category can be used only once per lobby; it cannot appear in two rounds.
+  The maximum is therefore 3 x 5 = 15 categories.
 - A lobby may move from `created` to `waiting_start` only after categories are
-  attached.
+  attached to every round.
 - Every attached category must contain exactly five valid prompts with unique
   orders `1..5`.
 - Each prompt has independent `question_type` and `answer_type` values:
@@ -83,6 +88,19 @@ created → waiting_start → in_progress → completed
   question and answer text remain required for every content type.
 - On transition to `waiting_start`, selected categories and prompts are
   snapshotted for the game. Later category edits do not change the lobby.
+
+### Rounds and prompt values
+
+- Prompt value in round `r` is `order * 100 * 2^(r-1)`: round 1 is 100..500,
+  round 2 is 200..1000, and round 3 is 400..2000. The value is stored on each
+  prompt as `score_value` when the lobby is materialized.
+- A wrong answer or timeout deducts the round-scaled value, exactly as in
+  round 1.
+- Only the current round's categories are selectable. All rounds stay in
+  `categories` so clients can preload media for the whole game; the board
+  shows only categories whose `round_number` equals `current_round`.
+- A game whose Redis state predates rounds loads as a single round
+  (`current_round=1`, `total_rounds=1`, category `round_number=1`).
 
 ### Roster rules
 
@@ -109,8 +127,10 @@ created → waiting_start → in_progress → completed
   non-banned participants while the lobby is `waiting_start` or
   `in_progress`, so either role can return after disconnecting.
 - At completion, final player scores and ban status are snapshotted to
-  `LobbyParticipant`. Host and non-banned participants can read lobby details
-  and final ranking without opening a game socket.
+  `LobbyParticipant`, and every round's standings are stored in
+  `lobby_round_result`. Host and non-banned participants can read lobby details,
+  final ranking, and per-round categories and results without opening a game
+  socket.
 - Host may delete its lobby in any lifecycle state. Server removes persistent
   lobby data plus the Redis state, event-stream, and timer-schedule keys,
   cancels local timer wakeups, emits `lobby_deleted`, then asks Socket.IO to
@@ -148,11 +168,17 @@ PublicGameLobbyState
 ├─ players[]
 │  └─ { user_id, username, score, connection_status, is_selected, is_banned }
 ├─ categories[]
+│  ├─ { category_id, name, round_number }
 │  └─ prompts[] {
 │       prompt_id, question, question_type, question_media,
 │       order, is_selected, score_value
 │     }
 ├─ phase
+├─ current_round
+├─ total_rounds
+├─ round_results[]                # one entry per finished round
+│  └─ { round_number, scores[] { user_id, username, score, score_delta,
+│       is_banned } }              # score is cumulative, score_delta is the round's
 ├─ current_prompt_id
 ├─ selecting_player_id
 ├─ answering_player_id
@@ -172,7 +198,8 @@ than the newest revision they rendered.
 
 The host receives the full player roster, including banned rows, so it can
 moderate and unban them. Non-host snapshots omit banned players entirely,
-including their scores, connection state, and active labels. The server emits
+including their scores, connection state, active labels, and their rows in
+`round_results`. The server emits
 recipient-specific snapshots to separate host and player Socket.IO rooms; it
 never broadcasts a broad state frame before these recipient-specific frames.
 
@@ -264,6 +291,7 @@ player_selecting_prompt
 player_answering
 buzz_open
 answer_reveal
+round_summary
 finished
 ```
 
@@ -299,7 +327,8 @@ host_selecting_starting_player
 - The game transitions to `player_selecting_prompt`.
 
 This phase occurs at game start and whenever ban recovery needs the host to
-choose a replacement selector. If no player is currently eligible, it remains
+choose a replacement selector. It also occurs at the start of a later round
+when the lowest-scoring eligible player is not unique, or nobody is eligible. If no player is currently eligible, it remains
 visible until somebody reconnects or the host unbans somebody.
 
 ### 3. Select a clue
@@ -310,7 +339,8 @@ Phase:
 player_selecting_prompt
 ```
 
-- Only `selecting_player_id` may select an unselected prompt.
+- Only `selecting_player_id` may select an unselected prompt, and only one in
+  the current round (`Prompt belongs to another round` otherwise).
 - The selected prompt becomes permanently spent.
 - Set:
   - `current_prompt_id`;
@@ -439,14 +469,45 @@ When the host advances or the reveal timer expires:
     connected and non-banned;
   - otherwise transition to `host_selecting_starting_player` so host chooses
     next player;
-- if every prompt has been selected:
-  - transition to `finished`;
-  - clear timers and active IDs;
-  - update database lobby state to `completed`;
-  - snapshot final player score, username, and ban status for final ranking.
+- if every prompt of the current round has been selected:
+  - append a `round_results` entry with every player's cumulative score and
+    `score_delta` (the score minus that player's score in the previous round
+    result, or minus 0 for round 1), including banned players;
+  - if `current_round < total_rounds`, transition to `round_summary`;
+  - otherwise transition to `finished`:
+    - clear timers and active IDs;
+    - update database lobby state to `completed`;
+    - snapshot final player score, username, and ban status for final ranking
+      and store the round results.
 
-The final clue always receives its answer-reveal period before the final
-leaderboard appears.
+The final clue of every round always receives its answer-reveal period before
+the round leaderboard or final leaderboard appears.
+
+### Round summary
+
+Phase:
+
+```text
+round_summary
+```
+
+Exists only between rounds, after every prompt of the round is spent, so a
+round cannot be skipped. After the **last** round there is no `round_summary`:
+the game goes straight to `finished`.
+
+- `selecting_player_id` is cleared, selection flags are cleared, and the
+  server starts a 10-second timer.
+- All clients show the round leaderboard: per player the cumulative score and
+  the delta earned in that round.
+- The host may end the summary early with `advance_round`; otherwise the
+  timer does. There is no other way to start the next round.
+- Starting the next round increments `current_round`, clears the timer, and
+  picks the next selector: the connected, non-banned player with the strictly
+  lowest score moves to `player_selecting_prompt`. If the lowest score is tied,
+  or nobody is eligible, enter `host_selecting_starting_player`.
+- Bans need no special branch here because `selecting_player_id` is `None`
+  during the summary.
+- No new sound cue is issued; background music stops, as in `answer_reveal`.
 
 ## Ban recovery
 
@@ -473,6 +534,7 @@ Timer durations are:
 answering timer:     30 seconds
 buzz timer:          10 seconds
 answer reveal timer: 30 seconds maximum
+round summary timer: 10 seconds
 ```
 
 The server is authoritative:
@@ -505,6 +567,7 @@ The server is authoritative:
 | `judge_answer` | host | `player_answering` |
 | `buzz` | eligible non-host player | `buzz_open` |
 | `advance_answer_reveal` | host | `answer_reveal` |
+| `advance_round` | host | `round_summary` |
 | `ban_player` / `unban_player` | host | no phase restriction while host has active lobby socket |
 
 All rejected events return a structured socket error to the sender. Clients
@@ -513,8 +576,8 @@ must not optimistically mutate game state.
 Payload-bearing events accept an optional UUID `command_id`; a repeated
 accepted ID returns its cached result without a second state mutation. The
 web client emits a UUID for every gameplay event, but the current server reads
-it only from payload-bearing events. `buzz` and
-`advance_answer_reveal` currently receive a server-generated ID, so retries
+it only from payload-bearing events. `buzz`,
+`advance_answer_reveal`, and `advance_round` currently receive a server-generated ID, so retries
 of those payload-free events are not client-idempotent. Older clients without
 a payload command ID also receive a server-generated ID.
 
@@ -526,12 +589,21 @@ a payload command ID also receive a server-generated ID.
   - `waiting_for_players`;
   - `host_selecting_starting_player`;
   - `player_selecting_prompt`.
+- Show only the current round's categories on the board
+  (`round_number === current_round`).
 - Give every category header the same vertical space so prompt rows align
   despite title length.
 - Replace board with full prompt stage in:
   - `player_answering`;
   - `buzz_open`;
   - `answer_reveal`.
+- In `round_summary`, show the round leaderboard in the board area (title
+  "Round N complete", rank, name, cumulative score, and `+delta`, plus the
+  countdown). The host sees a **Start round N+1** button; everyone else sees
+  "Next round starts automatically". The phase banner shows "Round X of Y"
+  whenever `total_rounds > 1`.
+- The final leaderboard and lobby details break results down per round: each
+  round's category names plus the standings after it.
 - Current prompt provides its text, type, and optional media only while prompt
   is active. Question and answer audio/video use stable per-prompt playback
   identities, so ordinary parent renders do not restart them. Each game-media

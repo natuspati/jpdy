@@ -1,6 +1,7 @@
 import Card from '@/components/ui/Card';
 import type { GameLobbyState } from '@/schemas';
 import { sortedScoreboard } from '@/services/game/gameDerivations';
+import RoundRecap from './RoundRecap';
 
 const FinalLeaderboard = ({ state }: { state: GameLobbyState }) => {
   const sorted = sortedScoreboard(state);
@@ -27,6 +28,24 @@ const FinalLeaderboard = ({ state }: { state: GameLobbyState }) => {
           ))}
         </ol>
       )}
+      {state.total_rounds > 1
+        ? state.round_results.map((result) => (
+            <RoundRecap
+              key={result.round_number}
+              roundNumber={result.round_number}
+              categoryNames={state.categories
+                .filter((category) => category.round_number === result.round_number)
+                .map((category) => category.name)}
+              standings={result.scores.map((score) => ({
+                key: score.user_id,
+                username: score.username,
+                score: score.score,
+                scoreDelta: score.score_delta,
+                isBanned: score.is_banned,
+              }))}
+            />
+          ))
+        : null}
       <p className="text-center text-xs text-slate-400">
         Host: <span className="text-amber-300">{state.host.username}</span> (non-scoring)
       </p>

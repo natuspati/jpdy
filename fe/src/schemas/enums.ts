@@ -12,6 +12,7 @@ export const GamePhaseEnum = z.enum([
   'player_answering',
   'buzz_open',
   'answer_reveal',
+  'round_summary',
   'finished',
 ]);
 export type GamePhaseEnum = z.infer<typeof GamePhaseEnum>;

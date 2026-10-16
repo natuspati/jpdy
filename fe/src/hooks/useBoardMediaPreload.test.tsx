@@ -18,6 +18,7 @@ const categories = (
   {
     category_id: 1,
     name: 'Category',
+    round_number: 1,
     prompts: items.map(([question_media, answer_media], index) => ({
       prompt_id: index + 1,
       question: '',
@@ -83,5 +84,16 @@ describe('useBoardMediaPreload', () => {
     const { result } = renderHook(() => useBoardMediaPreload(categories([null])));
 
     expect(result.current).toEqual({ loaded: 0, total: 0 });
+  });
+
+  it('preloads media from every round, not only the current one', async () => {
+    const [roundOne] = categories([media('/media/r1.mp4')]);
+    const [roundTwoBase] = categories([media('/media/r2.mp4')]);
+    const roundTwo = { ...roundTwoBase, category_id: 2, round_number: 2 };
+
+    const { result } = renderHook(() => useBoardMediaPreload([roundOne, roundTwo]));
+
+    await waitFor(() => expect(result.current).toEqual({ loaded: 2, total: 2 }));
+    expect([...fetched].sort()).toEqual(['/media/r1.mp4', '/media/r2.mp4']);
   });
 });

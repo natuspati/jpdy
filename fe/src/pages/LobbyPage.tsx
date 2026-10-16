@@ -8,6 +8,7 @@ import HostControls from '@/components/game/HostControls';
 import HostJudgePanel from '@/components/game/HostJudgePanel';
 import PhaseBanner from '@/components/game/PhaseBanner';
 import PromptStage from '@/components/game/PromptStage';
+import RoundSummary from '@/components/game/RoundSummary';
 import ScoreBoard from '@/components/game/ScoreBoard';
 import TimerBar from '@/components/game/TimerBar';
 import { useGameAudio } from '@/audio/useGameAudio';
@@ -121,11 +122,10 @@ const LobbyPage = () => {
 
   const totalSecondsForPhase = timerSecondsForPhase(state.phase);
   const isFinished = state.phase === 'finished';
-  const showBoard = [
-    'waiting_for_players',
-    'host_selecting_starting_player',
-    'player_selecting_prompt',
-  ].includes(state.phase) || revealingPromptId !== null;
+  const showBoard =
+    ['waiting_for_players', 'host_selecting_starting_player', 'player_selecting_prompt'].includes(
+      state.phase,
+    ) || revealingPromptId !== null;
   const showPromptStage =
     !!view.currentPrompt &&
     revealingPromptId === null &&
@@ -148,6 +148,7 @@ const LobbyPage = () => {
         : 'Another player is answering.';
     }
     if (state.phase === 'answer_reveal') return 'Waiting for the next clue.';
+    if (state.phase === 'round_summary') return 'Waiting for the next round.';
     return 'Buzzing is closed.';
   })();
 
@@ -182,7 +183,13 @@ const LobbyPage = () => {
 
       <div data-panel-section="countdown" className="shrink-0 empty:hidden">
         <TimerBar
-          deadline={revealingPromptId === null ? state.timer_deadline : null} totalSeconds={totalSecondsForPhase} />
+          deadline={
+            revealingPromptId === null && state.phase !== 'round_summary'
+              ? state.timer_deadline
+              : null
+          }
+          totalSeconds={totalSecondsForPhase}
+        />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -192,6 +199,13 @@ const LobbyPage = () => {
             currentUserId={userId}
             flashPromptId={revealingPromptId}
             onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
+          />
+        ) : null}
+        {state.phase === 'round_summary' ? (
+          <RoundSummary
+            state={state}
+            currentUserId={userId}
+            onAdvance={() => emit('advance_round')}
           />
         ) : null}
         {showPromptStage && view.currentPrompt ? (

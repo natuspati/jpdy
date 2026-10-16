@@ -2,11 +2,15 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import insert, update
 
-from configs.constants import MAX_CATEGORIES_IN_LOBBY, NUM_PROMPTS_IN_CATEGORY
+from configs.constants import (
+    MAX_CATEGORIES_PER_ROUND,
+    MAX_ROUNDS_IN_LOBBY,
+    NUM_PROMPTS_IN_CATEGORY,
+)
 from enums.lobby import LobbyStateEnum
 from factories import PromptCategoryCreateSchemaFactory, PromptCreateSchemaFactory
 from fixtures.auth_fixtures import AuthedUser
-from models.lobby import Lobby, LobbyParticipant
+from models.lobby import Lobby, LobbyParticipant, LobbyRoundResult
 from repos.game_state import GameStateRepo
 from schemas.lobby.game_state import GameLobbyState, GamePlayerState
 from utils.game_state import game_state_key
@@ -39,7 +43,7 @@ async def _prepare_lobby(
     category_id = await _create_complete_category(client, user)
     attach = await client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [category_id]},
+        json={"rounds": [[category_id]]},
         headers=user["headers"],
     )
     assert attach.status_code == 200, attach.text
@@ -197,7 +201,7 @@ async def test_update_lobby_attaches_categories(
 
     response = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [c1, c2]},
+        json={"rounds": [[c1, c2]]},
         headers=authed_user["headers"],
     )
     assert response.status_code == 200, response.text
@@ -217,14 +221,14 @@ async def test_update_lobby_replaces_existing_categories(
 
     first = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [c1, c2]},
+        json={"rounds": [[c1, c2]]},
         headers=authed_user["headers"],
     )
     assert first.status_code == 200
 
     second = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [c3]},
+        json={"rounds": [[c3]]},
         headers=authed_user["headers"],
     )
     assert second.status_code == 200, second.text
@@ -241,7 +245,7 @@ async def test_update_lobby_prepares_complete_categories_and_snapshots_state(
     category_id = await _create_complete_category(http_client, authed_user)
     attach = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [category_id]},
+        json={"rounds": [[category_id]]},
         headers=authed_user["headers"],
     )
     assert attach.status_code == 200, attach.text
@@ -254,6 +258,42 @@ async def test_update_lobby_prepares_complete_categories_and_snapshots_state(
     assert response.status_code == 200, response.text
     assert response.json()["state"] == LobbyStateEnum.WAITING_START.value
     assert await redis_client.get(game_state_key(lobby_id)) is not None
+
+
+async def test_materialized_state_assigns_rounds_and_scales_prompt_values(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    redis_client,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    round_one = await _create_complete_category(http_client, authed_user, "Round one")
+    round_two = await _create_complete_category(http_client, authed_user, "Round two")
+    attach = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"rounds": [[round_one], [round_two]]},
+        headers=authed_user["headers"],
+    )
+    assert attach.status_code == 200, attach.text
+    prepare = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"state": LobbyStateEnum.WAITING_START.value},
+        headers=authed_user["headers"],
+    )
+    assert prepare.status_code == 200, prepare.text
+
+    raw = await redis_client.get(game_state_key(lobby_id))
+    state = GameLobbyState.model_validate_json(raw)
+
+    assert state.total_rounds == 2
+    assert state.current_round == 1
+    assert [(c.category_id, c.round_number) for c in state.categories] == [
+        (round_one, 1),
+        (round_two, 2),
+    ]
+    assert [[p.score_value for p in c.prompts] for c in state.categories] == [
+        [100, 200, 300, 400, 500],
+        [200, 400, 600, 800, 1000],
+    ]
 
 
 async def test_prepared_lobby_keeps_prompt_snapshot_after_category_edit(
@@ -272,7 +312,7 @@ async def test_prepared_lobby_keeps_prompt_snapshot_after_category_edit(
 
     attach = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [category_id]},
+        json={"rounds": [[category_id]]},
         headers=authed_user["headers"],
     )
     assert attach.status_code == 200, attach.text
@@ -312,7 +352,7 @@ async def test_update_lobby_rejects_preparing_incomplete_categories(
     category_id = await _create_category(http_client, authed_user)
     attach = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [category_id]},
+        json={"rounds": [[category_id]]},
         headers=authed_user["headers"],
     )
     assert attach.status_code == 200, attach.text
@@ -351,7 +391,7 @@ async def test_update_lobby_rejects_categories_when_not_in_created(
 
     attach = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [c1]},
+        json={"rounds": [[c1]]},
         headers=authed_user["headers"],
     )
     assert attach.status_code == 200, attach.text
@@ -365,7 +405,7 @@ async def test_update_lobby_rejects_categories_when_not_in_created(
 
     response = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [c2]},
+        json={"rounds": [[c2]]},
         headers=authed_user["headers"],
     )
     assert response.status_code == 400
@@ -395,28 +435,100 @@ async def test_update_lobby_rejects_unknown_category_ids(
 
     response = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [c1, 99999]},
+        json={"rounds": [[c1, 99999]]},
         headers=authed_user["headers"],
     )
     assert response.status_code == 400
 
 
-async def test_update_lobby_rejects_too_many_categories(
+async def test_update_lobby_rejects_too_many_categories_in_a_round(
     http_client: AsyncClient,
     authed_user: AuthedUser,
 ):
     lobby_id = await _create_lobby(http_client, authed_user)
     ids = [
         await _create_category(http_client, authed_user, f"C{i}")
-        for i in range(MAX_CATEGORIES_IN_LOBBY + 1)
+        for i in range(MAX_CATEGORIES_PER_ROUND + 1)
     ]
 
     response = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": ids},
+        json={"rounds": [ids]},
         headers=authed_user["headers"],
     )
     assert response.status_code == 400
+
+
+async def test_update_lobby_rejects_too_many_rounds(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    ids = [
+        await _create_category(http_client, authed_user, f"C{i}")
+        for i in range(MAX_ROUNDS_IN_LOBBY + 1)
+    ]
+
+    response = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"rounds": [[category_id] for category_id in ids]},
+        headers=authed_user["headers"],
+    )
+    assert response.status_code == 400
+
+
+async def test_update_lobby_rejects_empty_round(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    c1 = await _create_category(http_client, authed_user, "C1")
+
+    response = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"rounds": [[c1], []]},
+        headers=authed_user["headers"],
+    )
+    assert response.status_code == 400
+
+
+async def test_update_lobby_rejects_category_repeated_across_rounds(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    c1 = await _create_category(http_client, authed_user, "C1")
+    c2 = await _create_category(http_client, authed_user, "C2")
+
+    response = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"rounds": [[c1, c2], [c1]]},
+        headers=authed_user["headers"],
+    )
+    assert response.status_code == 400
+
+
+async def test_update_lobby_assigns_categories_to_rounds(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    c1 = await _create_category(http_client, authed_user, "C1")
+    c2 = await _create_category(http_client, authed_user, "C2")
+    c3 = await _create_category(http_client, authed_user, "C3")
+
+    patch = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"rounds": [[c1], [c2, c3]]},
+        headers=authed_user["headers"],
+    )
+    assert patch.status_code == 200, patch.text
+
+    response = await http_client.get(f"/api/v1/lobby/{lobby_id}", headers=authed_user["headers"])
+    rounds = response.json()["rounds"]
+    assert [r["round_number"] for r in rounds] == [1, 2]
+    assert [[c["id"] for c in r["categories"]] for r in rounds] == [[c1], [c2, c3]]
+    assert [r["results"] for r in rounds] == [None, None]
 
 
 async def test_update_lobby_rejects_empty_category_list(
@@ -427,7 +539,7 @@ async def test_update_lobby_rejects_empty_category_list(
 
     response = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": []},
+        json={"rounds": []},
         headers=authed_user["headers"],
     )
     assert response.status_code == 400
@@ -448,7 +560,7 @@ async def test_update_lobby_by_non_owner_returns_403(
     assert response.status_code == 403
 
 
-async def test_update_lobby_deduplicates_category_ids(
+async def test_update_lobby_rejects_duplicate_category_ids(
     http_client: AsyncClient,
     authed_user: AuthedUser,
 ):
@@ -457,12 +569,47 @@ async def test_update_lobby_deduplicates_category_ids(
 
     response = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [c1, c1, c1]},
+        json={"rounds": [[c1, c1, c1]]},
         headers=authed_user["headers"],
     )
+    assert response.status_code == 400
+
+
+async def test_completed_lobby_details_return_round_results(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    db_session,
+):
+    lobby_id = await _prepare_lobby(http_client, authed_user)
+    await db_session.execute(
+        update(Lobby).where(Lobby.id == lobby_id).values(state=LobbyStateEnum.COMPLETED),
+    )
+    await db_session.execute(
+        insert(LobbyRoundResult),
+        [
+            {
+                "lobby_id": lobby_id,
+                "round_number": 1,
+                "user_id": None,
+                "username_snapshot": name,
+                "score": score,
+                "score_delta": score,
+                "is_banned": False,
+            }
+            for name, score in [("zed", 200), ("amy", 200), ("bob", 500)]
+        ],
+    )
+    await db_session.commit()
+
+    response = await http_client.get(f"/api/v1/lobby/{lobby_id}", headers=authed_user["headers"])
+
     assert response.status_code == 200, response.text
-    returned = response.json()["prompt_categories"]
-    assert [c["id"] for c in returned] == [c1]
+    results = response.json()["rounds"][0]["results"]
+    assert [(r["username"], r["score"]) for r in results] == [
+        ("bob", 500),
+        ("amy", 200),
+        ("zed", 200),
+    ]
 
 
 async def test_delete_lobby_in_created_returns_204(
@@ -533,7 +680,7 @@ async def test_delete_waiting_lobby_returns_204(
     category_id = await _create_complete_category(http_client, authed_user)
     attach = await http_client.patch(
         f"/api/v1/lobby/{lobby_id}",
-        json={"prompt_category_ids": [category_id]},
+        json={"rounds": [[category_id]]},
         headers=authed_user["headers"],
     )
     assert attach.status_code == 200, attach.text

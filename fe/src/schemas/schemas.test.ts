@@ -5,6 +5,7 @@ import {
   GameLobbyState,
   LobbyDetails,
   LobbyInDB,
+  LobbyUpdate,
   PromptInDB,
   TokenResponse,
   UserPublic,
@@ -54,8 +55,46 @@ describe('schemas (round-trip)', () => {
             rank: 1,
           },
         ],
+        rounds: [
+          {
+            round_number: 1,
+            categories: [],
+            results: [
+              { user_id: 3, username: 'player', score: 500, score_delta: 500, is_banned: false },
+            ],
+          },
+        ],
       }).success,
     ).toBe(true);
+  });
+
+  it('LobbyUpdate accepts rounds and rejects the removed flat category list', () => {
+    expect(LobbyUpdate.safeParse({ rounds: [[1, 2], [3]] }).success).toBe(true);
+    expect(LobbyUpdate.safeParse({ rounds: [['x']] }).success).toBe(false);
+  });
+
+  it('GameLobbyState parses round fields and defaults them for legacy frames', () => {
+    const built = buildGameState({
+      phase: 'round_summary',
+      currentRound: 1,
+      totalRounds: 2,
+      roundResults: [
+        {
+          round_number: 1,
+          scores: [
+            { user_id: 2, username: 'alice', score: 300, score_delta: 300, is_banned: false },
+          ],
+        },
+      ],
+    });
+    expect(GameLobbyState.parse(JSON.parse(JSON.stringify(built)))).toEqual(built);
+
+    const legacy = JSON.parse(JSON.stringify(buildGameState())) as Record<string, unknown>;
+    delete legacy.current_round;
+    delete legacy.total_rounds;
+    delete legacy.round_results;
+    const parsed = GameLobbyState.parse(legacy);
+    expect([parsed.current_round, parsed.total_rounds, parsed.round_results]).toEqual([1, 1, []]);
   });
 
   it('PromptInDB requires question_type enum', () => {

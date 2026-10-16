@@ -21,7 +21,10 @@ class LobbyCreateSchema(BaseSchema):
 
 class LobbyUpdateSchema(OneFieldSetSchemaMixin):
     state: LobbyStateEnum | None = None
-    prompt_category_ids: list[int] | None = None
+    rounds: list[list[int]] | None = Field(
+        default=None,
+        description="Category ids per round; list index + 1 is the round number.",
+    )
 
 
 class LobbyFilterSchema(PaginationSchema):

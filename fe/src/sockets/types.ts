@@ -30,6 +30,7 @@ export interface ClientToServerEvents {
   judge_answer: (p: JudgeAnswerPayload) => void;
   buzz: () => void;
   advance_answer_reveal: () => void;
+  advance_round: () => void;
   ban_player: (p: BanPlayerPayload) => void;
   unban_player: (p: UnbanPlayerPayload) => void;
 }

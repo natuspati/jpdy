@@ -25,6 +25,7 @@ from schemas.lobby.game_state import (
     GamePromptState,
 )
 from utils.auth import create_access_token, hash_password
+from utils.game_state import round_score_value
 
 
 @dataclass(slots=True)
@@ -207,6 +208,7 @@ async def seed_lobby(
                             question=prompt.question,
                             answer=prompt.answer,
                             order=prompt.order or 0,
+                            score_value=round_score_value(prompt.order or 0, 1),
                         )
                         for prompt in ordered
                     ],

@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from pydantic import Field
+
 from enums.lobby import LobbyStateEnum
 from schemas.base import BaseSchema
 from schemas.lobby.base import LobbyInDBSchema
@@ -38,6 +40,20 @@ class LobbyFinalRankingSchema(BaseSchema):
     rank: int
 
 
+class LobbyRoundResultSchema(BaseSchema):
+    user_id: int | None
+    username: str
+    score: int
+    score_delta: int
+    is_banned: bool
+
+
+class LobbyRoundSchema(BaseSchema):
+    round_number: int
+    categories: list[PromptCategoryInDBSchema]
+    results: list[LobbyRoundResultSchema] | None = None
+
+
 class LobbyWithCategoriesInDBSchema(LobbyInDBSchema):
     owner: UserPublicSchema | None
     prompt_categories: list[PromptCategoryInDBSchema]
@@ -48,6 +64,7 @@ class LobbyDetailsSchema(LobbyWithCategoriesInDBSchema):
     is_owner: bool
     is_participant: bool
     final_rankings: list[LobbyFinalRankingSchema] | None = None
+    rounds: list[LobbyRoundSchema] = Field(default_factory=list)
 
 
 class LobbyWithCategoryPromptsInDBSchema(LobbyInDBSchema):
