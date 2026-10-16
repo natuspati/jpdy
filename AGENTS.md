@@ -1,5 +1,12 @@
 # Jeopardy contributor guide
 
+## Commit conventions
+
+- Use feat, fix, refactor, test, docs, or chore prefixes in commit messages
+- Use feat (fe), fix (deploy), docs (agents), test (be) type of prefixes for sub-package-specific changes
+  and just feat, fix, docs, test, or chore for cross-cutting changes.
+- No co-authored-by or other trailers
+
 ## Stack and deployment
 
 - `be/`: FastAPI, Python 3.14, Pydantic v2, SQLAlchemy, uv.
