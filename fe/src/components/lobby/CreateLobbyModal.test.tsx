@@ -86,6 +86,29 @@ describe('CreateLobbyModal rounds editor', () => {
     expect(box('Cat 6 in round 1')).toBeEnabled();
   });
 
+  it('omits the betting count when blank and sends it when set', async () => {
+    renderModal();
+    await userEvent.click(box('Cat 1 in round 1'));
+    await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
+    expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, { id: 42, payload: { rounds: [[1]] } });
+
+    mocks.updateLobby.mockClear();
+    await userEvent.type(screen.getByLabelText('Betting prompts per round'), '3');
+    await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
+    expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
+      id: 42,
+      payload: { rounds: [[1]], betting_prompt_count: 3 },
+    });
+  });
+
+  it('disables create for an out-of-range betting count', async () => {
+    renderModal();
+    await userEvent.click(box('Cat 1 in round 1'));
+    await userEvent.type(screen.getByLabelText('Betting prompts per round'), '26');
+
+    expect(screen.getByRole('button', { name: 'Create & open' })).toBeDisabled();
+  });
+
   it('sends the rounds payload and then promotes the lobby', async () => {
     renderModal();
     await userEvent.click(screen.getByRole('button', { name: 'Add round' }));

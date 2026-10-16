@@ -27,6 +27,7 @@ const categories = (
       order: index + 1,
       is_selected: false,
       score_value: (index + 1) * 100,
+      is_betting: false,
     })),
   },
 ];

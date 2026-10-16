@@ -26,6 +26,21 @@ describe('useSelectionReveal', () => {
     expect(result.current).toBeNull();
   });
 
+  it('also holds the picked prompt when it opens betting', () => {
+    const betting = { ...selecting, phase: 'player_betting' as const, current_prompt_id: 101 };
+    const { result, rerender } = renderHook(({ state }) => useSelectionReveal(state), {
+      initialProps: { state: selecting },
+    });
+
+    rerender({ state: betting });
+    expect(result.current).toBe(101);
+
+    act(() => {
+      vi.advanceTimersByTime(SELECTION_REVEAL_MS);
+    });
+    expect(result.current).toBeNull();
+  });
+
   it('does not pause when joining a clue that is already open', () => {
     const { result } = renderHook(() => useSelectionReveal(answering));
     expect(result.current).toBeNull();

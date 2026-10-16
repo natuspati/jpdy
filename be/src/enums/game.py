@@ -5,6 +5,8 @@ class GamePhaseEnum(StrEnum):
     WAITING_FOR_PLAYERS = auto()
     HOST_SELECTING_STARTING_PLAYER = auto()
     PLAYER_SELECTING_PROMPT = auto()
+    PLAYER_BETTING = auto()
+    BETTING_OPEN = auto()
     PLAYER_ANSWERING = auto()
     BUZZ_OPEN = auto()
     ANSWER_REVEAL = auto()

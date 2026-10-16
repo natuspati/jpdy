@@ -116,6 +116,17 @@ class LobbyService:
         async with self._uow as uow:
             lobby = await ensure_owned_lobby(uow, lobby_id, user)
 
+            if "betting_prompt_count" in schema.model_fields_set:
+                if lobby.state != LobbyStateEnum.CREATED:
+                    raise BadRequestError(
+                        "Betting prompts can only be modified while the lobby "
+                        "is in the CREATED state",
+                    )
+                await uow.lobby_repo.update_betting_prompt_count(
+                    lobby_id,
+                    schema.betting_prompt_count,
+                )
+
             if schema.rounds is not None:
                 if lobby.state != LobbyStateEnum.CREATED:
                     raise BadRequestError(

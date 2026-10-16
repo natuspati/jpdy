@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import BetPanel from '@/components/game/BetPanel';
 import BuzzButton from '@/components/game/BuzzButton';
 import FinalLeaderboard from '@/components/game/FinalLeaderboard';
 import GameBoard from '@/components/game/GameBoard';
@@ -20,7 +21,7 @@ import { useBoardMediaPreload } from '@/hooks/useBoardMediaPreload';
 import { useLobbySocket } from '@/hooks/useLobbySocket';
 import { useSelectionReveal } from '@/hooks/useSelectionReveal';
 import { currentCategoryName, currentPrompt } from '@/services/game/gameDerivations';
-import { canBuzz } from '@/services/game/phaseGuards';
+import { canBuzz, canPlaceBet } from '@/services/game/phaseGuards';
 import { roleFor } from '@/services/game/roleFor';
 import { timerSecondsForPhase } from '@/services/game/gameTiming';
 import { toastSuccess } from '@/store/toastStore';
@@ -126,6 +127,8 @@ const LobbyPage = () => {
     ['waiting_for_players', 'host_selecting_starting_player', 'player_selecting_prompt'].includes(
       state.phase,
     ) || revealingPromptId !== null;
+  const showBetPanel =
+    ['player_betting', 'betting_open'].includes(state.phase) && revealingPromptId === null;
   const showPromptStage =
     !!view.currentPrompt &&
     revealingPromptId === null &&
@@ -142,6 +145,9 @@ const LobbyPage = () => {
     if (state.phase === 'waiting_for_players') return 'The game has not started.';
     if (state.phase === 'host_selecting_starting_player') return 'Waiting for the host to choose.';
     if (state.phase === 'player_selecting_prompt') return 'Wait for a clue to be selected.';
+    if (state.phase === 'player_betting' || state.phase === 'betting_open') {
+      return 'Betting is in progress.';
+    }
     if (state.phase === 'player_answering') {
       return state.answering_player_id === userId
         ? 'You are answering this clue.'
@@ -199,6 +205,14 @@ const LobbyPage = () => {
             currentUserId={userId}
             flashPromptId={revealingPromptId}
             onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
+          />
+        ) : null}
+        {showBetPanel ? (
+          <BetPanel
+            state={state}
+            categoryName={view.categoryName}
+            canBet={status === 'open' && canPlaceBet(state, userId)}
+            onBet={(amount) => emit('place_bet', { amount })}
           />
         ) : null}
         {state.phase === 'round_summary' ? (

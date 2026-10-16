@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
+import Field from '@/components/ui/Field';
+import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import Spinner from '@/components/ui/Spinner';
 import { useAvailableCategories } from '@/hooks/usePromptCategories';
 import { useCreateLobby, useUpdateLobby } from '@/hooks/useLobbies';
 import {
+  MAX_BETTING_PROMPTS_PER_ROUND,
   MAX_CATEGORIES_PER_ROUND,
   MAX_ROUNDS_IN_LOBBY,
   MIN_ROUNDS_IN_LOBBY,
@@ -27,9 +30,14 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
   const updateLobby = useUpdateLobby();
   // Category ids per round; the list index + 1 is the round number.
   const [rounds, setRounds] = useState<number[][]>([[]]);
+  // Blank means the server default (10% of a round's prompts, rounded down).
+  const [bettingCount, setBettingCount] = useState('');
 
   useEffect(() => {
-    if (!open) setRounds([[]]);
+    if (!open) {
+      setRounds([[]]);
+      setBettingCount('');
+    }
   }, [open]);
 
   const toggle = (roundIndex: number, id: number) => {
@@ -47,8 +55,18 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
     setRounds((prev) => prev.filter((_, index) => index !== roundIndex));
 
   const everyRoundHasCategory = rounds.every((ids) => ids.length > 0);
+  const bettingValue = Number(bettingCount);
+  const bettingInvalid =
+    bettingCount !== '' &&
+    (!Number.isInteger(bettingValue) ||
+      bettingValue < 0 ||
+      bettingValue > MAX_BETTING_PROMPTS_PER_ROUND);
 
   const handleStart = async () => {
+    if (bettingInvalid) {
+      toastError(`Betting prompts must be 0 to ${MAX_BETTING_PROMPTS_PER_ROUND}`);
+      return;
+    }
     if (!everyRoundHasCategory) {
       toastError('Pick at least one category in every round');
       return;
@@ -56,7 +74,7 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
     const lobby = await createLobby.mutateAsync();
     await updateLobby.mutateAsync({
       id: lobby.id,
-      payload: { rounds },
+      payload: bettingCount === '' ? { rounds } : { rounds, betting_prompt_count: bettingValue },
     });
     await updateLobby.mutateAsync({
       id: lobby.id,
@@ -142,6 +160,28 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
             ))}
           </div>
         )}
+        <Field
+          label="Betting prompts per round"
+          htmlFor="betting-prompt-count"
+          hint="Blank uses 10% of each round's prompts, rounded down."
+          error={
+            bettingInvalid
+              ? `Enter a whole number from 0 to ${MAX_BETTING_PROMPTS_PER_ROUND}.`
+              : undefined
+          }
+        >
+          <Input
+            id="betting-prompt-count"
+            type="number"
+            min={0}
+            max={MAX_BETTING_PROMPTS_PER_ROUND}
+            step={1}
+            placeholder="Default (10%)"
+            value={bettingCount}
+            invalid={bettingInvalid}
+            onChange={(event) => setBettingCount(event.target.value)}
+          />
+        </Field>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button
             type="button"
@@ -155,7 +195,11 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="button" disabled={busy || !everyRoundHasCategory} onClick={handleStart}>
+            <Button
+              type="button"
+              disabled={busy || !everyRoundHasCategory || bettingInvalid}
+              onClick={handleStart}
+            >
               {busy ? 'Creating…' : 'Create & open'}
             </Button>
           </div>

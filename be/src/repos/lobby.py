@@ -326,6 +326,12 @@ class LobbyRepo:
         lobby = (await self._session.execute(stmt)).scalar_one()
         return validate_model(lobby, LobbyInDBSchema)
 
+    async def update_betting_prompt_count(self, lobby_id: int, count: int | None) -> None:
+        """Set the per-round betting prompt count; ``None`` restores the default."""
+        await self._session.execute(
+            update(Lobby).where(Lobby.id == lobby_id).values(betting_prompt_count=count),
+        )
+
     async def update_lobby_state(
         self,
         lobby_id: int,

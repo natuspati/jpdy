@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { LobbyStateEnum } from './enums';
 import { Paginated } from './pagination';
-import { PromptCategoryInDB } from './prompt';
+import { MAX_BETTING_PROMPTS_PER_ROUND, PromptCategoryInDB } from './prompt';
 import { UserPublic } from './user';
 
 // LobbyInDBSchema
@@ -12,6 +12,8 @@ export const LobbyInDB = z.object({
   state: LobbyStateEnum,
   created_at: z.string(),
   updated_at: z.string(),
+  // null means the default share of each round's prompts.
+  betting_prompt_count: z.number().int().nullable().optional(),
 });
 export type LobbyInDB = z.infer<typeof LobbyInDB>;
 
@@ -87,6 +89,14 @@ export const LobbyUpdate = z
     state: LobbyStateEnum.optional(),
     // Category ids per round; list index + 1 is the round number.
     rounds: z.array(z.array(z.number().int())).optional(),
+    // Betting prompts per round; null resets to the default.
+    betting_prompt_count: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_BETTING_PROMPTS_PER_ROUND)
+      .nullable()
+      .optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: 'No fields to update' });
 export type LobbyUpdate = z.infer<typeof LobbyUpdate>;

@@ -12,6 +12,7 @@ from schemas.socket.events import (
     BanPlayerPayload,
     GameSoundCueName,
     JudgeAnswerPayload,
+    PlaceBetPayload,
     SelectPromptPayload,
     SelectStarterPayload,
     SetAssetsLoadedPayload,
@@ -219,6 +220,25 @@ async def on_select_prompt(namespace: str, sid: str, data: Any = None) -> None:
         _action,
         lambda _state, _payload: [GameSoundCueName.CLUE_SELECTED],
     )
+
+
+async def on_place_bet(namespace: str, sid: str, data: Any = None) -> None:
+    async def _action(
+        service: GameService,
+        lobby_id: int,
+        user_id: int,
+        payload: PlaceBetPayload | None,
+        command_id: str,
+    ) -> GameLobbyState:
+        assert payload is not None
+        return await service.place_bet(
+            lobby_id=lobby_id,
+            user_id=user_id,
+            payload=payload,
+            command_id=command_id,
+        )
+
+    await _run_event(namespace, sid, data, PlaceBetPayload, _action)
 
 
 async def on_judge_answer(namespace: str, sid: str, data: Any = None) -> None:

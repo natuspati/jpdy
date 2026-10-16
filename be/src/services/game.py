@@ -12,6 +12,7 @@ from schemas.socket.events import (
     GameSoundCueName,
     GameSoundCuePayload,
     JudgeAnswerPayload,
+    PlaceBetPayload,
     SelectPromptPayload,
     SelectStarterPayload,
     SetAssetsLoadedPayload,
@@ -138,6 +139,22 @@ class GameService:
                 user_id=user_id,
                 prompt_id=payload.prompt_id,
             ),
+        )
+        assert state is not None
+        return state
+
+    async def place_bet(
+        self,
+        lobby_id: int,
+        user_id: int,
+        payload: PlaceBetPayload,
+        command_id: str | None = None,
+    ) -> GameLobbyState:
+        state = await self._executor.execute(
+            lobby_id,
+            command_id,
+            "place_bet",
+            partial(self._state_machine.place_bet, user_id=user_id, amount=payload.amount),
         )
         assert state is not None
         return state

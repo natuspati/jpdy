@@ -13,6 +13,12 @@ export const SelectPromptPayload = z.object({
 });
 export type SelectPromptPayload = z.infer<typeof SelectPromptPayload>;
 
+export const PlaceBetPayload = z.object({
+  amount: z.number().int(),
+  command_id: z.string().uuid().optional(),
+});
+export type PlaceBetPayload = z.infer<typeof PlaceBetPayload>;
+
 export const JudgeAnswerPayload = z.object({
   correct: z.boolean(),
   command_id: z.string().uuid().optional(),

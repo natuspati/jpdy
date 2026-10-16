@@ -930,3 +930,84 @@ async def test_completed_lobby_details_returns_competition_rankings_to_allowed_u
         ("rank_banned", 3),
     ]
     assert rankings[-1]["is_banned"] is True
+
+
+async def test_update_lobby_sets_and_resets_betting_prompt_count(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    category_id = await _create_complete_category(http_client, authed_user)
+
+    response = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"rounds": [[category_id]], "betting_prompt_count": 3},
+        headers=authed_user["headers"],
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["betting_prompt_count"] == 3
+
+    response = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"betting_prompt_count": None},
+        headers=authed_user["headers"],
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["betting_prompt_count"] is None
+
+
+@pytest.mark.parametrize("count", [-1, 26])
+async def test_update_lobby_rejects_out_of_range_betting_prompt_count(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    count: int,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+
+    response = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"betting_prompt_count": count},
+        headers=authed_user["headers"],
+    )
+
+    assert response.status_code == 422
+
+
+async def test_update_lobby_rejects_betting_prompt_count_after_created(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    lobby_id = await _prepare_lobby(http_client, authed_user)
+
+    response = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"betting_prompt_count": 2},
+        headers=authed_user["headers"],
+    )
+
+    assert response.status_code == 400
+
+
+async def test_materialized_state_flags_requested_betting_prompts(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    redis_client,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    category_id = await _create_complete_category(http_client, authed_user)
+    attach = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"rounds": [[category_id]], "betting_prompt_count": 2},
+        headers=authed_user["headers"],
+    )
+    assert attach.status_code == 200, attach.text
+    prepare = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"state": LobbyStateEnum.WAITING_START.value},
+        headers=authed_user["headers"],
+    )
+    assert prepare.status_code == 200, prepare.text
+
+    state = GameLobbyState.model_validate_json(await redis_client.get(game_state_key(lobby_id)))
+
+    assert sum(p.is_betting for c in state.categories for p in c.prompts) == 2

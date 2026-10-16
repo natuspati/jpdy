@@ -40,6 +40,7 @@ class GamePromptState(BaseSchema):
     order: int
     score_value: int = Field(description="Round-scaled points, set when the lobby is materialized.")
     is_selected: bool = False
+    is_betting: bool = False
 
 
 class GameCategoryState(BaseSchema):
@@ -60,6 +61,7 @@ class PublicGamePromptState(BaseSchema):
     order: int
     score_value: int
     is_selected: bool = False
+    is_betting: bool = False
 
 
 class PublicGameCategoryState(BaseSchema):
@@ -105,6 +107,10 @@ class PublicGameLobbyState(BaseSchema):
         default_factory=list,
         description="Visible players who already failed the active prompt.",
     )
+    min_bet: int = 0
+    max_bet: int = 0
+    current_bet: int = 0
+    betting_player_id: int | None = None
     timer_deadline: datetime | None = None
     resolved_prompt_id: int | None = Field(
         default=None,
@@ -160,6 +166,10 @@ class GameLobbyState(BaseSchema):
         default_factory=list,
         description="Players who failed current prompt; cleared for next prompt.",
     )
+    min_bet: int = 0
+    max_bet: int = 0
+    current_bet: int = 0
+    betting_player_id: int | None = None
     timer_deadline: datetime | None = None
     timer_revision: int | None = Field(
         default=None,

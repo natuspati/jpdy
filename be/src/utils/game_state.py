@@ -143,6 +143,10 @@ def build_round_result(state: GameLobbyState) -> GameRoundResult:
     )
 
 
+def _is_question_visible(state: GameLobbyState, prompt: GamePromptState, is_betting: bool) -> bool:
+    return prompt.prompt_id == state.current_prompt_id and not is_betting
+
+
 def build_public_game_state(
     state: GameLobbyState,
     *,
@@ -150,6 +154,7 @@ def build_public_game_state(
 ) -> PublicGameLobbyState:
     """Project internal Redis state into a recipient-safe Socket.IO payload."""
     is_revealing_answer = state.phase == GamePhaseEnum.ANSWER_REVEAL
+    is_betting = state.phase in {GamePhaseEnum.PLAYER_BETTING, GamePhaseEnum.BETTING_OPEN}
     players = (
         state.players
         if include_banned_players
@@ -183,12 +188,12 @@ def build_public_game_state(
                 prompts=[
                     PublicGamePromptState(
                         prompt_id=prompt.prompt_id,
-                        question=(
-                            prompt.question if prompt.prompt_id == state.current_prompt_id else ""
-                        ),
+                        question=prompt.question
+                        if _is_question_visible(state, prompt, is_betting)
+                        else "",
                         question_type=(
                             prompt.question_type
-                            if prompt.prompt_id == state.current_prompt_id
+                            if _is_question_visible(state, prompt, is_betting)
                             else QuestionTypeEnum.TEXT
                         ),
                         question_media=prompt.question_media,
@@ -196,6 +201,8 @@ def build_public_game_state(
                         order=prompt.order,
                         score_value=prompt.score_value,
                         is_selected=prompt.is_selected,
+                        is_betting=prompt.is_betting
+                        and prompt.prompt_id == state.current_prompt_id,
                     )
                     for prompt in category.prompts
                 ],
@@ -216,6 +223,12 @@ def build_public_game_state(
         attempted_player_ids=[
             user_id for user_id in state.attempted_player_ids if user_id in visible_player_ids
         ],
+        min_bet=state.min_bet,
+        max_bet=state.max_bet,
+        current_bet=state.current_bet,
+        betting_player_id=(
+            state.betting_player_id if state.betting_player_id in visible_player_ids else None
+        ),
         timer_deadline=state.timer_deadline,
         resolved_prompt_id=state.resolved_prompt_id if is_revealing_answer else None,
         resolved_answer=state.resolved_answer if is_revealing_answer else None,

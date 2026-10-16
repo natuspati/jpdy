@@ -9,6 +9,8 @@ export const GamePhaseEnum = z.enum([
   'waiting_for_players',
   'host_selecting_starting_player',
   'player_selecting_prompt',
+  'player_betting',
+  'betting_open',
   'player_answering',
   'buzz_open',
   'answer_reveal',

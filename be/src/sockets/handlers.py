@@ -6,6 +6,7 @@ from sockets.events.game import (
     on_ban_player,
     on_buzz,
     on_judge_answer,
+    on_place_bet,
     on_select_prompt,
     on_select_starter,
     on_set_assets_loaded,
@@ -23,6 +24,7 @@ def register_socket_handlers() -> None:
     sio.on("select_starter", handler=on_select_starter, namespace="*")
     sio.on("select_prompt", handler=on_select_prompt, namespace="*")
     sio.on("judge_answer", handler=on_judge_answer, namespace="*")
+    sio.on("place_bet", handler=on_place_bet, namespace="*")
     sio.on("buzz", handler=on_buzz, namespace="*")
     sio.on("advance_answer_reveal", handler=on_advance_answer_reveal, namespace="*")
     sio.on("advance_round", handler=on_advance_round, namespace="*")

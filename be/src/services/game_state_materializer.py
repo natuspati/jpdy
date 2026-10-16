@@ -1,3 +1,6 @@
+import random
+
+from configs.constants import BETTING_PROMPT_DEFAULT_PERCENT
 from database import UnitOfWork
 from errors.request import BadRequestError, NotFoundError
 from schemas.lobby.game_state import (
@@ -9,6 +12,10 @@ from schemas.lobby.game_state import (
 from schemas.lobby.nested import LobbyWithCategoryPromptsInDBSchema
 from utils.game_state import round_score_value
 from utils.media import build_media_reference
+
+
+def default_betting_prompt_count(prompt_count: int) -> int:
+    return prompt_count * BETTING_PROMPT_DEFAULT_PERCENT // 100
 
 
 class GameStateMaterializer:
@@ -23,13 +30,15 @@ class GameStateMaterializer:
             raise NotFoundError(f"Lobby {lobby_id} not found")
         category_rounds = await self._uow.lobby_repo.select_category_rounds(lobby_id)
         return await self._uow.game_state_repo.initialize_state(
-            self.build_game_lobby_state(lobby, category_rounds),
+            self.build_game_lobby_state(lobby, category_rounds, lobby.betting_prompt_count),
         )
 
     @staticmethod
     def build_game_lobby_state(
         lobby: LobbyWithCategoryPromptsInDBSchema,
         category_rounds: dict[int, int],
+        betting_prompt_count: int | None,
+        rng: random.Random | None = None,
     ) -> GameLobbyState:
         """Build an immutable SQL lobby snapshot into initial Redis game state."""
         if lobby.owner is None:
@@ -39,7 +48,7 @@ class GameStateMaterializer:
             lobby.prompt_categories,
             key=lambda category: (category_rounds.get(category.id, 1), category.id),
         )
-        return GameLobbyState(
+        state = GameLobbyState(
             lobby_id=lobby.id,
             host=GameHostState(user_id=lobby.owner.id, username=lobby.owner.username),
             total_rounds=max((category_rounds.get(c.id, 1) for c in categories), default=1),
@@ -77,3 +86,19 @@ class GameStateMaterializer:
                 for category in categories
             ],
         )
+        sampler = rng or random.Random()
+        for round_number in range(1, state.total_rounds + 1):
+            prompts = [
+                prompt
+                for category in state.categories
+                if category.round_number == round_number
+                for prompt in category.prompts
+            ]
+            count = (
+                betting_prompt_count
+                if betting_prompt_count is not None
+                else default_betting_prompt_count(len(prompts))
+            )
+            for prompt in sampler.sample(prompts, min(count, len(prompts))):
+                prompt.is_betting = True
+        return state

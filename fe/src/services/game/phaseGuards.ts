@@ -46,6 +46,23 @@ export const canAdvanceAnswerReveal = (state: GameLobbyState, userId: number): b
 export const canAdvanceRound = (state: GameLobbyState, userId: number): boolean =>
   isHost(state, userId) && state.phase === 'round_summary';
 
+export const canPlaceBet = (state: GameLobbyState, userId: number): boolean => {
+  if (!isConnectedPlayer(state, userId)) return false;
+  const isSelector = state.selecting_player_id === userId;
+  if (state.phase === 'player_betting') return isSelector;
+  return state.phase === 'betting_open' && !isSelector;
+};
+
+// UX-only validation; the server stays authoritative.
+export const betError = (state: GameLobbyState, amount: number): string | null => {
+  if (!Number.isInteger(amount)) return 'Enter a whole number.';
+  if (amount < state.min_bet || amount > state.max_bet) {
+    return `Bet between ${state.min_bet} and ${state.max_bet}.`;
+  }
+  if (amount <= state.current_bet) return `Bet more than ${state.current_bet}.`;
+  return null;
+};
+
 export const canBuzz = (state: GameLobbyState, userId: number): boolean => {
   if (state.phase !== 'buzz_open') return false;
   if (isHost(state, userId)) return false;

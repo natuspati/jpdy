@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import Field
 
+from configs.constants import MAX_BETTING_PROMPTS_PER_ROUND
 from enums.lobby import LobbyStateEnum
 from schemas.base import BaseSchema, OneFieldSetSchemaMixin
 from schemas.pagination import PaginationSchema
@@ -13,6 +14,7 @@ class LobbyInDBSchema(BaseSchema):
     state: LobbyStateEnum
     created_at: datetime
     updated_at: datetime
+    betting_prompt_count: int | None = None
 
 
 class LobbyCreateSchema(BaseSchema):
@@ -24,6 +26,12 @@ class LobbyUpdateSchema(OneFieldSetSchemaMixin):
     rounds: list[list[int]] | None = Field(
         default=None,
         description="Category ids per round; list index + 1 is the round number.",
+    )
+    betting_prompt_count: int | None = Field(
+        default=None,
+        ge=0,
+        le=MAX_BETTING_PROMPTS_PER_ROUND,
+        description="Betting prompts per round; null uses the default percentage.",
     )
 
 

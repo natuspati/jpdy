@@ -42,8 +42,22 @@ describe('GameBoard', () => {
       name: 'A category title long enough to wrap onto another line',
       round_number: 1,
       prompts: [
-        { prompt_id: 103, question: 'Q3', order: 1, is_selected: false, score_value: 100 },
-        { prompt_id: 104, question: 'Q4', order: 2, is_selected: false, score_value: 200 },
+        {
+          prompt_id: 103,
+          question: 'Q3',
+          order: 1,
+          is_selected: false,
+          score_value: 100,
+          is_betting: false,
+        },
+        {
+          prompt_id: 104,
+          question: 'Q4',
+          order: 2,
+          is_selected: false,
+          score_value: 200,
+          is_betting: false,
+        },
       ],
     });
 
@@ -81,8 +95,22 @@ describe('GameBoard', () => {
       name: 'Round two category',
       round_number: 2,
       prompts: [
-        { prompt_id: 103, question: 'Q3', order: 1, is_selected: false, score_value: 200 },
-        { prompt_id: 104, question: 'Q4', order: 2, is_selected: false, score_value: 400 },
+        {
+          prompt_id: 103,
+          question: 'Q3',
+          order: 1,
+          is_selected: false,
+          score_value: 200,
+          is_betting: false,
+        },
+        {
+          prompt_id: 104,
+          question: 'Q4',
+          order: 2,
+          is_selected: false,
+          score_value: 400,
+          is_betting: false,
+        },
       ],
     });
 

@@ -4,10 +4,13 @@ import type { GameLobbyState } from '@/schemas';
 
 export const SELECTION_REVEAL_MS = 1000;
 
+const isOpening = (phase: GameLobbyState['phase'] | undefined): boolean =>
+  phase === 'player_answering' || phase === 'player_betting';
+
 /**
  * Id of the prompt that was just picked, for the first second after the selection arrives.
  * Everyone keeps seeing the board with that tile flashing before the clue opens. Only a live
- * pick (selecting -> answering) triggers it, so a reconnect straight into a clue skips the pause.
+ * pick (selecting -> answering or betting) triggers it, so a reconnect straight into a clue skips the pause.
  */
 export const useSelectionReveal = (state: GameLobbyState | null): number | null => {
   const phase = state?.phase;
@@ -17,7 +20,7 @@ export const useSelectionReveal = (state: GameLobbyState | null): number | null 
 
   // Layout effect: the reveal flag is set before paint, so the clue never flashes up first.
   useLayoutEffect(() => {
-    if (phase === 'player_answering' && previousPhase.current === 'player_selecting_prompt') {
+    if (isOpening(phase) && previousPhase.current === 'player_selecting_prompt') {
       setRevealing(promptId);
     }
     previousPhase.current = phase;
@@ -29,5 +32,5 @@ export const useSelectionReveal = (state: GameLobbyState | null): number | null 
     return () => clearTimeout(timer);
   }, [revealing]);
 
-  return phase === 'player_answering' && revealing === promptId ? revealing : null;
+  return isOpening(phase) && revealing === promptId ? revealing : null;
 };

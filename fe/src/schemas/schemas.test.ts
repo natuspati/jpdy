@@ -73,6 +73,35 @@ describe('schemas (round-trip)', () => {
     expect(LobbyUpdate.safeParse({ rounds: [['x']] }).success).toBe(false);
   });
 
+  it('LobbyUpdate bounds betting_prompt_count and allows null to reset', () => {
+    expect(LobbyUpdate.safeParse({ betting_prompt_count: 25 }).success).toBe(true);
+    expect(LobbyUpdate.safeParse({ betting_prompt_count: null }).success).toBe(true);
+    expect(LobbyUpdate.safeParse({ betting_prompt_count: 26 }).success).toBe(false);
+    expect(LobbyUpdate.safeParse({ betting_prompt_count: -1 }).success).toBe(false);
+  });
+
+  it('GameLobbyState parses betting fields and defaults them for older frames', () => {
+    const built = buildGameState({
+      phase: 'betting_open',
+      currentPromptId: 101,
+      minBet: 100,
+      maxBet: 500,
+      currentBet: 200,
+      bettingPlayerId: 2,
+    });
+    expect(GameLobbyState.parse(JSON.parse(JSON.stringify(built)))).toEqual(built);
+
+    const old = JSON.parse(JSON.stringify(buildGameState())) as Record<string, unknown>;
+    for (const key of ['min_bet', 'max_bet', 'current_bet', 'betting_player_id']) delete old[key];
+    const parsed = GameLobbyState.parse(old);
+    expect([parsed.min_bet, parsed.max_bet, parsed.current_bet, parsed.betting_player_id]).toEqual([
+      0,
+      0,
+      0,
+      null,
+    ]);
+  });
+
   it('GameLobbyState parses round fields and defaults them for legacy frames', () => {
     const built = buildGameState({
       phase: 'round_summary',

@@ -102,6 +102,20 @@ created → waiting_start → in_progress → completed
 - A game whose Redis state predates rounds loads as a single round
   (`current_round=1`, `total_rounds=1`, category `round_number=1`).
 
+### Betting prompts
+
+- Some prompts are randomly flagged as **betting prompts** (`is_betting`) when
+  the lobby is materialized on the move to `waiting_start`. The draw is made
+  **per round**, from that round's own prompts.
+- The host sets one optional number, `betting_prompt_count` ("betting prompts
+  per round", 0 to 25), applied to every round and clamped to that round's
+  prompt count. When unset (`null`), each round uses
+  `prompt_count * 10 // 100`: 2 for a five-category round (25 prompts), 0 for a
+  one-category round (5 prompts).
+- `betting_prompt_count` can be changed through REST only while the lobby is
+  `created`, in the same PATCH as `rounds` or separately. An explicit `null`
+  resets it to the default.
+
 ### Roster rules
 
 - Before the game starts, authenticated players join by connecting to the
@@ -171,7 +185,8 @@ PublicGameLobbyState
 │  ├─ { category_id, name, round_number }
 │  └─ prompts[] {
 │       prompt_id, question, question_type, question_media,
-│       order, is_selected, score_value
+│       order, is_selected, score_value,
+│       is_betting                 # true only for the current prompt
 │     }
 ├─ phase
 ├─ current_round
@@ -183,6 +198,10 @@ PublicGameLobbyState
 ├─ selecting_player_id
 ├─ answering_player_id
 ├─ attempted_player_ids
+├─ min_bet                        # betting phases only, else 0
+├─ max_bet                        # betting phases only, else 0
+├─ current_bet                    # highest bet so far, else 0
+├─ betting_player_id              # holder of the highest bet, else null
 ├─ timer_deadline
 ├─ resolved_prompt_id             # set only in answer_reveal
 ├─ resolved_answer                # set only in answer_reveal
@@ -209,6 +228,11 @@ prompts expose only their identity, order, spent state, and value. The
 exception is media: `question_media` and `answer_media` are present for every
 board prompt so clients can preload all media during the lobby; this trades some
 secrecy of upcoming media for faster loads. Answer text is never sent early.
+`is_betting` is public only for the current prompt, so players learn a prompt is
+a betting prompt once it is selected, not before. During `player_betting` and
+`betting_open` the current prompt's `question` is empty and its `question_type`
+is `text`; question media references are still sent for preloading, but clients
+must not render them during betting.
 Canonical correct answer text and `resolved_answer_media` are public only while:
 
 ```text
@@ -288,6 +312,8 @@ be exposed to browser clients.
 waiting_for_players
 host_selecting_starting_player
 player_selecting_prompt
+player_betting
+betting_open
 player_answering
 buzz_open
 answer_reveal
@@ -352,6 +378,55 @@ player_selecting_prompt
 Prompt stage shows canonical question text, which can be an instruction or
 caption for image, audio, or video clue, plus optional question media.
 
+If the selected prompt is a betting prompt, the flow below goes to
+`player_betting` instead of `player_answering`.
+
+### 3a. Betting prompts
+
+Selecting a betting prompt: set `current_prompt_id`, clear
+`answering_player_id`, flag the selector, and set the bet limits once for
+everyone:
+
+- `min_bet` = the prompt's round-scaled `score_value`;
+- `max_bet` = `max(highest value of the current round, highest score among
+  non-banned players)`, where the highest value of round `r` is
+  `5 * 100 * 2^(r-1)`;
+- `current_bet = 0`, `betting_player_id = null`.
+
+The existing `clue_selected` cue still fires; there are no new cues. Bets are
+integers and public. A bet is valid only when `min_bet <= amount <= max_bet`
+and `amount` is strictly greater than `current_bet`, so there are no ties.
+
+#### `player_betting` (10 seconds)
+
+- Only `selecting_player_id` may bet. A bet ends the phase immediately.
+- If the timer expires with no bet, the selector has no bet (value 0).
+- Either way the game continues to `betting_open`; when no eligible player
+  other than the selector exists, `betting_open` is skipped and betting resolves
+  at once.
+
+#### `betting_open` (10 seconds, fixed)
+
+- Every eligible non-host player **except the selector** may bet at any time.
+  The timer does not restart on a bet. A player may raise their own bet if it
+  is strictly higher than `current_bet`.
+- When the timer ends, betting resolves.
+
+#### Resolution
+
+- Nobody bet: the prompt stays spent, nobody scores, the game enters
+  `answer_reveal` with `resolution=expired`, and the original selector keeps the
+  next pick.
+- Otherwise the prompt's `score_value` is set to the winning bet, the highest
+  bettor becomes `answering_player_id` and `selecting_player_id`,
+  `attempted_player_ids` is emptied, and the game enters `player_answering`
+  with the usual 30-second timer and a `host_answer_key` for the host. The
+  betting fields are cleared.
+- **Nobody else may buzz.** A Wrong judgment deducts the bet and reveals with
+  `resolution=unanswered`; a timeout deducts the bet and reveals with
+  `resolution=expired`. Correct adds the bet.
+- The highest bettor is the next selector whether they answered correctly or not.
+
 ### 4. Answer by voice; host judges directly
 
 Phase:
@@ -389,6 +464,8 @@ When the host marks the spoken answer wrong:
 3. Clear `answering_player_id`.
 4. If another connected, non-banned, unattempted player exists, open buzz.
 5. Otherwise enter `answer_reveal` with `resolution=unanswered`.
+
+(A betting prompt never opens buzz; see 3a.)
 
 The buzz window is ten seconds total. A player who wins it receives a separate
 30-second spoken-answer timer.
@@ -516,6 +593,12 @@ Banning always updates both Redis game state and persistent
 
 - Ban current selector in `player_selecting_prompt`: clear active ownership
   and timer, then enter `host_selecting_starting_player`.
+- Ban the selector in `player_betting`: clear the selector, selection flags and
+  betting fields, then reveal the clue as `unanswered`. The prompt stays spent
+  and nothing is scored.
+- Ban the player holding the highest bet in `betting_open`: reset
+  `current_bet` to `0` and `betting_player_id` to `null`; the window continues.
+  Disconnects need no special handling.
 - Ban active answerer in `player_answering`: leave selected clue spent, do not
   score or deduct it, clear ownership, then reveal it as `unanswered` for
   the normal 30-second maximum. Reveal completion enters host player
@@ -532,6 +615,7 @@ Timer durations are:
 
 ```text
 answering timer:     30 seconds
+betting timer:       10 seconds (player_betting), 10 seconds fixed (betting_open)
 buzz timer:          10 seconds
 answer reveal timer: 30 seconds maximum
 round summary timer: 10 seconds
@@ -564,6 +648,7 @@ The server is authoritative:
 | `start_game` | host | `waiting_for_players` |
 | `select_starter` | host | `host_selecting_starting_player` |
 | `select_prompt` | current selector | `player_selecting_prompt` |
+| `place_bet` | selector in `player_betting`; eligible non-host non-selector in `betting_open` | `player_betting`, `betting_open` |
 | `judge_answer` | host | `player_answering` |
 | `buzz` | eligible non-host player | `buzz_open` |
 | `advance_answer_reveal` | host | `answer_reveal` |
@@ -593,6 +678,13 @@ a payload command ID also receive a server-generated ID.
   (`round_number === current_round`).
 - Give every category header the same vertical space so prompt rows align
   despite title length.
+- During `player_betting` and `betting_open`, the board and prompt stage are
+  hidden and a betting panel is shown instead: category name, the range
+  `min_bet..max_bet`, the current highest bet and its holder (or "No bet yet"),
+  and the countdown. Players who may bet also get a number input (default
+  `max(min_bet, current_bet + 1)`) and a **Place bet** button; the host and
+  everyone else see it read-only. The selected tile flashes on the board first,
+  as for any clue. Client-side bet validation is UX only.
 - Replace board with full prompt stage in:
   - `player_answering`;
   - `buzz_open`;

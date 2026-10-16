@@ -13,6 +13,8 @@ from sockets.uow import build_uow
 _logger = logging.getLogger(__name__)
 
 _TIMED_PHASES = {
+    GamePhaseEnum.PLAYER_BETTING,
+    GamePhaseEnum.BETTING_OPEN,
     GamePhaseEnum.PLAYER_ANSWERING,
     GamePhaseEnum.BUZZ_OPEN,
     GamePhaseEnum.ANSWER_REVEAL,

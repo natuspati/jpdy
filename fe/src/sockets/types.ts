@@ -4,6 +4,7 @@ import type {
   GameLobbyState,
   HostAnswerKey,
   JudgeAnswerPayload,
+  PlaceBetPayload,
   SelectPromptPayload,
   SelectStarterPayload,
   SetAssetsLoadedPayload,
@@ -28,6 +29,7 @@ export interface ClientToServerEvents {
   select_starter: (p: SelectStarterPayload) => void;
   select_prompt: (p: SelectPromptPayload) => void;
   judge_answer: (p: JudgeAnswerPayload) => void;
+  place_bet: (p: PlaceBetPayload) => void;
   buzz: () => void;
   advance_answer_reveal: () => void;
   advance_round: () => void;

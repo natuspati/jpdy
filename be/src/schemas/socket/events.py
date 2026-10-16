@@ -16,6 +16,11 @@ class SelectPromptPayload(BaseSchema):
     command_id: UUID | None = None
 
 
+class PlaceBetPayload(BaseSchema):
+    amount: int
+    command_id: UUID | None = None
+
+
 class JudgeAnswerPayload(BaseSchema):
     correct: bool
     command_id: UUID | None = None

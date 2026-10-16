@@ -36,6 +36,7 @@ export const GamePromptState = z
     order: z.number().int(),
     is_selected: z.boolean().default(false),
     score_value: z.number().int(),
+    is_betting: z.boolean().default(false),
   })
   .strict();
 export type GamePromptState = z.infer<typeof GamePromptState>;
@@ -82,6 +83,10 @@ export const GameLobbyState = z
     selecting_player_id: z.number().int().nullable().default(null),
     answering_player_id: z.number().int().nullable().default(null),
     attempted_player_ids: z.array(z.number().int()).default([]),
+    min_bet: z.number().int().nonnegative().default(0),
+    max_bet: z.number().int().nonnegative().default(0),
+    current_bet: z.number().int().nonnegative().default(0),
+    betting_player_id: z.number().int().nullable().default(null),
     timer_deadline: z.string().nullable().default(null),
     resolved_prompt_id: z.number().int().nullable().default(null),
     resolved_answer: z.string().nullable().default(null),

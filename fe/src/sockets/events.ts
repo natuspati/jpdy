@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   BanPlayerPayload,
   JudgeAnswerPayload,
+  PlaceBetPayload,
   SelectPromptPayload,
   SelectStarterPayload,
   SetAssetsLoadedPayload,
@@ -19,6 +20,7 @@ const payloadSchemas: Partial<Record<ClientEventName, z.ZodTypeAny>> = {
   select_starter: SelectStarterPayload,
   select_prompt: SelectPromptPayload,
   judge_answer: JudgeAnswerPayload,
+  place_bet: PlaceBetPayload,
   ban_player: BanPlayerPayload,
   unban_player: UnbanPlayerPayload,
 };
