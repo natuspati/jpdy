@@ -404,7 +404,8 @@ and `amount` is strictly greater than `current_bet`, so there are no ties.
 #### `player_betting` (10 seconds)
 
 - Only `selecting_player_id` may bet. A bet ends the phase immediately.
-- If the timer expires with no bet, the selector has no bet (value 0).
+- If the timer expires with no bet, the selector has no bet yet; if nobody else
+  bets either, they answer at the prompt's default value (see Resolution).
 - Either way the game continues to `betting_open`; when no eligible player
   other than the selector exists, `betting_open` is skipped and betting resolves
   at once.
@@ -418,9 +419,10 @@ and `amount` is strictly greater than `current_bet`, so there are no ties.
 
 #### Resolution
 
-- Nobody bet: the prompt stays spent, nobody scores, the game enters
-  `answer_reveal` with `resolution=expired`, and the original selector keeps the
-  next pick.
+- Nobody bet: the selector is treated as having bet the prompt's default value
+  (`min_bet`) and answers it as below. Only an ineligible (banned or
+  disconnected) selector spends the prompt: `answer_reveal` with
+  `resolution=expired`, nobody scores.
 - Otherwise the prompt's `score_value` is set to the winning bet, the highest
   bettor becomes `answering_player_id` and `selecting_player_id`,
   `attempted_player_ids` is emptied, and the game enters `player_answering`

@@ -259,22 +259,20 @@ def test_selector_no_bet_lets_challenger_win_and_answer() -> None:
     )
 
 
-def test_nobody_bets_expires_and_selector_keeps_pick() -> None:
+def test_nobody_bets_selector_answers_at_default_value() -> None:
     machine = _machine()
     state = _betting_state()
+    min_bet = state.min_bet
     _expire(machine, state)
     _expire(machine, state)
-    assert state.phase == GamePhaseEnum.ANSWER_REVEAL
-    assert state.resolution == GameResolutionEnum.EXPIRED
-    assert state.selecting_player_id == ONE
-    assert state.categories[0].prompts[0].is_selected
-    assert all(p.score == 0 for p in state.players)
-    machine.expire_timer(
-        _with_deadline(state, NOW - timedelta(seconds=1)),
-        None,
-        None,
-    )
-    assert state.phase == GamePhaseEnum.PLAYER_SELECTING_PROMPT
+    assert state.phase == GamePhaseEnum.PLAYER_ANSWERING
+    assert state.answering_player_id == state.selecting_player_id == ONE
+    assert state.categories[0].prompts[0].score_value == min_bet
+    assert state.current_bet == state.min_bet == 0
+    state.timer_deadline = NOW + timedelta(seconds=10)
+    machine.judge_answer(state, HOST, False)
+    assert state.players[0].score == -min_bet
+    assert state.resolution == GameResolutionEnum.UNANSWERED
     assert state.selecting_player_id == ONE
 
 

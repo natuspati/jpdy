@@ -388,6 +388,12 @@ class GameStateMachine:
     def _resolve_betting(self, state: GameLobbyState) -> None:
         bettor_id = state.betting_player_id
         prompt = find_game_prompt(state, state.current_prompt_id)
+        if bettor_id is None and is_eligible_game_player(
+            find_game_player(state, state.selecting_player_id),
+        ):
+            # Nobody bet: the selector answers at the prompt's default value.
+            bettor_id = state.selecting_player_id
+            state.current_bet = state.min_bet
         if bettor_id is None or prompt is None:
             self._clear_betting(state)
             self._enter_answer_reveal(state, GameResolutionEnum.EXPIRED)
