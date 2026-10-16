@@ -107,11 +107,15 @@ created → waiting_start → in_progress → completed
 - Some prompts are randomly flagged as **betting prompts** (`is_betting`) when
   the lobby is materialized on the move to `waiting_start`. The draw is made
   **per round**, from that round's own prompts.
-- The host sets one optional number, `betting_prompt_count` ("betting prompts
-  per round", 0 to 25), applied to every round and clamped to that round's
-  prompt count. When unset (`null`), each round uses
+- The host sets one optional number, `betting_prompt_count` ("Betting prompts
+  in each round" in the lobby form, 0 to 25). It is a count of prompts, not a
+  percent, applied to every round and clamped to that round's prompt count.
+  When unset (`null`, shown as "Auto"), each round uses
   `prompt_count * 10 // 100`: 2 for a five-category round (25 prompts), 0 for a
   one-category round (5 prompts).
+- The lobby form previews the result per round ("Round N: X of Y prompts will
+  be betting prompts"), mirroring the server's clamp and default. It is UX
+  only; the server draw is authoritative.
 - `betting_prompt_count` can be changed through REST only while the lobby is
   `created`, in the same PATCH as `rounds` or separately. An explicit `null`
   resets it to the default.

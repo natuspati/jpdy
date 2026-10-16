@@ -128,7 +128,9 @@ with 25 clues and these accounts:
 | Player | carol | carol123 |
 
 Use separate browser profiles for test users. As host, create a lobby and
-select categories, then join from the player profiles.
+assign categories to one to three rounds (each category can be used once, so
+the five seeded ones are shared across rounds) and optionally set the number of
+betting prompts per round, then join from the player profiles.
 
 Implementation details are in the [backend README](be/README.md) and
 [frontend README](fe/README.md); contributor conventions are in
