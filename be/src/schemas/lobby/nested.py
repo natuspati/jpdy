@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import Field
 
 from enums.lobby import LobbyStateEnum
+from enums.prompt import PromptCategoryKindEnum
 from schemas.base import BaseSchema
 from schemas.lobby.base import LobbyInDBSchema
 from schemas.pagination import PaginatedResponseSchema
@@ -50,6 +51,7 @@ class LobbyRoundResultSchema(BaseSchema):
 
 class LobbyRoundSchema(BaseSchema):
     round_number: int
+    kind: PromptCategoryKindEnum = PromptCategoryKindEnum.STANDARD
     categories: list[PromptCategoryInDBSchema]
     results: list[LobbyRoundResultSchema] | None = None
 

@@ -1,5 +1,30 @@
 import { z } from 'zod';
 
+export const SubmitFinalWagerPayload = z.object({
+  amount: z.number().int().positive().nullable(),
+  command_id: z.string().uuid().optional(),
+});
+export type SubmitFinalWagerPayload = z.infer<typeof SubmitFinalWagerPayload>;
+
+export const SubmitFinalAnswerPayload = z.object({
+  answer: z.string().max(256),
+  command_id: z.string().uuid().optional(),
+});
+export type SubmitFinalAnswerPayload = z.infer<typeof SubmitFinalAnswerPayload>;
+
+export const JudgeFinalAnswerPayload = z.object({
+  user_id: z.number().int(),
+  correct: z.boolean(),
+  command_id: z.string().uuid().optional(),
+});
+export type JudgeFinalAnswerPayload = z.infer<typeof JudgeFinalAnswerPayload>;
+
+export const AdvanceFinalRevealPayload = z.object({
+  user_id: z.number().int(),
+  command_id: z.string().uuid().optional(),
+});
+export type AdvanceFinalRevealPayload = z.infer<typeof AdvanceFinalRevealPayload>;
+
 // Client → server payloads (mirror be/src/schemas/socket/events.py)
 export const SelectStarterPayload = z.object({
   user_id: z.number().int(),

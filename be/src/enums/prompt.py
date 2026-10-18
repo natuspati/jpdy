@@ -1,6 +1,11 @@
 from enum import StrEnum, auto
 
 
+class PromptCategoryKindEnum(StrEnum):
+    STANDARD = auto()
+    FINAL = auto()
+
+
 class QuestionTypeEnum(StrEnum):
     TEXT = auto()
     IMAGE = auto()

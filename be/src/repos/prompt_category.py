@@ -1,8 +1,9 @@
-from sqlalchemy import delete, distinct, func, insert, or_, select, update
+from sqlalchemy import case, delete, distinct, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
+from enums.prompt import PromptCategoryKindEnum
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
 from schemas.prompt.category import (
@@ -33,13 +34,16 @@ class PromptCategoryRepo:
         Issues two queries against the same filtered base query: a ``count(*)``
         over the filter-only subquery for the total, and a paginated select
         with ``selectinload(prompts)`` for the page of rows. ``is_complete``
-        filters on correlated total-prompt, valid-order, text-prompt, and
-        distinct-order counts. A category is complete only when all four equal
-        ``NUM_PROMPTS_IN_CATEGORY``; otherwise it is incomplete.
+        filters on correlated total-prompt, valid-order, and distinct-order
+        counts, compared with the required prompt count for the category kind.
 
         :param filters: validated search/pagination payload
         :return: page of categories with prompts plus total count
         """
+        required_count = case(
+            (PromptCategory.kind == PromptCategoryKindEnum.FINAL, 1),
+            else_=NUM_PROMPTS_IN_CATEGORY,
+        )
         total_prompt_count_subq = (
             select(func.count(Prompt.id))
             .where(Prompt.category_id == PromptCategory.id)
@@ -50,7 +54,7 @@ class PromptCategoryRepo:
             select(func.count(Prompt.id))
             .where(
                 Prompt.category_id == PromptCategory.id,
-                Prompt.order.between(1, NUM_PROMPTS_IN_CATEGORY),
+                Prompt.order.between(1, required_count),
             )
             .correlate(PromptCategory)
             .scalar_subquery()
@@ -59,7 +63,7 @@ class PromptCategoryRepo:
             select(func.count(distinct(Prompt.order)))
             .where(
                 Prompt.category_id == PromptCategory.id,
-                Prompt.order.between(1, NUM_PROMPTS_IN_CATEGORY),
+                Prompt.order.between(1, required_count),
             )
             .correlate(PromptCategory)
             .scalar_subquery()
@@ -72,6 +76,8 @@ class PromptCategoryRepo:
             conditions.append(PromptCategory.name.ilike(f"%{filters.name}%"))
         if filters.owner_ids is not None:
             conditions.append(PromptCategory.owner_id.in_(filters.owner_ids))
+        if filters.kind is not None:
+            conditions.append(PromptCategory.kind == filters.kind)
         if filters.updated_at_start is not None:
             conditions.append(PromptCategory.updated_at >= filters.updated_at_start)
         if filters.updated_at_end is not None:
@@ -80,17 +86,17 @@ class PromptCategoryRepo:
             if filters.is_complete:
                 conditions.extend(
                     [
-                        total_prompt_count_subq == NUM_PROMPTS_IN_CATEGORY,
-                        valid_prompt_count_subq == NUM_PROMPTS_IN_CATEGORY,
-                        unique_order_count_subq == NUM_PROMPTS_IN_CATEGORY,
+                        total_prompt_count_subq == required_count,
+                        valid_prompt_count_subq == required_count,
+                        unique_order_count_subq == required_count,
                     ],
                 )
             else:
                 conditions.append(
                     or_(
-                        total_prompt_count_subq != NUM_PROMPTS_IN_CATEGORY,
-                        valid_prompt_count_subq != NUM_PROMPTS_IN_CATEGORY,
-                        unique_order_count_subq != NUM_PROMPTS_IN_CATEGORY,
+                        total_prompt_count_subq != required_count,
+                        valid_prompt_count_subq != required_count,
+                        unique_order_count_subq != required_count,
                     ),
                 )
 
@@ -156,7 +162,7 @@ class PromptCategoryRepo:
         """
         stmt = (
             insert(PromptCategory)
-            .values(name=schema.name, owner_id=owner_id)
+            .values(**schema.model_dump(), owner_id=owner_id)
             .returning(PromptCategory)
         )
         category = (await self._session.execute(stmt)).scalar_one()

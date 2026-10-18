@@ -20,8 +20,8 @@ export function useCountdown(deadlineIso: string | null): number | null {
       setRemaining(left);
       if (left === 0) window.clearInterval(handle);
     };
-    tick();
     const handle = window.setInterval(tick, 200);
+    tick();
     return () => window.clearInterval(handle);
   }, [deadlineIso]);
 

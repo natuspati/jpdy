@@ -70,6 +70,7 @@ const LobbyDetailsPage = () => {
               >
                 <RoundRecap
                   roundNumber={round.round_number}
+                  isFinal={round.kind === 'final'}
                   categoryNames={round.categories.map((category) => category.name)}
                   standings={
                     round.results?.map((result) => ({

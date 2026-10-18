@@ -76,6 +76,7 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
       {
         category_id: 10,
         name: 'Animals',
+        kind: 'standard',
         round_number: 1,
         prompts: [
           {
@@ -101,6 +102,7 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
     current_round: currentRound,
     total_rounds: totalRounds,
     round_results: roundResults,
+    final_round: null,
     current_prompt_id: currentPromptId,
     selecting_player_id: selectingPlayerId,
     answering_player_id: answeringPlayerId,
@@ -114,4 +116,65 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
     resolved_answer: resolvedAnswer,
     resolution,
   };
+}
+
+export function buildFinalGameState(
+  phase: 'final_betting' | 'final_answering' | 'final_reveal' | 'finished' = 'final_betting',
+): GameLobbyState {
+  const state = buildGameState({
+    phase,
+    currentRound: 2,
+    totalRounds: 2,
+    timerDeadline:
+      phase === 'final_betting' || phase === 'final_answering'
+        ? new Date(Date.now() + 30_000).toISOString()
+        : null,
+    currentPromptId: phase === 'final_betting' ? null : 201,
+    players: [
+      { user_id: 2, username: 'alice', score: 500 },
+      { user_id: 3, username: 'bob', score: 1000 },
+    ],
+  });
+  state.categories.push({
+    category_id: 20,
+    name: 'Final topic',
+    kind: 'final',
+    round_number: 2,
+    prompts: [
+      {
+        prompt_id: 201,
+        question: phase === 'final_betting' ? '' : 'The final question',
+        question_type: 'text',
+        question_media: null,
+        answer_media: null,
+        order: 1,
+        score_value: null,
+        is_selected: false,
+        is_betting: false,
+      },
+    ],
+  });
+  state.final_round = {
+    players: state.players.map((player) => ({
+      user_id: player.user_id,
+      username: player.username,
+      score_before_final: player.score,
+      decision_submitted: phase !== 'final_betting',
+      answer_submitted: phase === 'final_reveal',
+      removed: false,
+      revealed: phase === 'final_reveal' && player.user_id === 2,
+      wager: phase !== 'final_betting' && player.user_id === 2 ? 200 : null,
+      answer: phase === 'final_reveal' && player.user_id === 2 ? 'A written response' : null,
+      correct: null,
+      score_delta: null,
+      updated_score: null,
+    })),
+    current_user_id: phase === 'final_reveal' ? 2 : null,
+    is_last_reveal: false,
+    skipped_reason: null,
+    correct_answer: phase === 'final_reveal' ? 'The correct answer' : null,
+    correct_answer_type: phase === 'final_reveal' ? 'text' : null,
+    correct_answer_media: null,
+  };
+  return state;
 }

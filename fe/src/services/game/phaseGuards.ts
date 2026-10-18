@@ -32,7 +32,8 @@ export const canSelectPrompt = (
   if (state.phase !== 'player_selecting_prompt') return false;
   if (state.selecting_player_id !== userId) return false;
   const category = state.categories.find((c) => c.prompts.some((p) => p.prompt_id === promptId));
-  if (!category || category.round_number !== state.current_round) return false;
+  if (!category || category.kind === 'final' || category.round_number !== state.current_round)
+    return false;
   const prompt = category.prompts.find((p) => p.prompt_id === promptId);
   return !!prompt && !prompt.is_selected;
 };
@@ -71,3 +72,58 @@ export const canBuzz = (state: GameLobbyState, userId: number): boolean => {
 };
 
 export const canBan = (state: GameLobbyState, userId: number): boolean => isHost(state, userId);
+
+export const isFinalPhase = (phase: GameLobbyState['phase']): boolean =>
+  phase === 'final_betting' || phase === 'final_answering' || phase === 'final_reveal';
+
+const finalPlayer = (state: GameLobbyState, userId: number) =>
+  state.final_round?.players.find((player) => player.user_id === userId && !player.removed);
+
+const beforeDeadline = (state: GameLobbyState): boolean =>
+  state.timer_deadline !== null && Date.now() < Date.parse(state.timer_deadline);
+
+export const canSubmitFinalWager = (state: GameLobbyState, userId: number): boolean => {
+  const player = finalPlayer(state, userId);
+  return (
+    state.phase === 'final_betting' &&
+    !isHost(state, userId) &&
+    isConnectedPlayer(state, userId) &&
+    beforeDeadline(state) &&
+    !!player &&
+    !player.decision_submitted
+  );
+};
+
+export const canSubmitFinalAnswer = (state: GameLobbyState, userId: number): boolean => {
+  const player = finalPlayer(state, userId);
+  return (
+    state.phase === 'final_answering' &&
+    !isHost(state, userId) &&
+    isConnectedPlayer(state, userId) &&
+    beforeDeadline(state) &&
+    !!player &&
+    player.wager !== null &&
+    !player.answer_submitted
+  );
+};
+
+export const canJudgeFinalAnswer = (state: GameLobbyState, userId: number): boolean => {
+  const player = finalPlayer(state, state.final_round?.current_user_id ?? -1);
+  return (
+    state.phase === 'final_reveal' &&
+    isHost(state, userId) &&
+    !!player?.revealed &&
+    player.correct === null &&
+    !!player.answer?.trim()
+  );
+};
+
+export const canAdvanceFinalReveal = (state: GameLobbyState, userId: number): boolean => {
+  const player = finalPlayer(state, state.final_round?.current_user_id ?? -1);
+  return (
+    state.phase === 'final_reveal' &&
+    isHost(state, userId) &&
+    !!player?.revealed &&
+    player.correct !== null
+  );
+};

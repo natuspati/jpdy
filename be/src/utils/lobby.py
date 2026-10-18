@@ -1,4 +1,3 @@
-from collections import Counter
 from typing import TYPE_CHECKING
 
 from configs.constants import (
@@ -6,9 +5,9 @@ from configs.constants import (
     MAX_ROUNDS_IN_LOBBY,
     MIN_CATEGORIES_PER_ROUND,
     MIN_ROUNDS_IN_LOBBY,
-    NUM_PROMPTS_IN_CATEGORY,
 )
 from enums.lobby import LobbyStateEnum
+from enums.prompt import PromptCategoryKindEnum
 from errors.request import BadRequestError, ForbiddenError, NotFoundError
 from schemas.lobby.nested import (
     LobbyFinalRankingSchema,
@@ -19,6 +18,7 @@ from schemas.lobby.nested import (
 from schemas.lobby.participant import LobbyParticipantInDBSchema, LobbyRoundResultInDBSchema
 from schemas.prompt.category import PromptCategoryInDBSchema
 from schemas.user.base import UserPublicSchema
+from utils.prompt import prompt_count_for_kind
 
 if TYPE_CHECKING:
     from database import UnitOfWork
@@ -51,16 +51,30 @@ def _validate_round_sizes(round_sizes: list[int]) -> None:
         )
 
 
-async def validate_rounds(uow: UnitOfWork, rounds: list[list[int]]) -> list[list[int]]:
+async def validate_rounds(
+    uow: UnitOfWork,
+    rounds: list[list[int]],
+    final_category_id: int | None = None,
+) -> list[list[int]]:
     _validate_round_sizes([len(round_ids) for round_ids in rounds])
     all_ids = [category_id for round_ids in rounds for category_id in round_ids]
+    if final_category_id is not None:
+        all_ids.append(final_category_id)
     if len(set(all_ids)) != len(all_ids):
         raise BadRequestError("A prompt category can be used only once per lobby")
-    existing = await uow.lobby_repo.select_existing_category_ids(all_ids)
-    missing = sorted(set(all_ids) - existing)
+    kinds = await uow.lobby_repo.select_category_kinds(all_ids)
+    missing = sorted(set(all_ids) - kinds.keys())
     if missing:
         raise BadRequestError(f"Prompt categories {missing} do not exist")
-    return rounds
+    if any(
+        kinds[category_id] != PromptCategoryKindEnum.STANDARD
+        for round_ids in rounds
+        for category_id in round_ids
+    ):
+        raise BadRequestError("Normal rounds require standard categories")
+    if final_category_id is not None and kinds[final_category_id] != PromptCategoryKindEnum.FINAL:
+        raise BadRequestError("The Final slot requires a final category")
+    return [*rounds, [final_category_id]] if final_category_id is not None else rounds
 
 
 def validate_lifecycle_transition(
@@ -76,23 +90,36 @@ async def validate_lobby_categories_for_start(uow: UnitOfWork, lobby_id: int) ->
     if lobby is None:
         raise NotFoundError(f"Lobby {lobby_id} not found")
     category_rounds = await uow.lobby_repo.select_category_rounds(lobby_id)
-    round_sizes = Counter(category_rounds.get(c.id, 1) for c in lobby.prompt_categories)
-    total_rounds = max(round_sizes, default=0)
-    if set(round_sizes) != set(range(1, total_rounds + 1)):
+    rounds: dict[int, list[int]] = {}
+    final_ids = []
+    for category in lobby.prompt_categories:
+        if category.kind == PromptCategoryKindEnum.FINAL:
+            final_ids.append(category.id)
+        else:
+            rounds.setdefault(category_rounds.get(category.id, 1), []).append(category.id)
+    if set(rounds) != set(range(1, len(rounds) + 1)):
         raise BadRequestError("Lobby rounds must be numbered consecutively from 1")
-    _validate_round_sizes([round_sizes[number] for number in sorted(round_sizes)])
-    expected_orders = set(range(1, NUM_PROMPTS_IN_CATEGORY + 1))
+    if len(final_ids) > 1 or any(
+        category_rounds.get(category_id, 1) != len(rounds) + 1 for category_id in final_ids
+    ):
+        raise BadRequestError("The Final category must be alone after all normal rounds")
+    await validate_rounds(
+        uow,
+        [rounds[number] for number in sorted(rounds)],
+        final_ids[0] if final_ids else None,
+    )
     incomplete_categories = [
         category.id
         for category in lobby.prompt_categories
-        if len(category.prompts) != NUM_PROMPTS_IN_CATEGORY
-        or any(prompt.order is None for prompt in category.prompts)
-        or {prompt.order for prompt in category.prompts} != expected_orders
+        if len(category.prompts) != prompt_count_for_kind(category.kind)
+        or {prompt.order for prompt in category.prompts}
+        != set(range(1, prompt_count_for_kind(category.kind) + 1))
     ]
     if incomplete_categories:
         raise BadRequestError(
-            "Every lobby category must contain exactly five uniquely ordered "
-            f"prompts; invalid categories: {incomplete_categories}",
+            "Every lobby category must contain exactly five uniquely ordered prompts "
+            "(one for Final); invalid categories: "
+            f"{incomplete_categories}",
         )
 
 
@@ -116,6 +143,11 @@ def build_lobby_rounds(
     return [
         LobbyRoundSchema(
             round_number=number,
+            kind=next(
+                category.kind
+                for category in categories
+                if category_rounds.get(category.id, 1) == number
+            ),
             categories=sorted(
                 (c for c in categories if category_rounds.get(c.id, 1) == number),
                 key=lambda category: category.id,

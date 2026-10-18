@@ -3,7 +3,7 @@ from schemas.lobby.game_state import GameLobbyState, HostAnswerKey
 from schemas.socket.events import GameSoundCuePayload, SocketErrorPayload
 from sockets.app import sio
 from sockets.namespace import lobby_namespace
-from sockets.session import lobby_host_room, lobby_player_room
+from sockets.session import lobby_host_room, lobby_player_room, lobby_user_room
 from sockets.uow import build_uow
 from utils.game_state import build_public_game_state, find_game_prompt
 
@@ -18,17 +18,30 @@ SESSION_REPLACED_EVENT = "session_replaced"
 async def broadcast_state(lobby_id: int, state: GameLobbyState) -> None:
     """Emit a recipient-specific safe snapshot and host-private answer key."""
     namespace = lobby_namespace(lobby_id)
-    player_payload = build_public_game_state(state).model_dump(mode="json")
     host_payload = build_public_game_state(
         state,
         include_banned_players=True,
+        viewer_user_id=state.host.user_id,
     ).model_dump(mode="json")
-    await sio.emit(
-        STATE_CHANGED_EVENT,
-        player_payload,
-        to=lobby_player_room(lobby_id),
-        namespace=namespace,
-    )
+    if state.final_round is not None:
+        for player in state.players:
+            if player.is_banned:
+                continue
+            await sio.emit(
+                STATE_CHANGED_EVENT,
+                build_public_game_state(state, viewer_user_id=player.user_id).model_dump(
+                    mode="json",
+                ),
+                to=lobby_user_room(lobby_id, player.user_id),
+                namespace=namespace,
+            )
+    else:
+        await sio.emit(
+            STATE_CHANGED_EVENT,
+            build_public_game_state(state).model_dump(mode="json"),
+            to=lobby_player_room(lobby_id),
+            namespace=namespace,
+        )
     await sio.emit(
         STATE_CHANGED_EVENT,
         host_payload,

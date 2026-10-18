@@ -20,7 +20,9 @@ interface Props {
 
 const GameBoard = ({ state, currentUserId, onSelect, flashPromptId = null }: Props) => {
   // `state.categories` holds every round (so media can preload); the board shows only this one.
-  const categories = state.categories.filter((cat) => cat.round_number === state.current_round);
+  const categories = state.categories.filter(
+    (cat) => cat.kind !== 'final' && cat.round_number === state.current_round,
+  );
   if (categories.length === 0) {
     return <p className="text-slate-400">No categories.</p>;
   }

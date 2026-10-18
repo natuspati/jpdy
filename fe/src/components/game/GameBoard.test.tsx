@@ -40,6 +40,7 @@ describe('GameBoard', () => {
     state.categories.push({
       category_id: 11,
       name: 'A category title long enough to wrap onto another line',
+      kind: 'standard',
       round_number: 1,
       prompts: [
         {
@@ -93,6 +94,7 @@ describe('GameBoard', () => {
     state.categories.push({
       category_id: 11,
       name: 'Round two category',
+      kind: 'standard',
       round_number: 2,
       prompts: [
         {

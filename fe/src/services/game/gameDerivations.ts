@@ -17,6 +17,11 @@ export function currentPrompt(state: GameLobbyState): GamePromptState | undefine
 }
 
 export function currentCategoryName(state: GameLobbyState): string | undefined {
+  if (state.phase === 'final_betting') {
+    return state.categories.find(
+      (category) => category.kind === 'final' && category.round_number === state.current_round,
+    )?.name;
+  }
   return state.categories.find((cat) =>
     cat.prompts.some((p) => p.prompt_id === state.current_prompt_id),
   )?.name;

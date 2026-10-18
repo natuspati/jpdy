@@ -9,14 +9,18 @@ from errors.base import BaseError
 from errors.request import BadRequestError, ForbiddenError, NotFoundError
 from schemas.lobby.game_state import GameLobbyState
 from schemas.socket.events import (
+    AdvanceFinalRevealPayload,
     BanPlayerPayload,
     GameSoundCueName,
     JudgeAnswerPayload,
+    JudgeFinalAnswerPayload,
     PlaceBetPayload,
     SelectPromptPayload,
     SelectStarterPayload,
     SetAssetsLoadedPayload,
     StartGamePayload,
+    SubmitFinalAnswerPayload,
+    SubmitFinalWagerPayload,
     UnbanPlayerPayload,
 )
 from services.game import GameService
@@ -239,6 +243,100 @@ async def on_place_bet(namespace: str, sid: str, data: Any = None) -> None:
         )
 
     await _run_event(namespace, sid, data, PlaceBetPayload, _action)
+
+
+async def on_submit_final_wager(namespace: str, sid: str, data: Any = None) -> None:
+    async def _action(
+        service: GameService,
+        lobby_id: int,
+        user_id: int,
+        payload: SubmitFinalWagerPayload | None,
+        command_id: str,
+    ) -> GameLobbyState:
+        assert payload is not None
+        return await service.submit_final_wager(lobby_id, user_id, payload, command_id)
+
+    await _run_event(
+        namespace,
+        sid,
+        data,
+        SubmitFinalWagerPayload,
+        _action,
+        lambda state, _payload: (
+            [GameSoundCueName.GAME_COMPLETED] if state.phase.value == "finished" else []
+        ),
+    )
+
+
+async def on_submit_final_answer(namespace: str, sid: str, data: Any = None) -> None:
+    async def _action(
+        service: GameService,
+        lobby_id: int,
+        user_id: int,
+        payload: SubmitFinalAnswerPayload | None,
+        command_id: str,
+    ) -> GameLobbyState:
+        assert payload is not None
+        return await service.submit_final_answer(lobby_id, user_id, payload, command_id)
+
+    await _run_event(
+        namespace,
+        sid,
+        data,
+        SubmitFinalAnswerPayload,
+        _action,
+        lambda state, _payload: (
+            [GameSoundCueName.ANSWER_REVEALED] if state.phase.value == "final_reveal" else []
+        ),
+    )
+
+
+async def on_judge_final_answer(namespace: str, sid: str, data: Any = None) -> None:
+    async def _action(
+        service: GameService,
+        lobby_id: int,
+        user_id: int,
+        payload: JudgeFinalAnswerPayload | None,
+        command_id: str,
+    ) -> GameLobbyState:
+        assert payload is not None
+        return await service.judge_final_answer(lobby_id, user_id, payload, command_id)
+
+    await _run_event(
+        namespace,
+        sid,
+        data,
+        JudgeFinalAnswerPayload,
+        _action,
+        lambda _state, payload: [
+            GameSoundCueName.ANSWER_CORRECT if payload.correct else GameSoundCueName.ANSWER_WRONG,
+        ],
+    )
+
+
+async def on_advance_final_reveal(namespace: str, sid: str, data: Any = None) -> None:
+    async def _action(
+        service: GameService,
+        lobby_id: int,
+        user_id: int,
+        payload: AdvanceFinalRevealPayload | None,
+        command_id: str,
+    ) -> GameLobbyState:
+        assert payload is not None
+        return await service.advance_final_reveal(lobby_id, user_id, payload, command_id)
+
+    await _run_event(
+        namespace,
+        sid,
+        data,
+        AdvanceFinalRevealPayload,
+        _action,
+        lambda state, _payload: [
+            GameSoundCueName.GAME_COMPLETED
+            if state.phase.value == "finished"
+            else GameSoundCueName.ANSWER_REVEALED,
+        ],
+    )
 
 
 async def on_judge_answer(namespace: str, sid: str, data: Any = None) -> None:

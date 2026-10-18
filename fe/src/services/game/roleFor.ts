@@ -1,5 +1,10 @@
 import type { GameLobbyState } from '@/schemas';
-import { canPlaceBet } from './phaseGuards';
+import {
+  canPlaceBet,
+  canSubmitFinalAnswer,
+  canSubmitFinalWager,
+  isFinalPhase,
+} from './phaseGuards';
 
 export type Role = 'host' | 'selector' | 'answerer' | 'buzzer' | 'bettor' | 'spectator' | 'banned';
 
@@ -20,6 +25,9 @@ export function roleFor(state: GameLobbyState, userId: number): Role {
   if (state.host.user_id === userId) return 'host';
   const player = state.players.find((p) => p.user_id === userId);
   if (player?.is_banned) return 'banned';
+  if (canSubmitFinalWager(state, userId)) return 'bettor';
+  if (canSubmitFinalAnswer(state, userId)) return 'answerer';
+  if (isFinalPhase(state.phase)) return 'spectator';
   if (state.answering_player_id === userId) return 'answerer';
   if (
     state.phase === 'buzz_open' &&

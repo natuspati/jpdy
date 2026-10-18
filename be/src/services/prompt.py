@@ -3,7 +3,8 @@ from typing import Annotated
 from fastapi import Depends
 
 from database import UnitOfWork
-from errors.request import ForbiddenError, NotFoundError, ResourceConflictError
+from enums.prompt import PromptCategoryKindEnum
+from errors.request import BadRequestError, ForbiddenError, NotFoundError, ResourceConflictError
 from schemas.prompt.category import (
     PromptCategoryCreateSchema,
     PromptCategoryFilterSchema,
@@ -109,6 +110,11 @@ class PromptService:
     ) -> PromptResponseSchema:
         async with self._uow as uow:
             category = await ensure_owned_category(uow, category_id, user)
+            if category.kind == PromptCategoryKindEnum.FINAL:
+                if schema.order != 1:
+                    raise BadRequestError("Final categories require prompt order 1")
+                if category.prompts:
+                    raise ResourceConflictError("Final categories can contain only one prompt")
             if any(prompt.order == schema.order for prompt in category.prompts):
                 raise ResourceConflictError(
                     f"Order {schema.order} is already taken in category {category_id}",

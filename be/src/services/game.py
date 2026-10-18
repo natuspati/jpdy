@@ -8,15 +8,19 @@ from database import UnitOfWork
 from errors.request import NotFoundError
 from schemas.lobby.game_state import GameLobbyState
 from schemas.socket.events import (
+    AdvanceFinalRevealPayload,
     BanPlayerPayload,
     GameSoundCueName,
     GameSoundCuePayload,
     JudgeAnswerPayload,
+    JudgeFinalAnswerPayload,
     PlaceBetPayload,
     SelectPromptPayload,
     SelectStarterPayload,
     SetAssetsLoadedPayload,
     StartGamePayload,
+    SubmitFinalAnswerPayload,
+    SubmitFinalWagerPayload,
     UnbanPlayerPayload,
 )
 from schemas.user.base import UserPublicSchema
@@ -219,6 +223,86 @@ class GameService:
             partial(self._state_machine.advance_round, user_id=user_id),
         )
         assert state is not None
+        await self._projections.project_completion(state)
+        return state
+
+    async def submit_final_wager(
+        self,
+        lobby_id: int,
+        user_id: int,
+        payload: SubmitFinalWagerPayload,
+        command_id: str | None = None,
+    ) -> GameLobbyState:
+        state = await self._executor.execute(
+            lobby_id,
+            command_id,
+            "submit_final_wager",
+            partial(self._state_machine.submit_final_wager, user_id=user_id, amount=payload.amount),
+        )
+        assert state is not None
+        await self._projections.project_completion(state)
+        return state
+
+    async def submit_final_answer(
+        self,
+        lobby_id: int,
+        user_id: int,
+        payload: SubmitFinalAnswerPayload,
+        command_id: str | None = None,
+    ) -> GameLobbyState:
+        state = await self._executor.execute(
+            lobby_id,
+            command_id,
+            "submit_final_answer",
+            partial(
+                self._state_machine.submit_final_answer,
+                user_id=user_id,
+                answer=payload.answer,
+            ),
+        )
+        assert state is not None
+        return state
+
+    async def judge_final_answer(
+        self,
+        lobby_id: int,
+        user_id: int,
+        payload: JudgeFinalAnswerPayload,
+        command_id: str | None = None,
+    ) -> GameLobbyState:
+        state = await self._executor.execute(
+            lobby_id,
+            command_id,
+            "judge_final_answer",
+            partial(
+                self._state_machine.judge_final_answer,
+                user_id=user_id,
+                target_user_id=payload.user_id,
+                correct=payload.correct,
+            ),
+        )
+        assert state is not None
+        return state
+
+    async def advance_final_reveal(
+        self,
+        lobby_id: int,
+        user_id: int,
+        payload: AdvanceFinalRevealPayload,
+        command_id: str | None = None,
+    ) -> GameLobbyState:
+        state = await self._executor.execute(
+            lobby_id,
+            command_id,
+            "advance_final_reveal",
+            partial(
+                self._state_machine.advance_final_reveal,
+                user_id=user_id,
+                target_user_id=payload.user_id,
+            ),
+        )
+        assert state is not None
+        await self._projections.project_completion(state)
         return state
 
     async def ban_player(
@@ -240,6 +324,7 @@ class GameService:
         )
         assert state is not None
         await self._projections.project_participant(state, payload.user_id)
+        await self._projections.project_completion(state)
         return state
 
     async def unban_player(

@@ -19,6 +19,8 @@ _TIMED_PHASES = {
     GamePhaseEnum.BUZZ_OPEN,
     GamePhaseEnum.ANSWER_REVEAL,
     GamePhaseEnum.ROUND_SUMMARY,
+    GamePhaseEnum.FINAL_BETTING,
+    GamePhaseEnum.FINAL_ANSWERING,
 }
 
 
@@ -120,6 +122,13 @@ def _sound_cues_for_expired_timer(
 ) -> list[GameSoundCueName]:
     if before is None:
         return []
+    if after.phase == GamePhaseEnum.FINISHED and before.phase in {
+        GamePhaseEnum.FINAL_BETTING,
+        GamePhaseEnum.ROUND_SUMMARY,
+    }:
+        return [GameSoundCueName.GAME_COMPLETED]
+    if before.phase == GamePhaseEnum.FINAL_ANSWERING:
+        return [GameSoundCueName.ANSWER_REVEALED]
     if before.phase in {GamePhaseEnum.PLAYER_ANSWERING, GamePhaseEnum.BUZZ_OPEN}:
         cues = [GameSoundCueName.ANSWER_EXPIRED]
         if after.phase == GamePhaseEnum.ANSWER_REVEAL:

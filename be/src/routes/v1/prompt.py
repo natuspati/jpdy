@@ -155,8 +155,12 @@ async def delete_prompt_category(
         _FORBIDDEN_CATEGORY,
         _CATEGORY_NOT_FOUND,
         ErrorResponse(
+            status.HTTP_400_BAD_REQUEST,
+            "Final categories require prompt order 1",
+        ),
+        ErrorResponse(
             status.HTTP_409_CONFLICT,
-            "Order already taken in this category",
+            "Order already taken in this category or Final category already has a prompt",
         ),
         ErrorResponse(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

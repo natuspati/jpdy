@@ -6,12 +6,19 @@ from configs.constants import (
     ANSWERING_TIME_SECONDS,
     BETTING_TIME_SECONDS,
     BUZZING_TIME_SECONDS,
+    FINAL_ANSWERING_TIME_SECONDS,
+    FINAL_BETTING_TIME_SECONDS,
     NUM_PROMPTS_IN_CATEGORY,
     ROUND_SUMMARY_TIME_SECONDS,
 )
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from errors.request import BadRequestError, ForbiddenError
-from schemas.lobby.game_state import GameLobbyState, GamePlayerState
+from schemas.lobby.game_state import (
+    FinalPlayerState,
+    FinalRoundState,
+    GameLobbyState,
+    GamePlayerState,
+)
 from utils.game_state import (
     GameCommandOutcome,
     build_round_result,
@@ -136,6 +143,8 @@ class GameStateMachine:
         if prompt is None:
             raise BadRequestError(f"Prompt {prompt_id} is not in this lobby")
         category = find_game_category_of_prompt(state, prompt_id)
+        if category is not None and category.kind == "final":
+            raise BadRequestError("Final prompts cannot be selected from the board")
         if category is not None and category.round_number != state.current_round:
             raise BadRequestError("Prompt belongs to another round")
         if prompt.is_selected:
@@ -256,6 +265,83 @@ class GameStateMachine:
         self._start_next_round(state)
         return GameCommandOutcome(state=state, result=state, reason="round_advanced")
 
+    def submit_final_wager(
+        self,
+        state: GameLobbyState,
+        user_id: int,
+        amount: int | None,
+    ) -> GameCommandOutcome:
+        self._require_phase(state, GamePhaseEnum.FINAL_BETTING)
+        self._require_final_deadline(state)
+        player = self._final_player(state, user_id)
+        if player.decision_submitted:
+            raise BadRequestError("Final decision has already been submitted")
+        if amount is not None and (
+            type(amount) is not int or not 1 <= amount <= player.score_before_final
+        ):
+            raise BadRequestError("Wager must be an integer between 1 and your starting score")
+        player.decision_submitted = True
+        player.wager = amount
+        final = state.final_round
+        assert final is not None
+        if all(p.decision_submitted for p in final.players if not p.removed):
+            self._lock_final_wagers(state)
+        return GameCommandOutcome(state=state, result=state, reason="final_wager_submitted")
+
+    def submit_final_answer(
+        self,
+        state: GameLobbyState,
+        user_id: int,
+        answer: str,
+    ) -> GameCommandOutcome:
+        self._require_phase(state, GamePhaseEnum.FINAL_ANSWERING)
+        self._require_final_deadline(state)
+        player = self._final_player(state, user_id)
+        if player.wager is None:
+            raise ForbiddenError("Only players who wagered may submit an answer")
+        if player.answer_submitted:
+            raise BadRequestError("Final answer has already been submitted")
+        if not isinstance(answer, str) or len(answer) > 256:
+            raise BadRequestError("Final answer must be text of at most 256 characters")
+        player.answer_submitted = True
+        player.answer = answer.strip()
+        final = state.final_round
+        assert final is not None
+        if all(p.answer_submitted for p in final.players if not p.removed and p.wager is not None):
+            self._lock_final_answers(state)
+        return GameCommandOutcome(state=state, result=state, reason="final_answer_submitted")
+
+    def judge_final_answer(
+        self,
+        state: GameLobbyState,
+        user_id: int,
+        target_user_id: int,
+        correct: bool,
+    ) -> GameCommandOutcome:
+        self._require_host(state, user_id)
+        player = self._current_final_reveal(state, target_user_id)
+        if player.correct is not None:
+            raise BadRequestError("This Final answer has already been judged")
+        if not player.answer:
+            raise BadRequestError("Missing Final answers are automatically incorrect")
+        self._apply_final_judgment(state, player, correct)
+        return GameCommandOutcome(state=state, result=state, reason="final_answer_judged")
+
+    def advance_final_reveal(
+        self,
+        state: GameLobbyState,
+        user_id: int,
+        target_user_id: int,
+    ) -> GameCommandOutcome:
+        self._require_host(state, user_id)
+        player = self._current_final_reveal(state, target_user_id)
+        if player.correct is None:
+            raise BadRequestError("Judge the current Final answer before advancing")
+        assert state.final_round is not None
+        state.final_round.reveal_index += 1
+        self._open_final_reveal(state)
+        return GameCommandOutcome(state=state, result=state, reason="final_reveal_advanced")
+
     def ban_player(
         self,
         state: GameLobbyState,
@@ -329,6 +415,10 @@ class GameStateMachine:
             self._advance_after_reveal(state)
         elif state.phase == GamePhaseEnum.ROUND_SUMMARY:
             self._start_next_round(state)
+        elif state.phase == GamePhaseEnum.FINAL_BETTING:
+            self._lock_final_wagers(state)
+        elif state.phase == GamePhaseEnum.FINAL_ANSWERING:
+            self._lock_final_answers(state)
         else:
             return GameCommandOutcome(state=None, result=None, reason="timer_phase_not_timed")
         return GameCommandOutcome(state=state, result=state, reason="timer_expired")
@@ -364,6 +454,12 @@ class GameStateMachine:
         state.current_round += 1
         state.timer_deadline = None
         clear_game_player_selection_flags(state)
+        if any(
+            category.kind == "final" and category.round_number == state.current_round
+            for category in state.categories
+        ):
+            self._start_final(state)
+            return
         eligible = [player for player in state.players if is_eligible_game_player(player)]
         lowest = min((player.score for player in eligible), default=None)
         lowest_players = [player for player in eligible if player.score == lowest]
@@ -422,6 +518,13 @@ class GameStateMachine:
         state.phase = GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
 
     def _recover_from_banned_player(self, state: GameLobbyState, user_id: int) -> None:
+        if state.phase in {
+            GamePhaseEnum.FINAL_BETTING,
+            GamePhaseEnum.FINAL_ANSWERING,
+            GamePhaseEnum.FINAL_REVEAL,
+        }:
+            self._remove_final_player(state, user_id)
+            return
         is_selector = state.selecting_player_id == user_id
         is_answerer = state.answering_player_id == user_id
         if state.phase == GamePhaseEnum.PLAYER_SELECTING_PROMPT and is_selector:
@@ -468,6 +571,157 @@ class GameStateMachine:
         state.resolved_answer_type = prompt.answer_type
         state.resolved_answer_media = prompt.answer_media
         state.resolution = resolution
+
+    def _start_final(self, state: GameLobbyState) -> None:
+        state.selecting_player_id = state.answering_player_id = None
+        state.current_prompt_id = None
+        self._clear_betting(state)
+        self._clear_resolution(state)
+        state.final_round = FinalRoundState(
+            players=[
+                FinalPlayerState(
+                    user_id=player.user_id,
+                    username=player.username,
+                    score_before_final=player.score,
+                )
+                for player in state.players
+                if not player.is_banned
+                and player.user_id != state.host.user_id
+                and player.score > 0
+            ],
+        )
+        if not state.final_round.players:
+            self._finish_final(state, skipped_reason="no_eligible_players")
+            return
+        state.phase = GamePhaseEnum.FINAL_BETTING
+        state.timer_deadline = self._deadline(FINAL_BETTING_TIME_SECONDS)
+
+    def _lock_final_wagers(self, state: GameLobbyState) -> None:
+        final = state.final_round
+        assert final is not None
+        for player in final.players:
+            if not player.removed:
+                player.decision_submitted = True
+        participants = [p for p in final.players if not p.removed and p.wager is not None]
+        if not participants:
+            self._finish_final(state, skipped_reason="all_passed")
+            return
+        final.reveal_order = [
+            p.user_id
+            for p in sorted(
+                participants,
+                key=lambda p: (p.score_before_final, p.username, p.user_id),
+            )
+        ]
+        category = next(
+            c
+            for c in state.categories
+            if c.kind == "final" and c.round_number == state.current_round
+        )
+        state.current_prompt_id = category.prompts[0].prompt_id
+        state.phase = GamePhaseEnum.FINAL_ANSWERING
+        state.timer_deadline = self._deadline(FINAL_ANSWERING_TIME_SECONDS)
+
+    def _lock_final_answers(self, state: GameLobbyState) -> None:
+        state.timer_deadline = None
+        state.phase = GamePhaseEnum.FINAL_REVEAL
+        self._open_final_reveal(state)
+
+    def _open_final_reveal(self, state: GameLobbyState) -> None:
+        final = state.final_round
+        assert final is not None
+        while final.reveal_index < len(final.reveal_order):
+            player = next(
+                p for p in final.players if p.user_id == final.reveal_order[final.reveal_index]
+            )
+            if player.removed:
+                final.reveal_index += 1
+                continue
+            player.revealed = True
+            if not player.answer and player.correct is None:
+                self._apply_final_judgment(state, player, False)
+            return
+        self._finish_final(state)
+
+    @staticmethod
+    def _apply_final_judgment(
+        state: GameLobbyState,
+        player: FinalPlayerState,
+        correct: bool,
+    ) -> None:
+        assert player.correct is None
+        assert player.wager is not None
+        live_player = find_game_player(state, player.user_id)
+        assert live_player is not None
+        live_player.score += player.wager if correct else -player.wager
+        player.correct = correct
+
+    @staticmethod
+    def _finish_final(state: GameLobbyState, skipped_reason: str | None = None) -> None:
+        assert state.final_round is not None
+        state.final_round.skipped_reason = skipped_reason
+        state.timer_deadline = None
+        state.phase = GamePhaseEnum.FINISHED
+        if not any(result.round_number == state.current_round for result in state.round_results):
+            state.round_results.append(build_round_result(state))
+
+    def _remove_final_player(self, state: GameLobbyState, user_id: int) -> None:
+        final = state.final_round
+        assert final is not None
+        player = next((p for p in final.players if p.user_id == user_id), None)
+        if player is None or player.removed:
+            return
+        player.removed = True
+        if player.correct is None:
+            player.wager = None
+            player.answer = None
+        if state.phase == GamePhaseEnum.FINAL_BETTING:
+            if not any(not p.removed for p in final.players):
+                self._finish_final(state, skipped_reason="no_participants")
+            elif all(p.decision_submitted for p in final.players if not p.removed):
+                self._lock_final_wagers(state)
+        elif not any(not p.removed and p.wager is not None for p in final.players):
+            self._finish_final(
+                state,
+                skipped_reason="no_participants"
+                if not any(p.revealed for p in final.players)
+                else None,
+            )
+        elif state.phase == GamePhaseEnum.FINAL_ANSWERING:
+            if all(
+                p.answer_submitted for p in final.players if not p.removed and p.wager is not None
+            ):
+                self._lock_final_answers(state)
+        elif final.reveal_order[final.reveal_index] == user_id:
+            final.reveal_index += 1
+            self._open_final_reveal(state)
+
+    def _require_final_deadline(self, state: GameLobbyState) -> None:
+        if state.timer_deadline is None or self._clock() >= state.timer_deadline:
+            raise BadRequestError("Final submission time has expired")
+
+    @staticmethod
+    def _final_player(state: GameLobbyState, user_id: int) -> FinalPlayerState:
+        final = state.final_round
+        assert final is not None
+        player = next((p for p in final.players if p.user_id == user_id and not p.removed), None)
+        live_player = find_game_player(state, user_id)
+        if (
+            player is None
+            or live_player is None
+            or live_player.is_banned
+            or user_id == state.host.user_id
+        ):
+            raise ForbiddenError("You are not eligible for this Final")
+        return player
+
+    def _current_final_reveal(self, state: GameLobbyState, target_user_id: int) -> FinalPlayerState:
+        self._require_phase(state, GamePhaseEnum.FINAL_REVEAL)
+        final = state.final_round
+        assert final is not None
+        if final.reveal_order[final.reveal_index] != target_user_id:
+            raise BadRequestError("The current Final reveal has changed")
+        return self._final_player(state, target_user_id)
 
     @staticmethod
     def _clear_resolution(state: GameLobbyState) -> None:

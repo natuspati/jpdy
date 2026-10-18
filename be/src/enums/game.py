@@ -11,6 +11,9 @@ class GamePhaseEnum(StrEnum):
     BUZZ_OPEN = auto()
     ANSWER_REVEAL = auto()
     ROUND_SUMMARY = auto()
+    FINAL_BETTING = auto()
+    FINAL_ANSWERING = auto()
+    FINAL_REVEAL = auto()
     FINISHED = auto()
 
 

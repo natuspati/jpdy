@@ -19,6 +19,7 @@ import {
   type MediaKind,
   type MediaReference,
   type PromptContentType,
+  type PromptCategoryKindEnum,
   type PromptInDB,
 } from '@/schemas';
 import { toastError } from '@/store/toastStore';
@@ -39,6 +40,7 @@ interface Props {
   categoryId: number;
   order: number;
   existing: PromptInDB | undefined;
+  kind?: PromptCategoryKindEnum;
 }
 
 interface MediaControlProps {
@@ -289,7 +291,7 @@ const toValues = (prompt: PromptInDB): SlotValues => ({
   order: prompt.order ?? 1,
 });
 
-const PromptEditor = ({ categoryId, order, existing }: Props) => {
+const PromptEditor = ({ categoryId, order, existing, kind = 'standard' }: Props) => {
   const queryClient = useQueryClient();
   const create = useCreatePrompt(categoryId);
   const update = useUpdatePrompt(categoryId);
@@ -492,8 +494,12 @@ const PromptEditor = ({ categoryId, order, existing }: Props) => {
       onSubmit={onSubmit}
     >
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-200">Prompt {order}</h3>
-        <span className="text-xs text-slate-400">Score: {order * 100}</span>
+        <h3 className="text-sm font-semibold text-slate-200">
+          {kind === 'final' ? 'Final prompt' : `Prompt ${order}`}
+        </h3>
+        {kind !== 'final' ? (
+          <span className="text-xs text-slate-400">Score: {order * 100}</span>
+        ) : null}
       </div>
       <Field
         label="Question instruction / caption"

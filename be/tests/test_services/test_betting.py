@@ -83,6 +83,7 @@ def _lobby(category_count: int, rounds: list[int]) -> tuple[SimpleNamespace, dic
         SimpleNamespace(
             id=cid,
             name=f"c{cid}",
+            kind="standard",
             prompts=[
                 SimpleNamespace(
                     id=cid * 10 + order,
@@ -147,6 +148,22 @@ def test_materializer_rng_is_seeded_and_draws_each_round_from_its_own_prompts() 
     assert _betting_ids(first, 1) == _betting_ids(again, 1)
     assert all(pid // 10 == 1 for pid in _betting_ids(first, 1))
     assert all(pid // 10 == 2 for pid in _betting_ids(first, 2))
+
+
+def test_materializer_snapshots_final_without_points_or_random_betting() -> None:
+    lobby, rounds = _lobby(2, [1, 2])
+    lobby.prompt_categories[1].kind = "final"
+    lobby.prompt_categories[1].prompts = lobby.prompt_categories[1].prompts[:1]
+    state = GameStateMaterializer.build_game_lobby_state(lobby, rounds, 3)
+
+    assert state.total_rounds == 2
+    assert len(_betting_ids(state, 1)) == 3
+    assert _betting_ids(state, 2) == []
+    final = state.categories[1]
+    assert final.kind == "final"
+    assert final.prompts[0].score_value is None
+    lobby.prompt_categories[1].prompts[0].question = "edited later"
+    assert final.prompts[0].question == "q"
 
 
 def test_public_projection_hides_betting_flag_and_question_until_selected() -> None:

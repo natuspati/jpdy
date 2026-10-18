@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { GameCategoryState, MediaReference } from '@/schemas';
+import type { GameCategoryState, GamePhaseEnum, MediaReference } from '@/schemas';
 
 import { preloadedSrc, useBoardMediaPreload } from './useBoardMediaPreload';
 
@@ -18,6 +18,7 @@ const categories = (
   {
     category_id: 1,
     name: 'Category',
+    kind: 'standard',
     round_number: 1,
     prompts: items.map(([question_media, answer_media], index) => ({
       prompt_id: index + 1,
@@ -96,5 +97,22 @@ describe('useBoardMediaPreload', () => {
 
     await waitFor(() => expect(result.current).toEqual({ loaded: 2, total: 2 }));
     expect([...fetched].sort()).toEqual(['/media/r1.mp4', '/media/r2.mp4']);
+  });
+
+  it('never preloads Final media before its phase, then loads question and canonical separately', async () => {
+    const board = categories([media('/final-question'), media('/final-answer')]);
+    board[0].kind = 'final';
+    const { result, rerender } = renderHook(
+      ({ phase }: { phase: GamePhaseEnum }) => useBoardMediaPreload(board, phase),
+      { initialProps: { phase: 'final_betting' as GamePhaseEnum } },
+    );
+    expect(result.current.total).toBe(0);
+    expect(fetched).toEqual([]);
+    rerender({ phase: 'final_answering' });
+    await waitFor(() => expect(result.current.loaded).toBe(1));
+    expect(fetched).toEqual(['/final-question']);
+    rerender({ phase: 'final_reveal' });
+    await waitFor(() => expect(result.current.loaded).toBe(2));
+    expect(fetched).toEqual(['/final-question', '/final-answer']);
   });
 });

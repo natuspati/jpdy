@@ -10,6 +10,8 @@ from schemas.lobby.game_state import (
     GamePromptState,
     GameRoundResult,
     GameRoundScore,
+    PublicFinalPlayerState,
+    PublicFinalRoundState,
     PublicGameCategoryState,
     PublicGameLobbyState,
     PublicGamePromptState,
@@ -151,6 +153,7 @@ def build_public_game_state(
     state: GameLobbyState,
     *,
     include_banned_players: bool = False,
+    viewer_user_id: int | None = None,
 ) -> PublicGameLobbyState:
     """Project internal Redis state into a recipient-safe Socket.IO payload."""
     is_revealing_answer = state.phase == GamePhaseEnum.ANSWER_REVEAL
@@ -162,6 +165,15 @@ def build_public_game_state(
     )
     visible_player_ids = {player.user_id for player in players}
     banned_ids = {player.user_id for player in state.players if player.is_banned}
+    final_question_visible = (
+        state.final_round is not None
+        and state.final_round.skipped_reason is None
+        and state.phase
+        in {GamePhaseEnum.FINAL_ANSWERING, GamePhaseEnum.FINAL_REVEAL, GamePhaseEnum.FINISHED}
+    )
+    final_answer_visible = state.final_round is not None and any(
+        player.revealed for player in state.final_round.players
+    )
     round_results = [
         result.model_copy(
             update={
@@ -185,19 +197,36 @@ def build_public_game_state(
                 category_id=category.category_id,
                 name=category.name,
                 round_number=category.round_number,
+                kind=category.kind,
                 prompts=[
                     PublicGamePromptState(
                         prompt_id=prompt.prompt_id,
                         question=prompt.question
-                        if _is_question_visible(state, prompt, is_betting)
+                        if (
+                            final_question_visible
+                            if category.kind == "final"
+                            else _is_question_visible(state, prompt, is_betting)
+                        )
                         else "",
                         question_type=(
                             prompt.question_type
-                            if _is_question_visible(state, prompt, is_betting)
+                            if (
+                                final_question_visible
+                                if category.kind == "final"
+                                else _is_question_visible(state, prompt, is_betting)
+                            )
                             else QuestionTypeEnum.TEXT
                         ),
-                        question_media=prompt.question_media,
-                        answer_media=prompt.answer_media,
+                        question_media=(
+                            prompt.question_media
+                            if category.kind != "final" or final_question_visible
+                            else None
+                        ),
+                        answer_media=(
+                            prompt.answer_media
+                            if category.kind != "final" or final_answer_visible
+                            else None
+                        ),
                         order=prompt.order,
                         score_value=prompt.score_value,
                         is_selected=prompt.is_selected,
@@ -213,6 +242,7 @@ def build_public_game_state(
         current_round=state.current_round,
         total_rounds=state.total_rounds,
         round_results=round_results,
+        final_round=_build_public_final_round(state, viewer_user_id, visible_player_ids),
         current_prompt_id=state.current_prompt_id,
         selecting_player_id=(
             state.selecting_player_id if state.selecting_player_id in visible_player_ids else None
@@ -236,4 +266,69 @@ def build_public_game_state(
         resolved_answer_media=state.resolved_answer_media if is_revealing_answer else None,
         resolution=state.resolution if is_revealing_answer else None,
         latest_sound_cue_id=state.sound_cue_id,
+    )
+
+
+def _build_public_final_round(
+    state: GameLobbyState,
+    viewer_user_id: int | None,
+    visible_player_ids: set[int],
+) -> PublicFinalRoundState | None:
+    final = state.final_round
+    if final is None:
+        return None
+    current_user_id = (
+        final.reveal_order[final.reveal_index]
+        if state.phase == GamePhaseEnum.FINAL_REVEAL
+        and final.reveal_index < len(final.reveal_order)
+        else None
+    )
+    has_revealed = any(p.revealed for p in final.players)
+    prompt = next(
+        (p for c in state.categories if c.kind == "final" for p in c.prompts),
+        None,
+    )
+    return PublicFinalRoundState(
+        players=[
+            PublicFinalPlayerState(
+                user_id=player.user_id,
+                username=player.username,
+                score_before_final=player.score_before_final,
+                decision_submitted=player.decision_submitted,
+                answer_submitted=player.answer_submitted,
+                removed=player.removed,
+                revealed=player.revealed,
+                wager=(
+                    player.wager
+                    if player.correct is not None or player.user_id == viewer_user_id
+                    else None
+                ),
+                answer=(
+                    player.answer if player.revealed or player.user_id == viewer_user_id else None
+                ),
+                correct=player.correct,
+                score_delta=(
+                    (player.wager if player.correct else -player.wager)
+                    if player.correct is not None and player.wager is not None
+                    else None
+                ),
+                updated_score=(
+                    find_game_player(state, player.user_id).score
+                    if player.correct is not None
+                    else None
+                ),
+            )
+            for player in final.players
+            if player.user_id in visible_player_ids
+        ],
+        current_user_id=current_user_id if current_user_id in visible_player_ids else None,
+        is_last_reveal=current_user_id is not None
+        and not any(
+            not p.removed and p.user_id in final.reveal_order[final.reveal_index + 1 :]
+            for p in final.players
+        ),
+        skipped_reason=final.skipped_reason,
+        correct_answer=prompt.answer if prompt is not None and has_revealed else None,
+        correct_answer_type=prompt.answer_type if prompt is not None and has_revealed else None,
+        correct_answer_media=prompt.answer_media if prompt is not None and has_revealed else None,
     )

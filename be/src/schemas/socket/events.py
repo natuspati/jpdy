@@ -1,7 +1,7 @@
 from enum import StrEnum, auto
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, StrictBool, StrictInt
 
 from schemas.base import BaseSchema
 
@@ -44,6 +44,25 @@ class StartGamePayload(BaseSchema):
 class SetAssetsLoadedPayload(BaseSchema):
     loaded: bool
     command_id: UUID | None = None
+
+
+class SubmitFinalWagerPayload(BaseSchema):
+    amount: StrictInt | None = Field(ge=1)
+    command_id: UUID | None = None
+
+
+class SubmitFinalAnswerPayload(BaseSchema):
+    answer: str = Field(max_length=256)
+    command_id: UUID | None = None
+
+
+class AdvanceFinalRevealPayload(BaseSchema):
+    user_id: int
+    command_id: UUID | None = None
+
+
+class JudgeFinalAnswerPayload(AdvanceFinalRevealPayload):
+    correct: StrictBool
 
 
 class SocketErrorPayload(BaseSchema):

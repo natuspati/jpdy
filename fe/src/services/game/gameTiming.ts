@@ -5,9 +5,13 @@ export const BETTING_TIME_SECONDS = 10;
 export const BUZZING_TIME_SECONDS = 10;
 export const ANSWER_REVEAL_TIME_SECONDS = 30;
 export const ROUND_SUMMARY_TIME_SECONDS = 10;
+export const FINAL_SUBMISSION_TIME_SECONDS = 30;
 
 export function timerSecondsForPhase(phase: GamePhaseEnum): number {
   switch (phase) {
+    case 'final_betting':
+    case 'final_answering':
+      return FINAL_SUBMISSION_TIME_SECONDS;
     case 'player_betting':
     case 'betting_open':
       return BETTING_TIME_SECONDS;

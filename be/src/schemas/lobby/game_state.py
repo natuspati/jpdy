@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import Field
 
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
-from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
+from enums.prompt import AnswerTypeEnum, PromptCategoryKindEnum, QuestionTypeEnum
 from schemas.base import BaseSchema
 from schemas.media import MediaReferenceSchema
 
@@ -38,7 +38,7 @@ class GamePromptState(BaseSchema):
     question_media: MediaReferenceSchema | None = None
     answer_media: MediaReferenceSchema | None = None
     order: int
-    score_value: int = Field(description="Round-scaled points, set when the lobby is materialized.")
+    score_value: int | None = Field(description="Round-scaled points; Final has no fixed value.")
     is_selected: bool = False
     is_betting: bool = False
 
@@ -47,6 +47,7 @@ class GameCategoryState(BaseSchema):
     category_id: int
     name: str
     round_number: int = 1
+    kind: PromptCategoryKindEnum = PromptCategoryKindEnum.STANDARD
     prompts: list[GamePromptState]
 
 
@@ -59,7 +60,7 @@ class PublicGamePromptState(BaseSchema):
     question_media: MediaReferenceSchema | None = None
     answer_media: MediaReferenceSchema | None = None
     order: int
-    score_value: int
+    score_value: int | None
     is_selected: bool = False
     is_betting: bool = False
 
@@ -68,6 +69,7 @@ class PublicGameCategoryState(BaseSchema):
     category_id: int
     name: str
     round_number: int
+    kind: PromptCategoryKindEnum = PromptCategoryKindEnum.STANDARD
     prompts: list[PublicGamePromptState]
 
 
@@ -82,6 +84,51 @@ class GameRoundScore(BaseSchema):
 class GameRoundResult(BaseSchema):
     round_number: int
     scores: list[GameRoundScore] = Field(default_factory=list)
+
+
+class FinalPlayerState(BaseSchema):
+    user_id: int
+    username: str
+    score_before_final: int
+    decision_submitted: bool = False
+    wager: int | None = None
+    answer_submitted: bool = False
+    answer: str | None = None
+    revealed: bool = False
+    correct: bool | None = None
+    removed: bool = False
+
+
+class FinalRoundState(BaseSchema):
+    players: list[FinalPlayerState] = Field(default_factory=list)
+    reveal_order: list[int] = Field(default_factory=list)
+    reveal_index: int = 0
+    skipped_reason: str | None = None
+
+
+class PublicFinalPlayerState(BaseSchema):
+    user_id: int
+    username: str
+    score_before_final: int
+    decision_submitted: bool
+    answer_submitted: bool
+    removed: bool
+    revealed: bool
+    wager: int | None = None
+    answer: str | None = None
+    correct: bool | None = None
+    score_delta: int | None = None
+    updated_score: int | None = None
+
+
+class PublicFinalRoundState(BaseSchema):
+    players: list[PublicFinalPlayerState] = Field(default_factory=list)
+    current_user_id: int | None = None
+    is_last_reveal: bool = False
+    skipped_reason: str | None = None
+    correct_answer: str | None = None
+    correct_answer_type: AnswerTypeEnum | None = None
+    correct_answer_media: MediaReferenceSchema | None = None
 
 
 class PublicGameLobbyState(BaseSchema):
@@ -100,6 +147,7 @@ class PublicGameLobbyState(BaseSchema):
     current_round: int = 1
     total_rounds: int = 1
     round_results: list[GameRoundResult] = Field(default_factory=list)
+    final_round: PublicFinalRoundState | None = None
     current_prompt_id: int | None = None
     selecting_player_id: int | None = None
     answering_player_id: int | None = None
@@ -159,6 +207,7 @@ class GameLobbyState(BaseSchema):
     current_round: int = 1
     total_rounds: int = 1
     round_results: list[GameRoundResult] = Field(default_factory=list)
+    final_round: FinalRoundState | None = None
     current_prompt_id: int | None = None
     selecting_player_id: int | None = None
     answering_player_id: int | None = None

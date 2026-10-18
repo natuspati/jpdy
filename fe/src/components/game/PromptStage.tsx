@@ -57,10 +57,10 @@ const PromptStage = ({
         </div>
       ) : null}
       <div
-        aria-label={`${prompt.score_value} points`}
+        aria-label={prompt.score_value === null ? 'Final' : `${prompt.score_value} points`}
         className={`absolute right-3 top-2 text-xs font-bold uppercase tracking-[0.2em] ${scoreTone}`}
       >
-        {prompt.score_value}
+        {prompt.score_value ?? 'Final'}
       </div>
       <div
         data-testid="prompt-stage-content"

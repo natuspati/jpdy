@@ -53,6 +53,7 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
   const enabledRef = useRef(initial.enabled);
   const volumeRef = useRef(initial.volume);
   const desiredBackgroundRef = useRef<BackgroundTrack>(null);
+  const finalRevealRef = useRef(false);
   const activePromptMediaKeysRef = useRef<Set<string>>(new Set());
   const graphRef = useRef<AudioGraph | null>(null);
   const buffersRef = useRef<Map<GameSoundName, Promise<AudioBuffer>>>(new Map());
@@ -288,10 +289,12 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
 
   const syncGameState = useCallback(
     (state: GameLobbyState | null) => {
+      finalRevealRef.current = state?.phase === 'final_reveal' || state?.phase === 'finished';
       if (
         !state ||
         state.phase === 'finished' ||
         state.phase === 'answer_reveal' ||
+        state.phase === 'final_reveal' ||
         state.phase === 'round_summary'
       ) {
         void startBackground(null);
@@ -327,7 +330,7 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
           void playEffect('correct');
           break;
         case 'answer_wrong':
-          void playEffect('wrong', 'answeringLoop');
+          void playEffect('wrong', finalRevealRef.current ? null : 'answeringLoop');
           break;
         case 'answer_expired':
           // Expiry immediately leads to answer reveal. Do not restore the

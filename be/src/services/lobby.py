@@ -4,6 +4,7 @@ from fastapi import Depends
 
 from database import UnitOfWork
 from enums.lobby import LobbyStateEnum
+from enums.prompt import PromptCategoryKindEnum
 from errors.request import BadRequestError, NotFoundError
 from schemas.lobby.base import LobbyFilterSchema, LobbyInDBSchema, LobbyUpdateSchema
 from schemas.lobby.nested import (
@@ -127,13 +128,34 @@ class LobbyService:
                     schema.betting_prompt_count,
                 )
 
-            if schema.rounds is not None:
+            if schema.rounds is not None or "final_category_id" in schema.model_fields_set:
                 if lobby.state != LobbyStateEnum.CREATED:
                     raise BadRequestError(
                         "Prompt categories can only be modified while the lobby "
                         "is in the CREATED state",
                     )
-                rounds = await validate_rounds(uow, schema.rounds)
+                category_rounds = await uow.lobby_repo.select_category_rounds(lobby_id)
+                current_rounds: dict[int, list[int]] = {}
+                final_category_id = None
+                for category in lobby.prompt_categories:
+                    if category.kind == PromptCategoryKindEnum.FINAL:
+                        final_category_id = category.id
+                    else:
+                        current_rounds.setdefault(
+                            category_rounds.get(category.id, 1),
+                            [],
+                        ).append(category.id)
+                if "final_category_id" in schema.model_fields_set:
+                    final_category_id = schema.final_category_id
+                rounds = await validate_rounds(
+                    uow,
+                    (
+                        schema.rounds
+                        if schema.rounds is not None
+                        else [current_rounds[number] for number in sorted(current_rounds)]
+                    ),
+                    final_category_id,
+                )
                 await uow.lobby_repo.replace_lobby_categories(
                     lobby_id=lobby_id,
                     rounds=rounds,

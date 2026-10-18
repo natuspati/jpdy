@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import Field, field_validator
 
+from enums.prompt import PromptCategoryKindEnum
 from schemas.base import BaseSchema, OneFieldSetSchemaMixin
 from schemas.pagination import PaginationSchema
 
@@ -9,12 +10,14 @@ from schemas.pagination import PaginationSchema
 class PromptCategoryInDBSchema(BaseSchema):
     id: int
     name: str
+    kind: PromptCategoryKindEnum = PromptCategoryKindEnum.STANDARD
     owner_id: int | None
     updated_at: datetime
 
 
 class PromptCategoryCreateSchema(BaseSchema):
     name: str = Field(min_length=1, max_length=256)
+    kind: PromptCategoryKindEnum = PromptCategoryKindEnum.STANDARD
 
 
 class PromptCategoryUpdateSchema(OneFieldSetSchemaMixin):
@@ -34,5 +37,6 @@ class PromptCategoryFilterSchema(PaginationSchema):
     name: str | None = Field(default=None, min_length=1, max_length=256)
     owner_ids: list[int] | None = None
     is_complete: bool | None = None
+    kind: PromptCategoryKindEnum | None = None
     updated_at_start: datetime | None = None
     updated_at_end: datetime | None = None

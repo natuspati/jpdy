@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { Paginated } from './pagination';
 import { MediaReference } from './media';
+import { PromptCategoryKindEnum } from './enums';
 
 // NUM_PROMPTS_IN_CATEGORY mirrors be constants
 export const NUM_PROMPTS_IN_CATEGORY = 5;
@@ -116,6 +117,7 @@ function validateContentMedia(
 export const PromptCategoryInDB = z.object({
   id: z.number().int(),
   name: z.string(),
+  kind: PromptCategoryKindEnum.default('standard'),
   owner_id: z.number().int().nullable(),
   updated_at: z.string(),
 });
@@ -130,6 +132,7 @@ export type PromptCategoryWithPrompts = z.infer<typeof PromptCategoryWithPrompts
 // PromptCategoryCreateSchema
 export const PromptCategoryCreate = z.object({
   name: z.string().min(1, 'Required').max(256),
+  kind: PromptCategoryKindEnum.default('standard'),
 });
 export type PromptCategoryCreate = z.infer<typeof PromptCategoryCreate>;
 

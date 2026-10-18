@@ -8,6 +8,11 @@ const FinalLeaderboard = ({ state }: { state: GameLobbyState }) => {
   return (
     <Card className="space-y-3">
       <h2 className="text-center text-xl font-bold">Final scores</h2>
+      {state.final_round?.skipped_reason ? (
+        <p role="status" className="text-center text-sm text-slate-300">
+          Final skipped: {state.final_round.skipped_reason.replaceAll('_', ' ')}
+        </p>
+      ) : null}
       {sorted.length === 0 ? (
         <p className="text-center text-sm text-slate-400">No players finished this game.</p>
       ) : (
@@ -33,6 +38,10 @@ const FinalLeaderboard = ({ state }: { state: GameLobbyState }) => {
             <RoundRecap
               key={result.round_number}
               roundNumber={result.round_number}
+              isFinal={state.categories.some(
+                (category) =>
+                  category.round_number === result.round_number && category.kind === 'final',
+              )}
               categoryNames={state.categories
                 .filter((category) => category.round_number === result.round_number)
                 .map((category) => category.name)}

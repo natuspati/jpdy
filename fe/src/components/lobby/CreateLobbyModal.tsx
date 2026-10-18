@@ -26,18 +26,21 @@ interface Props {
 
 const CreateLobbyModal = ({ open, onClose }: Props) => {
   const navigate = useNavigate();
-  const { data, isLoading } = useAvailableCategories();
+  const { data, isLoading } = useAvailableCategories('standard');
+  const { data: finalData, isLoading: finalLoading } = useAvailableCategories('final');
   const createLobby = useCreateLobby();
   const updateLobby = useUpdateLobby();
   // Category ids per round; the list index + 1 is the round number.
   const [rounds, setRounds] = useState<number[][]>([[]]);
   // Blank means the server default (10% of a round's prompts, rounded down).
   const [bettingCount, setBettingCount] = useState('');
+  const [finalCategoryId, setFinalCategoryId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) {
       setRounds([[]]);
       setBettingCount('');
+      setFinalCategoryId(null);
     }
   }, [open]);
 
@@ -75,7 +78,11 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
     const lobby = await createLobby.mutateAsync();
     await updateLobby.mutateAsync({
       id: lobby.id,
-      payload: bettingCount === '' ? { rounds } : { rounds, betting_prompt_count: bettingValue },
+      payload: {
+        rounds,
+        final_category_id: finalCategoryId,
+        ...(bettingCount === '' ? {} : { betting_prompt_count: bettingValue }),
+      },
     });
     await updateLobby.mutateAsync({
       id: lobby.id,
@@ -175,6 +182,28 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
             ))}
           </div>
         )}
+        <Field
+          label="Final category (optional)"
+          htmlFor="final-category"
+          hint="One scoreless prompt after all normal rounds. Only ready Final categories are shown."
+        >
+          <select
+            id="final-category"
+            className="h-11 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-slate-100"
+            value={finalCategoryId ?? ''}
+            disabled={busy || finalLoading}
+            onChange={(event) =>
+              setFinalCategoryId(event.target.value === '' ? null : Number(event.target.value))
+            }
+          >
+            <option value="">No final</option>
+            {finalData?.contents.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field
           label="Betting prompts in each round"
           htmlFor="betting-prompt-count"

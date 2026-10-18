@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const PromptCategoryKindEnum = z.enum(['standard', 'final']);
+export type PromptCategoryKindEnum = z.infer<typeof PromptCategoryKindEnum>;
+
 // Mirrors be/src/enums/lobby.py
 export const LobbyStateEnum = z.enum(['created', 'waiting_start', 'in_progress', 'completed']);
 export type LobbyStateEnum = z.infer<typeof LobbyStateEnum>;
@@ -15,6 +18,9 @@ export const GamePhaseEnum = z.enum([
   'buzz_open',
   'answer_reveal',
   'round_summary',
+  'final_betting',
+  'final_answering',
+  'final_reveal',
   'finished',
 ]);
 export type GamePhaseEnum = z.infer<typeof GamePhaseEnum>;

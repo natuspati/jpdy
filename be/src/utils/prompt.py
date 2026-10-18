@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
-from enums import AnswerTypeEnum, MediaKindEnum, QuestionTypeEnum
+from enums import AnswerTypeEnum, MediaKindEnum, PromptCategoryKindEnum, QuestionTypeEnum
 from errors.request import BadRequestError, ForbiddenError, NotFoundError
 from schemas.prompt.nested import (
     PromptCategoryResponseSchema,
@@ -18,6 +18,10 @@ from utils.media import build_media_reference, ensure_owned_media_asset
 
 if TYPE_CHECKING:
     from database import UnitOfWork
+
+
+def prompt_count_for_kind(kind: PromptCategoryKindEnum) -> int:
+    return 1 if kind == PromptCategoryKindEnum.FINAL else NUM_PROMPTS_IN_CATEGORY
 
 
 async def ensure_owned_category(
@@ -124,10 +128,11 @@ def validate_prompt_order(
     new_orders = list(prompt_order.values())
     if len(set(new_orders)) != len(new_orders):
         raise BadRequestError("Prompt orders must be unique within the mapping")
+    required_count = prompt_count_for_kind(category.kind)
     for order_value in new_orders:
-        if not 1 <= order_value <= NUM_PROMPTS_IN_CATEGORY:
+        if not 1 <= order_value <= required_count:
             raise BadRequestError(
-                f"Prompt order must be between 1 and {NUM_PROMPTS_IN_CATEGORY}",
+                f"Prompt order must be between 1 and {required_count}",
             )
     category_prompt_ids = {prompt.id for prompt in category.prompts}
     missing = set(prompt_order) - category_prompt_ids

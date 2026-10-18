@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildGameState } from '@/test/fixtures/gameState';
+import { buildFinalGameState, buildGameState } from '@/test/fixtures/gameState';
 import {
   canAdvanceAnswerReveal,
   canAdvanceRound,
@@ -12,10 +12,43 @@ import {
   canSelectPrompt,
   canSelectStarter,
   canStartGame,
+  canSubmitFinalAnswer,
+  canSubmitFinalWager,
+  canJudgeFinalAnswer,
+  canAdvanceFinalReveal,
   isHost,
 } from './phaseGuards';
 
 describe('phaseGuards', () => {
+  it('gates immutable Final decisions by phase, saved eligibility, deadline and host role', () => {
+    const state = buildFinalGameState();
+    expect(canSubmitFinalWager(state, 2)).toBe(true);
+    expect(canSubmitFinalWager(state, 1)).toBe(false);
+    expect(canSubmitFinalWager(state, 99)).toBe(false);
+    state.final_round!.players[0].decision_submitted = true;
+    expect(canSubmitFinalWager(state, 2)).toBe(false);
+    const answering = buildFinalGameState('final_answering');
+    expect(canSubmitFinalAnswer(answering, 2)).toBe(true);
+    expect(canSubmitFinalAnswer(answering, 3)).toBe(false);
+    answering.final_round!.players[0].removed = true;
+    expect(canSubmitFinalAnswer(answering, 2)).toBe(false);
+    answering.final_round!.players[0].removed = false;
+    answering.timer_deadline = new Date(Date.now()).toISOString();
+    expect(canSubmitFinalAnswer(answering, 2)).toBe(false);
+  });
+
+  it('requires judgment before Final advance and never offers normal actions for Final prompts', () => {
+    const state = buildFinalGameState('final_reveal');
+    expect(canJudgeFinalAnswer(state, 1)).toBe(true);
+    expect(canJudgeFinalAnswer(state, 2)).toBe(false);
+    expect(canAdvanceFinalReveal(state, 1)).toBe(false);
+    state.final_round!.players[0].correct = false;
+    expect(canJudgeFinalAnswer(state, 1)).toBe(false);
+    expect(canAdvanceFinalReveal(state, 1)).toBe(true);
+    state.phase = 'player_selecting_prompt';
+    state.selecting_player_id = 2;
+    expect(canSelectPrompt(state, 2, 201)).toBe(false);
+  });
   it('isHost true only for owner', () => {
     const state = buildGameState();
     expect(isHost(state, 1)).toBe(true);

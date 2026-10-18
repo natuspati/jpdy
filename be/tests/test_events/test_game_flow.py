@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -10,9 +11,11 @@ from configs.constants import ANSWER_REVEAL_TIME_SECONDS
 from database import UnitOfWork
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from enums.lobby import LobbyStateEnum
+from enums.prompt import AnswerTypeEnum, PromptCategoryKindEnum, QuestionTypeEnum
 from fixtures.game_fixtures import SeededLobby, SocketClient
-from models.lobby import Lobby, LobbyParticipant
+from models.lobby import Lobby, LobbyParticipant, LobbyRoundResult
 from schemas.lobby.game_state import GamePlayerState
+from schemas.media import MediaReferenceSchema
 from schemas.socket.events import (
     BanPlayerPayload,
     JudgeAnswerPayload,
@@ -21,7 +24,152 @@ from schemas.socket.events import (
 )
 from services import game_timers
 from services.game import GameService
-from utils.game_state import game_state_key
+from utils.game_state import build_round_result, game_state_key
+
+
+async def test_final_socket_frames_are_private_reconnectable_and_completion_is_persisted(
+    seed_lobby,
+    connect_socket,
+    redis_client,
+    db_session,
+):
+    seeded = await seed_lobby(category_count=2, player_count=2)
+    state = seeded.state
+    state.total_rounds = 2
+    state.phase = GamePhaseEnum.ROUND_SUMMARY
+    state.players = [
+        GamePlayerState(user_id=player.id, username=player.username, score=score)
+        for player, score in zip(seeded.players, (100, 200), strict=True)
+    ]
+    final_category = state.categories[-1]
+    final_category.kind = PromptCategoryKindEnum.FINAL
+    final_category.round_number = 2
+    final_category.prompts = final_category.prompts[:1]
+    final_category.prompts[0].score_value = None
+    final_category.prompts[0].question_type = QuestionTypeEnum.IMAGE
+    final_category.prompts[0].answer_type = AnswerTypeEnum.IMAGE
+    final_category.prompts[0].question_media = MediaReferenceSchema(
+        asset_id=999,
+        url="/media/secret-final-question.webp",
+        mime_type="image/webp",
+        filename="q.webp",
+    )
+    final_category.prompts[0].answer_media = MediaReferenceSchema(
+        asset_id=1000,
+        url="/media/secret-final-answer.webp",
+        mime_type="image/webp",
+        filename="a.webp",
+    )
+    state.round_results = [build_round_result(state)]
+    await redis_client.set(game_state_key(state.lobby_id), state.model_dump_json())
+    host, players = await _connect_all(seeded, connect_socket, player_count=2)
+    namespace = f"/lobbies/{seeded.lobby_id}"
+    one, two = [player.id for player in seeded.players]
+
+    async def frames():
+        return [await socket.expect("state_changed") for socket in (host, *players)]
+
+    await host.client.emit("advance_round", namespace=namespace)
+    initial = await frames()
+    assert all(frame["phase"] == "final_betting" for frame in initial)
+    assert all(frame["categories"][-1]["prompts"][0]["question"] == "" for frame in initial)
+    assert all(
+        frame["categories"][-1]["prompts"][0]["question_media"] is None
+        and frame["categories"][-1]["prompts"][0]["answer_media"] is None
+        for frame in initial
+    )
+    deadline = initial[0]["timer_deadline"]
+    wager_id = str(uuid4())
+    for _ in range(2):
+        await players[0].client.emit(
+            "submit_final_wager",
+            {"amount": 73, "command_id": wager_id},
+            namespace=namespace,
+        )
+        wager_frames = await frames()
+        assert wager_frames[0]["final_round"]["players"][0]["wager"] is None
+        assert wager_frames[1]["final_round"]["players"][0]["wager"] == 73
+        assert wager_frames[2]["final_round"]["players"][0]["wager"] is None
+        assert all(frame["timer_deadline"] == deadline for frame in wager_frames)
+
+    await players[1].client.emit(
+        "submit_final_wager",
+        {"amount": 101, "command_id": str(uuid4())},
+        namespace=namespace,
+    )
+    answering = await frames()
+    assert all(frame["phase"] == "final_answering" for frame in answering)
+    assert all(frame["final_round"]["correct_answer"] is None for frame in answering)
+    assert all(
+        frame["categories"][-1]["prompts"][0]["question_media"] is not None
+        and frame["categories"][-1]["prompts"][0]["answer_media"] is None
+        for frame in answering
+    )
+    answer_deadline = answering[0]["timer_deadline"]
+    await players[0].client.emit(
+        "submit_final_answer",
+        {"answer": "one-secret", "command_id": str(uuid4())},
+        namespace=namespace,
+    )
+    submissions = await frames()
+    assert submissions[0]["final_round"]["players"][0]["answer"] is None
+    assert submissions[1]["final_round"]["players"][0]["answer"] == "one-secret"
+    assert submissions[2]["final_round"]["players"][0]["answer"] is None
+    assert all(frame["timer_deadline"] == answer_deadline for frame in submissions)
+    players[0] = await connect_socket(seeded.lobby_id, seeded.players[0].token)
+    reconnected = await frames()
+    assert reconnected[1]["final_round"]["players"][0]["answer"] == "one-secret"
+    assert reconnected[1]["final_round"]["players"][0]["wager"] == 73
+    assert all(frame["timer_deadline"] == answer_deadline for frame in reconnected)
+    await players[1].client.emit(
+        "submit_final_answer",
+        {"answer": "two-secret", "command_id": str(uuid4())},
+        namespace=namespace,
+    )
+    reveal = await frames()
+    assert all(frame["phase"] == "final_reveal" for frame in reveal)
+    assert reveal[0]["final_round"]["players"][0]["answer"] == "one-secret"
+    assert reveal[0]["final_round"]["players"][0]["wager"] is None
+    assert reveal[0]["final_round"]["players"][1]["answer"] is None
+    assert reveal[1]["final_round"]["players"][1]["answer"] is None
+    assert reveal[0]["final_round"]["correct_answer"] == final_category.prompts[0].answer
+    assert all(frame["final_round"]["correct_answer_media"] is not None for frame in reveal)
+    assert host.events["host_answer_key"].empty()
+
+    for user_id, correct in ((one, True), (two, False)):
+        command_id = str(uuid4())
+        for _ in range(2):
+            await host.client.emit(
+                "judge_final_answer",
+                {"user_id": user_id, "correct": correct, "command_id": command_id},
+                namespace=namespace,
+            )
+            judged = await frames()
+            outcome = next(
+                p for p in judged[0]["final_round"]["players"] if p["user_id"] == user_id
+            )
+            assert outcome["correct"] is correct
+            assert outcome["wager"] == (73 if user_id == one else 101)
+        await host.client.emit(
+            "advance_final_reveal",
+            {"user_id": user_id, "command_id": str(uuid4())},
+            namespace=namespace,
+        )
+        advanced = await frames()
+    assert all(frame["phase"] == "finished" for frame in advanced)
+    assert [p["score"] for p in advanced[0]["players"]] == [173, 99]
+    assert len(advanced[0]["round_results"]) == 2
+    lobby_state = await db_session.scalar(select(Lobby.state).where(Lobby.id == seeded.lobby_id))
+    assert lobby_state == LobbyStateEnum.COMPLETED
+    results = (
+        await db_session.scalars(
+            select(LobbyRoundResult)
+            .where(LobbyRoundResult.lobby_id == seeded.lobby_id)
+            .order_by(LobbyRoundResult.round_number, LobbyRoundResult.user_id),
+        )
+    ).all()
+    assert len(results) == 4
+    assert [result.score_delta for result in results[-2:]] == [73, -101]
 
 
 async def _drain(socket: SocketClient, count: int) -> dict:

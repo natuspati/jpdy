@@ -10,6 +10,7 @@ from schemas.prompt.prompt import PromptCreateSchema, PromptUpdateSchema
 
 class PromptCategoryCreateSchemaFactory(ModelFactory[PromptCategoryCreateSchema]):
     __model__ = PromptCategoryCreateSchema
+    kind = "standard"
 
 
 class PromptCategoryUpdateSchemaFactory(ModelFactory[PromptCategoryUpdateSchema]):

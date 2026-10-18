@@ -14,6 +14,9 @@ interface Props {
 const RoundSummary = ({ state, currentUserId, onAdvance }: Props) => {
   const result = state.round_results[state.round_results.length - 1];
   const finishedRound = result?.round_number ?? state.current_round;
+  const nextIsFinal = state.categories.some(
+    (category) => category.round_number === finishedRound + 1 && category.kind === 'final',
+  );
   return (
     <section aria-label="Round summary" className="mx-auto w-full max-w-xl space-y-3">
       <h2 className="text-center text-xl font-bold text-amber-300">
@@ -31,10 +34,12 @@ const RoundSummary = ({ state, currentUserId, onAdvance }: Props) => {
       <TimerBar deadline={state.timer_deadline} totalSeconds={ROUND_SUMMARY_TIME_SECONDS} />
       {canAdvanceRound(state, currentUserId) ? (
         <Button fullWidth size="lg" onClick={onAdvance}>
-          Start round {finishedRound + 1}
+          {nextIsFinal ? 'Start Final' : `Start round ${finishedRound + 1}`}
         </Button>
       ) : (
-        <p className="text-center text-sm text-slate-400">Next round starts automatically</p>
+        <p className="text-center text-sm text-slate-400">
+          {nextIsFinal ? 'Final starts automatically' : 'Next round starts automatically'}
+        </p>
       )}
     </section>
   );

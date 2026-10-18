@@ -15,6 +15,7 @@ import { queryKeys } from '@/api/queryKeys';
 import { useAuth } from '@/hooks/useAuth';
 import type {
   PromptCategoryCreate,
+  PromptCategoryKindEnum,
   PromptCategoryUpdate,
   PromptCreate,
   PromptUpdate,
@@ -25,6 +26,7 @@ interface CategoryFilters {
   page?: number;
   size?: number;
   is_complete?: boolean;
+  kind?: PromptCategoryKindEnum;
 }
 
 export function useMyCategories(filters: CategoryFilters = {}) {
@@ -37,11 +39,12 @@ export function useMyCategories(filters: CategoryFilters = {}) {
   });
 }
 
-export function useAvailableCategories() {
+export function useAvailableCategories(kind: PromptCategoryKindEnum = 'standard') {
   const { isAuthed } = useAuth();
+  const filters = { is_complete: true, size: 200, kind };
   return useQuery({
-    queryKey: queryKeys.categories.list({ is_complete: true, size: 200 }),
-    queryFn: () => searchCategories({ is_complete: true, size: 200 }),
+    queryKey: queryKeys.categories.list(filters),
+    queryFn: () => searchCategories(filters),
     enabled: isAuthed,
   });
 }

@@ -25,7 +25,11 @@ class LobbyUpdateSchema(OneFieldSetSchemaMixin):
     state: LobbyStateEnum | None = None
     rounds: list[list[int]] | None = Field(
         default=None,
-        description="Category ids per round; list index + 1 is the round number.",
+        description="Standard category ids for 1-3 normal rounds; index + 1 is the round number.",
+    )
+    final_category_id: int | None = Field(
+        default=None,
+        description="Final category id; omitted preserves the selection, null removes it.",
     )
     betting_prompt_count: int | None = Field(
         default=None,

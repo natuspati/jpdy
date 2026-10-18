@@ -56,6 +56,7 @@ class GameStateMaterializer:
                 GameCategoryState(
                     category_id=category.id,
                     name=category.name,
+                    kind=category.kind,
                     round_number=category_rounds.get(category.id, 1),
                     prompts=[
                         GamePromptState(
@@ -75,9 +76,13 @@ class GameStateMaterializer:
                                 else None
                             ),
                             order=prompt.order or 0,
-                            score_value=round_score_value(
-                                prompt.order or 0,
-                                category_rounds.get(category.id, 1),
+                            score_value=(
+                                None
+                                if category.kind == "final"
+                                else round_score_value(
+                                    prompt.order or 0,
+                                    category_rounds.get(category.id, 1),
+                                )
                             ),
                         )
                         for prompt in category.prompts
@@ -91,7 +96,7 @@ class GameStateMaterializer:
             prompts = [
                 prompt
                 for category in state.categories
-                if category.round_number == round_number
+                if category.round_number == round_number and category.kind != "final"
                 for prompt in category.prompts
             ]
             count = (

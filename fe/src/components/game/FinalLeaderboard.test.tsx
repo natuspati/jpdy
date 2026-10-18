@@ -1,10 +1,25 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { buildGameState } from '@/test/fixtures/gameState';
+import { buildFinalGameState, buildGameState } from '@/test/fixtures/gameState';
 import FinalLeaderboard from './FinalLeaderboard';
 
 describe('FinalLeaderboard', () => {
+  it('labels the extra round Final and shows a skipped reason and zero delta', () => {
+    const state = buildFinalGameState('finished');
+    state.final_round!.skipped_reason = 'all_passed';
+    state.round_results = [
+      {
+        round_number: 2,
+        scores: [{ user_id: 2, username: 'alice', score: 500, score_delta: 0, is_banned: false }],
+      },
+    ];
+    render(<FinalLeaderboard state={state} />);
+    expect(screen.getByRole('region', { name: 'Final' })).toHaveTextContent('Final topic');
+    expect(screen.getByRole('region', { name: 'Final' })).toHaveTextContent('5000');
+    expect(screen.getByRole('status')).toHaveTextContent('Final skipped: all passed');
+    expect(screen.queryByRole('region', { name: 'Round 2' })).not.toBeInTheDocument();
+  });
   it('sorts players by score descending', () => {
     const state = buildGameState({
       players: [
@@ -71,6 +86,7 @@ describe('FinalLeaderboard', () => {
     state.categories.push({
       category_id: 11,
       name: 'Second round topic',
+      kind: 'standard',
       round_number: 2,
       prompts: [],
     });

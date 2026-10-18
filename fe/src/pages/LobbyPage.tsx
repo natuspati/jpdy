@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import BetPanel from '@/components/game/BetPanel';
 import BuzzButton from '@/components/game/BuzzButton';
 import FinalLeaderboard from '@/components/game/FinalLeaderboard';
+import FinalRoundPanel from '@/components/game/FinalRoundPanel';
 import GameBoard from '@/components/game/GameBoard';
 import HostControls from '@/components/game/HostControls';
 import HostJudgePanel from '@/components/game/HostJudgePanel';
@@ -21,7 +22,7 @@ import { useBoardMediaPreload } from '@/hooks/useBoardMediaPreload';
 import { useLobbySocket } from '@/hooks/useLobbySocket';
 import { useSelectionReveal } from '@/hooks/useSelectionReveal';
 import { currentCategoryName, currentPrompt } from '@/services/game/gameDerivations';
-import { canBuzz, canPlaceBet } from '@/services/game/phaseGuards';
+import { canBuzz, canPlaceBet, isFinalPhase } from '@/services/game/phaseGuards';
 import { roleFor } from '@/services/game/roleFor';
 import { timerSecondsForPhase } from '@/services/game/gameTiming';
 import { toastSuccess } from '@/store/toastStore';
@@ -33,13 +34,28 @@ const LobbyPage = () => {
   const navigate = useNavigate();
   const { token, userId } = useAuth();
   const { syncGameState, playCue, stopAll } = useGameAudio();
-  const { state, hostAnswerKey, soundCue, lobbyDeleted, status, emit, reconnect, reason } =
-    useLobbySocket({
-      lobbyId: lobbyIdSafe,
-      token,
-    });
+  const {
+    state,
+    hostAnswerKey,
+    soundCue,
+    lobbyDeleted,
+    status,
+    emit,
+    reconnect,
+    reason,
+    pendingCommand,
+    commandError,
+  } = useLobbySocket({
+    lobbyId: lobbyIdSafe,
+    token,
+    userId,
+  });
 
-  const { loaded, total } = useBoardMediaPreload(state?.categories);
+  const { loaded, total } = useBoardMediaPreload(
+    state?.categories,
+    state?.phase,
+    state?.final_round?.correct_answer_media,
+  );
   const allLoaded = loaded === total;
   const myLoadedFlag = state?.players.find((player) => player.user_id === userId)?.assets_loaded;
   const phase = state?.phase;
@@ -199,6 +215,17 @@ const LobbyPage = () => {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {isFinalPhase(state.phase) ? (
+          <FinalRoundPanel
+            key={`final:${state.lobby_id}:${userId}`}
+            state={state}
+            userId={userId}
+            connected={status === 'open'}
+            pendingCommand={pendingCommand}
+            commandError={commandError}
+            emit={emit}
+          />
+        ) : null}
         {showBoard ? (
           <GameBoard
             state={state}
@@ -234,37 +261,39 @@ const LobbyPage = () => {
         ) : null}
       </div>
 
-      <section
-        data-testid="game-actions"
-        className={`shrink-0 ${view.role === 'host' ? 'space-y-2' : 'flex justify-center'}`}
-      >
-        {view.role === 'host' ? (
-          <>
-            {revealingPromptId === null ? (
-              <HostControls
-                state={state}
-                currentUserId={userId}
-                onStart={(force) => (force ? emit('start_game', { force }) : emit('start_game'))}
-                onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
-                onAdvanceAnswerReveal={() => emit('advance_answer_reveal')}
-                onJudge={(correct) => emit('judge_answer', { correct })}
-              />
-            ) : null}
-            {state.phase === 'player_answering' && answerer && revealingPromptId === null ? (
-              <HostJudgePanel
-                answeringPlayerName={answerer.username}
-                expectedAnswer={hostAnswerKey?.expected_answer}
-              />
-            ) : null}
-          </>
-        ) : (
-          <BuzzButton
-            enabled={status === 'open' && canBuzz(state, userId)}
-            disabledReason={status === 'open' ? buzzDisabledReason : 'Reconnecting…'}
-            onBuzz={() => emit('buzz')}
-          />
-        )}
-      </section>
+      {!isFinalPhase(state.phase) ? (
+        <section
+          data-testid="game-actions"
+          className={`shrink-0 ${view.role === 'host' ? 'space-y-2' : 'flex justify-center'}`}
+        >
+          {view.role === 'host' ? (
+            <>
+              {revealingPromptId === null ? (
+                <HostControls
+                  state={state}
+                  currentUserId={userId}
+                  onStart={(force) => (force ? emit('start_game', { force }) : emit('start_game'))}
+                  onSelectStarter={(uid) => emit('select_starter', { user_id: uid })}
+                  onAdvanceAnswerReveal={() => emit('advance_answer_reveal')}
+                  onJudge={(correct) => emit('judge_answer', { correct })}
+                />
+              ) : null}
+              {state.phase === 'player_answering' && answerer && revealingPromptId === null ? (
+                <HostJudgePanel
+                  answeringPlayerName={answerer.username}
+                  expectedAnswer={hostAnswerKey?.expected_answer}
+                />
+              ) : null}
+            </>
+          ) : (
+            <BuzzButton
+              enabled={status === 'open' && canBuzz(state, userId)}
+              disabledReason={status === 'open' ? buzzDisabledReason : 'Reconnecting…'}
+              onBuzz={() => emit('buzz')}
+            />
+          )}
+        </section>
+      ) : null}
     </div>
   );
 };

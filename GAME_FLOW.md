@@ -5,9 +5,9 @@ Redis owns live-game state and timers; SQL owns lobby setup plus
 participant/completion projections. Clients render ordered Socket.IO snapshots
 and do not maintain a parallel game-state machine.
 
-This document describes the **voice-answer** game. Players answer
-through external voice software such as Discord. They do not type answers into
-the application and do not press an answer-submission button.
+Normal rounds are a **voice-answer** game through external software such as
+Discord. The optional **Final** is the sole exception: players privately wager
+and submit written answers through the application.
 
 For deployment and Tailscale configuration, see the
 [`setup and game-night guide`](README.md). Gameplay rules are the same for
@@ -19,7 +19,7 @@ development and hosted sessions.
 - Only non-host players select clues and receive scores.
 - A prompt question and answer reveal can independently be text, image, audio,
   or video. Every prompt still has canonical text question and answer fields.
-- A player answers verbally after selecting a clue or winning a buzz.
+- In normal rounds, a player answers verbally after selecting a clue or winning a buzz.
 - The host accepts or rejects the spoken answer directly.
 - Canonical expected answer text is private to host only while a player is
   actively answering. Canonical answer text and optional answer media are
@@ -71,16 +71,25 @@ created → waiting_start → in_progress → completed
 
 ### Category requirements
 
-- A lobby has between one and three **rounds**, and each round has between one
+- A lobby has between one and three **normal rounds**, and each round has between one
   and five categories. The host assigns categories to rounds when creating the
   lobby (`rounds`: one list of category ids per round; list index + 1 is the
   round number).
 - A category can be used only once per lobby; it cannot appear in two rounds.
-  The maximum is therefore 3 x 5 = 15 categories.
+  The maximum is therefore 3 x 5 = 15 standard categories, plus one Final category.
 - A lobby may move from `created` to `waiting_start` only after categories are
   attached to every round.
-- Every attached category must contain exactly five valid prompts with unique
-  orders `1..5`.
+- Category `kind` is chosen at creation (`standard`, the default, or `final`)
+  and cannot be edited. Standard categories require five valid prompts with
+  unique orders `1..5`; Final categories require exactly one prompt, at order `1`.
+  Draft categories may be incomplete. Writes reject a second Final prompt or
+  another order. Category search accepts an optional `kind` filter.
+- Lobby PATCH `rounds` contains only normal-round category lists. Optional
+  `final_category_id` selects a Final category; omission preserves it and
+  explicit `null` disables it. Changing normal rounds repositions the preserved
+  Final at `N+1`, alone in the same category association table. Kind,
+  completeness, uniqueness, and access are revalidated when opening the lobby.
+  Both selections lock at `waiting_start`.
 - Each prompt has independent `question_type` and `answer_type` values:
   `text`, `image`, `audio`, or `video`.
 - Text content has no media asset. Non-text content must reference an uploaded
@@ -96,9 +105,11 @@ created → waiting_start → in_progress → completed
   prompt as `score_value` when the lobby is materialized.
 - A wrong answer or timeout deducts the round-scaled value, exactly as in
   round 1.
-- Only the current round's categories are selectable. All rounds stay in
-  `categories` so clients can preload media for the whole game; the board
-  shows only categories whose `round_number` equals `current_round`.
+- Only the current normal round's standard categories are selectable. Normal
+  media stays in `categories` for preloading; Final question/answer references
+  are withheld until their respective reveal phases. Final has `score_value=null`
+  and `is_betting=false`; it is never offered on the board or in the random draw.
+- The optional Final counts in `total_rounds` (maximum four rounds overall).
 - A game whose Redis state predates rounds loads as a single round
   (`current_round=1`, `total_rounds=1`, category `round_number=1`).
 
@@ -186,7 +197,7 @@ PublicGameLobbyState
 ├─ players[]
 │  └─ { user_id, username, score, connection_status, is_selected, is_banned }
 ├─ categories[]
-│  ├─ { category_id, name, round_number }
+│  ├─ { category_id, name, round_number, kind }
 │  └─ prompts[] {
 │       prompt_id, question, question_type, question_media,
 │       order, is_selected, score_value,
@@ -198,6 +209,7 @@ PublicGameLobbyState
 ├─ round_results[]                # one entry per finished round
 │  └─ { round_number, scores[] { user_id, username, score, score_delta,
 │       is_banned } }              # score is cumulative, score_delta is the round's
+├─ final_round                    # null before Final; personalized projection below
 ├─ current_prompt_id
 ├─ selecting_player_id
 ├─ answering_player_id
@@ -223,21 +235,22 @@ The host receives the full player roster, including banned rows, so it can
 moderate and unban them. Non-host snapshots omit banned players entirely,
 including their scores, connection state, active labels, and their rows in
 `round_results`. The server emits
-recipient-specific snapshots to separate host and player Socket.IO rooms; it
+recipient-specific snapshots to separate host and player Socket.IO rooms; during
+Final, each player receives a personalized frame in their existing per-user room. It
 never broadcasts a broad state frame before these recipient-specific frames.
 
 Public prompt data never contains expected-answer field. `question` and
 `question_type` are populated only for current active prompt; other board
 prompts expose only their identity, order, spent state, and value. The
 exception is media: `question_media` and `answer_media` are present for every
-board prompt so clients can preload all media during the lobby; this trades some
+standard board prompt so clients can preload normal media during the lobby; this trades some
 secrecy of upcoming media for faster loads. Answer text is never sent early.
 `is_betting` is public only for the current prompt, so players learn a prompt is
 a betting prompt once it is selected, not before. During `player_betting` and
 `betting_open` the current prompt's `question` is empty and its `question_type`
 is `text`; question media references are still sent for preloading, but clients
 must not render them during betting.
-Canonical correct answer text and `resolved_answer_media` are public only while:
+Normal canonical correct answer text and `resolved_answer_media` are public only while:
 
 ```text
 phase = answer_reveal
@@ -270,8 +283,9 @@ game is in `player_answering`, including when the phase starts or the host
 reconnects. The client clears this private value whenever the phase changes
 away from `player_answering`.
 
-No player receives `host_answer_key`. There is no public submitted-answer
-field because spoken answers are not transmitted through the application.
+No player receives `host_answer_key`. Spoken answers are not transmitted through
+the application; Final submissions use the separate personalized `final_round`
+projection and never a host-preview event.
 
 ### Internal Redis state
 
@@ -322,6 +336,9 @@ player_answering
 buzz_open
 answer_reveal
 round_summary
+final_betting
+final_answering
+final_reveal
 finished
 ```
 
@@ -540,7 +557,7 @@ answer_reveal
 - The client may show a resolution message, such as “Correct”, “No correct
   response”, or “Time expired”.
 
-The correct answer is visible to all clients only in this phase.
+The normal clue's correct answer is visible to all clients only in this phase.
 
 ### After the reveal ends
 
@@ -574,9 +591,10 @@ Phase:
 round_summary
 ```
 
-Exists only between rounds, after every prompt of the round is spent, so a
-round cannot be skipped. After the **last** round there is no `round_summary`:
-the game goes straight to `finished`.
+Exists only between rounds, after every prompt of the normal round is spent, so
+a normal round cannot be skipped. With a configured Final, the last normal round
+also leads here, then into Final wagering. Without Final, the last normal reveal
+still goes directly to `finished`.
 
 - `selecting_player_id` is cleared, selection flags are cleared, and the
   server starts a 10-second timer.
@@ -585,12 +603,91 @@ the game goes straight to `finished`.
 - The host may end the summary early with `advance_round`; otherwise the
   timer does. There is no other way to start the next round.
 - Starting the next round increments `current_round`, clears the timer, and
-  picks the next selector: the connected, non-banned player with the strictly
+  dispatches Final by category kind, or picks the next normal selector: the connected, non-banned player with the strictly
   lowest score moves to `player_selecting_prompt`. If the lowest score is tied,
   or nobody is eligible, enter `host_selecting_starting_player`.
 - Bans need no special branch here because `selecting_player_id` is `None`
   during the summary.
 - No new sound cue is issued; background music stops, as in `answer_reveal`.
+
+## Optional Final
+
+```text
+last normal answer_reveal -> round_summary (10 seconds, host may advance)
+  -> final_betting (30 seconds, or all decisions)
+  -> final_answering (30 seconds, or all submissions)
+  -> final_reveal (judge, then explicit Next for each participant)
+  -> finished (host presses Finish game after the last judgment)
+```
+
+### Wagering and eligibility
+
+- Entering Final sets `current_round=N+1` and freezes all non-host, non-banned
+  players with strictly positive cumulative scores, including disconnected
+  players. Each saved starting score is the maximum wager.
+- Everyone sees the category name, never its question, canonical answer, or
+  either media reference during wagering.
+- An eligible player submits once: an integer in `1..score_before_final`, or
+  explicit Pass (`amount=null`). Booleans, fractions, zero, excessive amounts,
+  duplicate decisions, unauthorized actors, and late decisions are rejected.
+- One shared server deadline applies to everyone. Missing decisions become Pass.
+  Advance early when all remaining eligible players decide. No eligible players
+  or all Pass finishes with unchanged scores, a zero-delta Final result, and
+  `skipped_reason` (`no_eligible_players` or `all_passed`), without exposing content.
+
+### Written answers and privacy
+
+- Only players who wagered may submit plain text, once, at most 256 characters.
+  Trimmed empty/whitespace answers are accepted as empty. An unsent draft is not
+  a submission. Passers and ineligible players watch without answer controls.
+- Entering `final_answering` reveals the question and question media to everyone
+  and arms a shared 30-second deadline. There is no buzz or spoken-answer flow.
+  All remaining participants submitting ends answering early.
+- A reconnect restores accepted decisions/submissions and the original deadline;
+  disconnect/reconnect never resets the clock or removes eligibility.
+- `final_round.players` exposes identity, saved score, decision/submission flags,
+  removal/reveal status, and nullable answer/outcome fields. A player's accepted
+  wager and answer are visible to that player. Other wagers remain hidden even
+  from the host until their judgment; other answers remain hidden even from the
+  host until their individual reveal. No raw internal Final state is emitted.
+- The public `final_round` additionally contains `current_user_id`,
+  `is_last_reveal`, `skipped_reason`, and canonical `correct_answer`,
+  `correct_answer_type`, and `correct_answer_media`. Canonical fields are null
+  until the first reveal; question media is absent before answering and answer
+  media before the first reveal, including preload discovery and reconnects.
+  Normal `resolved_*` fields remain exclusive to `answer_reveal`.
+
+### Reveal, scoring, and completion
+
+- Freeze reveal order by starting score ascending, then username, then user ID.
+  Judgments never reorder it. All answers lock before the first reveal opens.
+- Opening each reveal exposes only that response (plus earlier reveals), and the
+  first reveal also publishes the canonical answer and optional answer media.
+  The host has no advance preview and judges non-empty text manually.
+- Correct adds the wager; Wrong subtracts it. Missing or empty responses display
+  **Not submitted** and automatically lose the wager when their own reveal opens,
+  not earlier. Every empty response still has its own visible reveal.
+- At judgment, reveal the wager, verdict, delta, and updated score. Apply each
+  adjustment exactly once in Redis. The reveal has no timer and stays visible
+  until the host presses **Next**, disabled until judgment. The final button is
+  **Finish game**; final standings and completion are published only afterward.
+- Append one Final round result with cumulative scores and deltas from the last
+  normal round. Passers, ineligible players, and removed-unjudged players have
+  zero delta. Existing tied rankings remain; no tie-breaker is added.
+- Persist participant completion and per-round results on every finish path,
+  including skips, timer expiry, and ban exhaustion. Projection retries replace
+  results idempotently. Completed REST details retain category, scores, and deltas;
+  individual wagers/answers and skipped reasons remain live Redis history only.
+
+### Bans
+
+- Remove a banned player from remaining Final actions and reveals. Void an
+  unjudged wager without scoring; retain an already applied adjustment.
+- Re-evaluate early completion after bans. Banning the current reveal moves to
+  the next remaining reveal or finishes; no participants remaining finishes
+  immediately (`no_participants` if no reveal ever opened).
+- Unbanning never re-enters the frozen roster. Existing banned-row redaction
+  applies to Final progress, reveal history, and results.
 
 ## Ban recovery
 
@@ -625,6 +722,9 @@ betting timer:       10 seconds (player_betting), 10 seconds fixed (betting_open
 buzz timer:          10 seconds
 answer reveal timer: 30 seconds maximum
 round summary timer: 10 seconds
+Final wagering:     30 seconds shared
+Final answering:    30 seconds shared
+Final reveal:       no timer
 ```
 
 The server is authoritative:
@@ -633,6 +733,8 @@ The server is authoritative:
   timer callback has not yet run. A fenced timer-expiry command performs the
   legal timeout transition.
 - A late buzz is rejected even if the buzz timeout callback has not yet run.
+- Final wager/answer submissions reject `now >= timer_deadline`, even before
+  the timer worker runs. Submissions never extend either shared deadline.
 - The browser derives countdown display from `timer_deadline - now()` and
   never decides game transitions locally.
 - Every timed state carries an internal `timer_revision`. The same accepted
@@ -659,6 +761,10 @@ The server is authoritative:
 | `buzz` | eligible non-host player | `buzz_open` |
 | `advance_answer_reveal` | host | `answer_reveal` |
 | `advance_round` | host | `round_summary` |
+| `submit_final_wager` | frozen eligible player | `final_betting` |
+| `submit_final_answer` | frozen participant who wagered | `final_answering` |
+| `judge_final_answer` | host | `final_reveal`, current non-empty unjudged response |
+| `advance_final_reveal` | host | `final_reveal`, current response already judged |
 | `ban_player` / `unban_player` | host | no phase restriction while host has active lobby socket |
 
 All rejected events return a structured socket error to the sender. Clients
@@ -672,6 +778,13 @@ it only from payload-bearing events. `buzz`,
 of those payload-free events are not client-idempotent. Older clients without
 a payload command ID also receive a server-generated ID.
 
+All four Final commands use validated payloads and accept UUID `command_id`,
+including advance. Wager requires `amount` (positive integer or `null`), answer
+requires `answer` (text), judgment requires current `user_id` and boolean
+`correct`, and advance requires current `user_id`. That user ID fences delayed
+host commands against another reveal; submission ownership always comes from
+the authenticated session, never a client player ID.
+
 ## Rendering rules
 
 ### Board and prompt stage
@@ -680,8 +793,7 @@ a payload command ID also receive a server-generated ID.
   - `waiting_for_players`;
   - `host_selecting_starting_player`;
   - `player_selecting_prompt`.
-- Show only the current round's categories on the board
-  (`round_number === current_round`).
+- Show only standard categories in the current normal round on the board.
 - Give every category header the same vertical space so prompt rows align
   despite title length.
 - During `player_betting` and `betting_open`, the board and prompt stage are
@@ -708,7 +820,11 @@ a payload command ID also receive a server-generated ID.
   item autoplays once only when game sound is enabled; media controls remain
   native and manually usable.
 - Canonical answer text and optional answer media remain hidden until
-  `answer_reveal`.
+  `answer_reveal` for normal prompts or the first `final_reveal` for Final.
+- Final uses a dedicated wager/Pass form, written-answer form, and per-player
+  reveal panel. Hide normal buzz, selector, and public-auction controls. Native
+  accessible inputs show accepted/pending/error states; spectators and host
+  cannot submit. Label the extra round **Final** in recaps and completed details.
 
 ### Participant and control panel
 

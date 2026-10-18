@@ -6,6 +6,7 @@ import {
   PromptCategoryInDB,
   PromptCategoryUpdate,
   PromptCategoryWithPrompts,
+  type PromptCategoryKindEnum,
   PromptCreate,
   PromptInDB,
   PromptUpdate,
@@ -18,6 +19,7 @@ interface CategoryFilters {
   name?: string;
   owner_ids?: number[];
   is_complete?: boolean;
+  kind?: PromptCategoryKindEnum;
 }
 
 export async function searchCategories(filters: CategoryFilters = {}) {

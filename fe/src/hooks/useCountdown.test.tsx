@@ -17,6 +17,12 @@ describe('useCountdown', () => {
     expect(result.current).toBeNull();
   });
 
+  it('mounts safely with an already expired reconnect deadline', () => {
+    const { result } = renderHook(() => useCountdown('2025-12-31T23:59:59Z'));
+    expect(result.current).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('counts down toward 0', () => {
     const deadline = new Date('2026-01-01T00:00:10Z').toISOString();
     const { result } = renderHook(() => useCountdown(deadline));

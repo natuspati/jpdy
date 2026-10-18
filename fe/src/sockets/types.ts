@@ -1,4 +1,8 @@
 import type {
+  SubmitFinalWagerPayload,
+  SubmitFinalAnswerPayload,
+  JudgeFinalAnswerPayload,
+  AdvanceFinalRevealPayload,
   BanPlayerPayload,
   GameSoundCuePayload,
   GameLobbyState,
@@ -24,6 +28,10 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
+  submit_final_wager: (p: SubmitFinalWagerPayload) => void;
+  submit_final_answer: (p: SubmitFinalAnswerPayload) => void;
+  judge_final_answer: (p: JudgeFinalAnswerPayload) => void;
+  advance_final_reveal: (p: AdvanceFinalRevealPayload) => void;
   start_game: (p?: StartGamePayload) => void;
   set_assets_loaded: (p: SetAssetsLoadedPayload) => void;
   select_starter: (p: SelectStarterPayload) => void;

@@ -8,16 +8,29 @@ import CreateLobbyModal from './CreateLobbyModal';
 const mocks = vi.hoisted(() => ({
   createLobby: vi.fn(),
   updateLobby: vi.fn(),
+  availableCategories: vi.fn(),
 }));
 
 const categories = Array.from({ length: 7 }, (_, index) => ({
   id: index + 1,
   name: `Cat ${index + 1}`,
+  kind: 'standard',
   prompts: Array.from({ length: 5 }, (_, order) => ({ id: index * 10 + order })),
 }));
 
 vi.mock('@/hooks/usePromptCategories', () => ({
-  useAvailableCategories: () => ({ data: { contents: categories }, isLoading: false }),
+  useAvailableCategories: (kind: string) => {
+    mocks.availableCategories(kind);
+    return {
+      data: {
+        contents:
+          kind === 'final'
+            ? [{ id: 100, name: 'Final history', kind: 'final', prompts: [{ id: 1000 }] }]
+            : categories,
+      },
+      isLoading: false,
+    };
+  },
 }));
 
 vi.mock('@/hooks/useLobbies', () => ({
@@ -90,14 +103,17 @@ describe('CreateLobbyModal rounds editor', () => {
     renderModal();
     await userEvent.click(box('Cat 1 in round 1'));
     await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
-    expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, { id: 42, payload: { rounds: [[1]] } });
+    expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
+      id: 42,
+      payload: { rounds: [[1]], final_category_id: null },
+    });
 
     mocks.updateLobby.mockClear();
     await userEvent.type(screen.getByLabelText('Betting prompts in each round'), '3');
     await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
     expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
       id: 42,
-      payload: { rounds: [[1]], betting_prompt_count: 3 },
+      payload: { rounds: [[1]], final_category_id: null, betting_prompt_count: 3 },
     });
   });
 
@@ -138,11 +154,48 @@ describe('CreateLobbyModal rounds editor', () => {
 
     expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
       id: 42,
-      payload: { rounds: [[1, 2], [3]] },
+      payload: { rounds: [[1, 2], [3]], final_category_id: null },
     });
     expect(mocks.updateLobby).toHaveBeenNthCalledWith(2, {
       id: 42,
       payload: { state: 'waiting_start' },
+    });
+  });
+
+  it('keeps the optional final separate from three normal rounds and saves it before opening', async () => {
+    renderModal();
+    expect(mocks.availableCategories).toHaveBeenCalledWith('standard');
+    expect(mocks.availableCategories).toHaveBeenCalledWith('final');
+    expect(screen.queryByRole('checkbox', { name: /Final history/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Cat 1' })).not.toBeInTheDocument();
+
+    await userEvent.click(box('Cat 1 in round 1'));
+    await userEvent.click(screen.getByRole('button', { name: 'Add round' }));
+    await userEvent.click(box('Cat 2 in round 2'));
+    await userEvent.click(screen.getByRole('button', { name: 'Add round' }));
+    await userEvent.click(box('Cat 3 in round 3'));
+    await userEvent.selectOptions(screen.getByLabelText('Final category (optional)'), '100');
+    await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
+
+    expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
+      id: 42,
+      payload: { rounds: [[1], [2], [3]], final_category_id: 100 },
+    });
+    expect(mocks.updateLobby).toHaveBeenNthCalledWith(2, {
+      id: 42,
+      payload: { state: 'waiting_start' },
+    });
+  });
+
+  it('allows removing the optional final without changing normal selections', async () => {
+    renderModal();
+    await userEvent.click(box('Cat 1 in round 1'));
+    await userEvent.selectOptions(screen.getByLabelText('Final category (optional)'), '100');
+    await userEvent.selectOptions(screen.getByLabelText('Final category (optional)'), '');
+    await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
+    expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
+      id: 42,
+      payload: { rounds: [[1]], final_category_id: null },
     });
   });
 });

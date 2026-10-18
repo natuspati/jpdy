@@ -4,6 +4,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.selectable import ScalarSelect
 
 from enums.lobby import LobbyStateEnum
+from enums.prompt import PromptCategoryKindEnum
 from models.lobby import Lobby, LobbyParticipant, LobbyPromptCategory, LobbyRoundResult
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
@@ -387,6 +388,18 @@ class LobbyRepo:
             return set()
         query = select(PromptCategory.id).where(PromptCategory.id.in_(category_ids))
         return set((await self._session.execute(query)).scalars().all())
+
+    async def select_category_kinds(
+        self,
+        category_ids: list[int],
+    ) -> dict[int, PromptCategoryKindEnum]:
+        query = select(PromptCategory.id, PromptCategory.kind).where(
+            PromptCategory.id.in_(category_ids),
+        )
+        return {
+            category_id: PromptCategoryKindEnum(kind)
+            for category_id, kind in (await self._session.execute(query)).all()
+        }
 
     async def replace_lobby_categories(
         self,

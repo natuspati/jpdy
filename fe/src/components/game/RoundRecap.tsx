@@ -42,14 +42,15 @@ export const RoundStandings = ({ standings }: { standings: readonly RoundStandin
 
 interface Props {
   roundNumber: number;
+  isFinal?: boolean;
   categoryNames: readonly string[];
   standings: readonly RoundStanding[] | null;
 }
 
 /** One round's categories plus the standings after it (cumulative score and round delta). */
-const RoundRecap = ({ roundNumber, categoryNames, standings }: Props) => (
-  <section aria-label={`Round ${roundNumber}`} className="space-y-2">
-    <h3 className="font-semibold text-amber-300">Round {roundNumber}</h3>
+const RoundRecap = ({ roundNumber, isFinal = false, categoryNames, standings }: Props) => (
+  <section aria-label={isFinal ? 'Final' : `Round ${roundNumber}`} className="space-y-2">
+    <h3 className="font-semibold text-amber-300">{isFinal ? 'Final' : `Round ${roundNumber}`}</h3>
     <p className="text-sm text-slate-300">{categoryNames.join(' · ')}</p>
     {standings && standings.length > 0 ? <RoundStandings standings={standings} /> : null}
   </section>

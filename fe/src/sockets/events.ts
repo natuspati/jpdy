@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
 import {
+  SubmitFinalWagerPayload,
+  SubmitFinalAnswerPayload,
+  JudgeFinalAnswerPayload,
+  AdvanceFinalRevealPayload,
   BanPlayerPayload,
   JudgeAnswerPayload,
   PlaceBetPayload,
@@ -15,6 +19,10 @@ import type { LobbySocket } from './client';
 import type { ClientEventName, ClientToServerEvents } from './types';
 
 const payloadSchemas: Partial<Record<ClientEventName, z.ZodTypeAny>> = {
+  submit_final_wager: SubmitFinalWagerPayload,
+  submit_final_answer: SubmitFinalAnswerPayload,
+  judge_final_answer: JudgeFinalAnswerPayload,
+  advance_final_reveal: AdvanceFinalRevealPayload,
   start_game: StartGamePayload.optional(),
   set_assets_loaded: SetAssetsLoadedPayload,
   select_starter: SelectStarterPayload,

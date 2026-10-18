@@ -56,6 +56,18 @@ function messageFor(state: GameLobbyState, role: Role): string {
       return role === 'host'
         ? 'Round complete. Start the next round when ready.'
         : 'Round complete. The next round starts soon…';
+    case 'final_betting':
+      return role === 'bettor'
+        ? 'Final: commit a private wager or Pass. Your decision is final.'
+        : 'Final: waiting for private wager decisions…';
+    case 'final_answering':
+      return role === 'answerer'
+        ? 'Final: submit your written answer once. An unsent draft does not count.'
+        : 'Final: players are writing their private answers…';
+    case 'final_reveal':
+      return role === 'host'
+        ? 'Final: judge the revealed answer, then advance when ready.'
+        : 'Final: revealing one answer at a time.';
     case 'finished':
       return 'Game over.';
     default:
@@ -67,7 +79,11 @@ const PhaseBanner = ({ state, role }: Props) => (
   <div className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-200 sm:text-sm">
     {state.total_rounds > 1 ? (
       <p className="font-semibold text-amber-300">
-        Round {state.current_round} of {state.total_rounds}
+        {state.categories.some(
+          (category) => category.round_number === state.current_round && category.kind === 'final',
+        )
+          ? 'Final'
+          : `Round ${state.current_round} of ${state.total_rounds}`}
       </p>
     ) : null}
     <p>{messageFor(state, role)}</p>

@@ -27,11 +27,12 @@ const CategoriesPage = () => {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {data.contents.map((c) => {
+            const promptCount = c.kind === 'final' ? 1 : NUM_PROMPTS_IN_CATEGORY;
             const promptOrders = c.prompts.map((prompt) => prompt.order);
             const complete =
-              c.prompts.length === NUM_PROMPTS_IN_CATEGORY &&
-              promptOrders.every((order) => order !== null) &&
-              new Set(promptOrders).size === NUM_PROMPTS_IN_CATEGORY;
+              c.prompts.length === promptCount &&
+              promptOrders.every((order) => order !== null && order >= 1 && order <= promptCount) &&
+              new Set(promptOrders).size === promptCount;
             return (
               <Card key={c.id}>
                 <div className="flex items-start justify-between gap-3">
@@ -43,8 +44,9 @@ const CategoriesPage = () => {
                       {c.name}
                     </Link>
                     <p className="text-sm text-slate-400">
-                      {c.prompts.length} / {NUM_PROMPTS_IN_CATEGORY} prompts
+                      {c.prompts.length} / {promptCount} prompts
                     </p>
+                    <Badge>{c.kind === 'final' ? 'Final' : 'Standard'}</Badge>
                   </div>
                   {complete ? (
                     <Badge tone="success">Ready</Badge>

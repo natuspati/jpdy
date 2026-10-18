@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { GameAudioContext, type GameAudioContextValue } from '@/audio/gameAudioContext';
-import { buildGameState } from '@/test/fixtures/gameState';
+import { buildFinalGameState, buildGameState } from '@/test/fixtures/gameState';
 import LobbyPage from './LobbyPage';
 
 const socketState = vi.hoisted(() => ({
@@ -57,6 +57,17 @@ const renderLobby = () =>
   );
 
 describe('LobbyPage active-game layout', () => {
+  it.each(['final_betting', 'final_answering', 'final_reveal'] as const)(
+    'renders the %s panel without normal buzzer, auction, or selector actions',
+    (phase) => {
+      socketState.state = buildFinalGameState(phase);
+      renderLobby();
+      expect(screen.getByRole('region', { name: 'Final round' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /buzz|Place bet/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('game-actions')).not.toBeInTheDocument();
+      expect(screen.queryByText('Animals')).not.toBeInTheDocument();
+    },
+  );
   it('places player tiles and status in a header above the board, with the buzzer below', () => {
     socketState.state = buildGameState({
       phase: 'player_selecting_prompt',

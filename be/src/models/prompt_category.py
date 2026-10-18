@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from enums.prompt import PromptCategoryKindEnum
 from models.base import Base
 
 
@@ -11,6 +12,11 @@ class PromptCategory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column()
+    kind: Mapped[str] = mapped_column(
+        String(8),
+        default=PromptCategoryKindEnum.STANDARD,
+        server_default=PromptCategoryKindEnum.STANDARD.value,
+    )
     owner_id: Mapped[int | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"),
     )

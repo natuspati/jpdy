@@ -24,7 +24,7 @@ const CreateCategoryModal = ({ open, onClose }: Props) => {
     formState: { errors },
   } = useForm<PromptCategoryCreate>({
     resolver: zodResolver(PromptCategoryCreate),
-    defaultValues: { name: '' },
+    defaultValues: { name: '', kind: 'standard' },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -39,6 +39,21 @@ const CreateCategoryModal = ({ open, onClose }: Props) => {
       <form className="space-y-3" onSubmit={onSubmit}>
         <Field label="Name" htmlFor="name" error={errors.name?.message}>
           <Input id="name" autoFocus invalid={!!errors.name} {...register('name')} />
+        </Field>
+        <Field
+          label="Category kind"
+          htmlFor="category-kind"
+          hint="Kind cannot be changed after creation."
+          error={errors.kind?.message}
+        >
+          <select
+            id="category-kind"
+            className="h-11 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-slate-100"
+            {...register('kind')}
+          >
+            <option value="standard">Standard — five prompts</option>
+            <option value="final">Final — one prompt, no fixed score</option>
+          </select>
         </Field>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>

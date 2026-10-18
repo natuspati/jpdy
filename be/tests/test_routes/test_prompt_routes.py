@@ -1,8 +1,11 @@
 from httpx import AsyncClient
+from sqlalchemy import insert
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
 from factories import PromptCategoryCreateSchemaFactory, PromptCreateSchemaFactory
 from fixtures.auth_fixtures import AuthedUser
+from models.prompt import Prompt
+from models.prompt_category import PromptCategory
 
 
 async def _create_category(client: AsyncClient, user: AuthedUser, name: str = "Cat") -> int:
@@ -50,6 +53,107 @@ async def test_create_category_persists_with_current_user_as_owner(
     body = response.json()
     assert body["name"] == "Films"
     assert body["owner_id"] == authed_user["user_id"]
+    assert body["kind"] == "standard"
+
+
+async def test_final_category_prompt_limit_order_readiness_and_immutable_kind(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    headers = authed_user["headers"]
+    created = await http_client.post(
+        "/api/v1/category",
+        json={"name": "Final", "kind": "final"},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    category_id = created.json()["id"]
+    assert created.json()["kind"] == "final"
+    standard_id = await _create_category(http_client, authed_user)
+    for order in range(1, NUM_PROMPTS_IN_CATEGORY + 1):
+        await _create_prompt(http_client, authed_user, standard_id, order)
+
+    async def search(kind: str, complete: bool) -> list[int]:
+        response = await http_client.get(
+            "/api/v1/category",
+            params={"kind": kind, "is_complete": str(complete).lower()},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        return [category["id"] for category in response.json()["contents"]]
+
+    assert await search("final", False) == [category_id]
+    assert await search("final", True) == []
+    invalid_order = await http_client.post(
+        f"/api/v1/category/{category_id}/prompts",
+        json=PromptCreateSchemaFactory.build(order=2).model_dump(),
+        headers=headers,
+    )
+    assert invalid_order.status_code == 400
+    prompt_id = await _create_prompt(http_client, authed_user, category_id, 1)
+    duplicate = await http_client.post(
+        f"/api/v1/category/{category_id}/prompts",
+        json=PromptCreateSchemaFactory.build(order=1).model_dump(),
+        headers=headers,
+    )
+    assert duplicate.status_code == 409
+    reorder = await http_client.patch(
+        f"/api/v1/category/{category_id}",
+        json={"prompt_order": {str(prompt_id): 2}},
+        headers=headers,
+    )
+    assert reorder.status_code == 400
+    renamed = await http_client.patch(
+        f"/api/v1/category/{category_id}",
+        json={"name": "Renamed Final", "kind": "standard"},
+        headers=headers,
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["kind"] == "final"
+    assert await search("final", True) == [category_id]
+    assert await search("final", False) == []
+    assert await search("standard", True) == [standard_id]
+    all_complete = await http_client.get(
+        "/api/v1/category",
+        params={"is_complete": "true"},
+        headers=headers,
+    )
+    assert {row["id"] for row in all_complete.json()["contents"]} == {category_id, standard_id}
+
+
+async def test_final_readiness_rejects_legacy_invalid_prompt_orders(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    db_session,
+):
+    for orders in ([2], [1, 2], [None], [1, 1]):
+        category_id = (
+            await db_session.execute(
+                insert(PromptCategory)
+                .values(name="Invalid Final", kind="final", owner_id=authed_user["user_id"])
+                .returning(PromptCategory.id),
+            )
+        ).scalar_one()
+        for order in orders:
+            await db_session.execute(
+                insert(Prompt).values(
+                    category_id=category_id,
+                    order=order,
+                    question="Question",
+                    question_type="text",
+                    answer="Answer",
+                    answer_type="text",
+                ),
+            )
+    await db_session.commit()
+    for complete, expected_count in ((True, 0), (False, 4)):
+        response = await http_client.get(
+            "/api/v1/category",
+            params={"kind": "final", "is_complete": str(complete).lower()},
+            headers=authed_user["headers"],
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["total"] == expected_count
 
 
 async def test_create_category_ignores_owner_id_from_payload(

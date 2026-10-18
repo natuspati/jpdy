@@ -2,7 +2,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildGameState } from '@/test/fixtures/gameState';
+import { buildFinalGameState, buildGameState } from '@/test/fixtures/gameState';
 import { useGameAudio } from './useGameAudio';
 import { GameAudioProvider } from './GameAudioProvider';
 
@@ -67,6 +67,7 @@ const AudioHarness = () => {
     endPromptMediaPlayback,
     setVolume,
     syncGameState,
+    playCue,
     toggleMuted,
   } = useGameAudio();
   return (
@@ -82,6 +83,15 @@ const AudioHarness = () => {
       </button>
       <button type="button" onClick={() => syncGameState(buildGameState())}>
         Board
+      </button>
+      <button type="button" onClick={() => syncGameState(buildFinalGameState('final_answering'))}>
+        Final answering
+      </button>
+      <button type="button" onClick={() => syncGameState(buildFinalGameState('final_reveal'))}>
+        Final reveal
+      </button>
+      <button type="button" onClick={() => playCue({ cue_id: 1, cue: 'answer_wrong' })}>
+        Wrong
       </button>
       <button type="button" onClick={() => beginPromptMediaPlayback('101:question')}>
         Begin first
@@ -152,6 +162,26 @@ describe('GameAudioProvider', () => {
 
     fireEvent.click(getByRole('button', { name: 'End second' }));
     await waitFor(() => expect(loops()).toHaveLength(2));
+  });
+
+  it('uses the existing answering music for Final submissions and stays silent after reveal judgments', async () => {
+    const { getByRole } = renderAudio();
+    fireEvent.click(getByRole('button', { name: 'Enable' }));
+    fireEvent.click(getByRole('button', { name: 'Final answering' }));
+    await waitFor(() => expect(loops()).toHaveLength(1));
+    const answering = loops()[0];
+    expect(answering.buffer?.url).toContain('answering-loop');
+    fireEvent.click(getByRole('button', { name: 'Final reveal' }));
+    expect(answering.stop).toHaveBeenCalledOnce();
+    fireEvent.click(getByRole('button', { name: 'Wrong' }));
+    await waitFor(() =>
+      expect(
+        FakeBufferSource.instances.some((source) => source.buffer?.url.includes('wrong')),
+      ).toBe(true),
+    );
+    const wrong = FakeBufferSource.instances.find((source) => source.buffer?.url.includes('wrong'));
+    await act(async () => wrong?.onended?.());
+    expect(loops()).toHaveLength(1);
   });
 
   it('is on by default and starts the desired loop on the first user gesture', async () => {

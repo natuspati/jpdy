@@ -11,6 +11,7 @@ from enums.lobby import LobbyStateEnum
 from factories import PromptCategoryCreateSchemaFactory, PromptCreateSchemaFactory
 from fixtures.auth_fixtures import AuthedUser
 from models.lobby import Lobby, LobbyParticipant, LobbyRoundResult
+from models.prompt_category import PromptCategory
 from repos.game_state import GameStateRepo
 from schemas.lobby.game_state import GameLobbyState, GamePlayerState
 from utils.game_state import game_state_key
@@ -77,6 +78,147 @@ async def _create_complete_category(
         )
         assert response.status_code == 201, response.text
     return category_id
+
+
+async def _create_final_category(client: AsyncClient, user: AuthedUser) -> int:
+    response = await client.post(
+        "/api/v1/category",
+        json={"name": "Final", "kind": "final"},
+        headers=user["headers"],
+    )
+    assert response.status_code == 201, response.text
+    category_id = response.json()["id"]
+    prompt = await client.post(
+        f"/api/v1/category/{category_id}/prompts",
+        json=PromptCreateSchemaFactory.build(order=1).model_dump(),
+        headers=user["headers"],
+    )
+    assert prompt.status_code == 201, prompt.text
+    return category_id
+
+
+async def test_final_setup_merges_repositions_clears_and_locks(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    headers = authed_user["headers"]
+    lobby_id = await _create_lobby(http_client, authed_user)
+    category_ids = [await _create_complete_category(http_client, authed_user) for _ in range(3)]
+    final_id = await _create_final_category(http_client, authed_user)
+    path = f"/api/v1/lobby/{lobby_id}"
+
+    async def patch(payload: dict) -> None:
+        response = await http_client.patch(path, json=payload, headers=headers)
+        assert response.status_code == 200, response.text
+
+    async def assert_rounds(expected: list[list[int]]) -> None:
+        details = await http_client.get(path, headers=headers)
+        assert details.status_code == 200, details.text
+        rounds = details.json()["rounds"]
+        assert [[c["id"] for c in r["categories"]] for r in rounds] == expected
+        assert [r["round_number"] for r in rounds] == list(range(1, len(rounds) + 1))
+        for round_schema in rounds:
+            expected_kind = (
+                "final" if round_schema["categories"][0]["id"] == final_id else "standard"
+            )
+            assert round_schema["kind"] == expected_kind
+            assert all(c["kind"] == expected_kind for c in round_schema["categories"])
+
+    await patch({"rounds": [[category_ids[0]]], "final_category_id": final_id})
+    await assert_rounds([[category_ids[0]], [final_id]])
+    await patch({"rounds": [[category_id] for category_id in category_ids]})
+    await assert_rounds([[category_id] for category_id in category_ids] + [[final_id]])
+    await patch({"final_category_id": None})
+    await assert_rounds([[category_id] for category_id in category_ids])
+    await patch({"final_category_id": final_id})
+    await patch({"state": "waiting_start"})
+    await assert_rounds([[category_id] for category_id in category_ids] + [[final_id]])
+    for payload in ({"final_category_id": None}, {"final_category_id": final_id}):
+        response = await http_client.patch(path, json=payload, headers=headers)
+        assert response.status_code == 400
+
+
+async def test_final_setup_rejects_invalid_kind_missing_ids_and_round_counts(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    standard_id = await _create_category(http_client, authed_user)
+    final_id = await _create_final_category(http_client, authed_user)
+    for payload in (
+        {"rounds": [[final_id]]},
+        {"rounds": [[standard_id]], "final_category_id": standard_id},
+        {"rounds": [[standard_id]], "final_category_id": 999999},
+        {"rounds": [[999999]], "final_category_id": final_id},
+        {"rounds": [], "final_category_id": final_id},
+        {"rounds": [[standard_id]] * 4, "final_category_id": final_id},
+    ):
+        response = await http_client.patch(
+            f"/api/v1/lobby/{lobby_id}",
+            json=payload,
+            headers=authed_user["headers"],
+        )
+        assert response.status_code == 400, response.text
+    # Use a separate standard category to distinguish wrong-kind from duplicate validation.
+    other_id = await _create_category(http_client, authed_user)
+    response = await http_client.patch(
+        f"/api/v1/lobby/{lobby_id}",
+        json={"rounds": [[standard_id]], "final_category_id": other_id},
+        headers=authed_user["headers"],
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("mutation", ["incomplete", "kind", "position"])
+async def test_opening_lobby_revalidates_final_setup(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    db_session,
+    mutation: str,
+):
+    lobby_id = await _create_lobby(http_client, authed_user)
+    standard_id = await _create_complete_category(http_client, authed_user)
+    final_id = await _create_final_category(http_client, authed_user)
+    path = f"/api/v1/lobby/{lobby_id}"
+    selected = await http_client.patch(
+        path,
+        json={"rounds": [[standard_id]], "final_category_id": final_id},
+        headers=authed_user["headers"],
+    )
+    assert selected.status_code == 200, selected.text
+    if mutation == "incomplete":
+        category = await http_client.get(
+            f"/api/v1/category/{final_id}",
+            headers=authed_user["headers"],
+        )
+        prompt_id = category.json()["prompts"][0]["id"]
+        deleted = await http_client.delete(
+            f"/api/v1/category/{final_id}/prompts/{prompt_id}",
+            headers=authed_user["headers"],
+        )
+        assert deleted.status_code == 204
+    elif mutation == "kind":
+        await db_session.execute(
+            update(PromptCategory).where(PromptCategory.id == final_id).values(kind="standard"),
+        )
+        await db_session.commit()
+    else:
+        from models.lobby import LobbyPromptCategory
+
+        await db_session.execute(
+            update(LobbyPromptCategory)
+            .where(LobbyPromptCategory.prompt_category_id == final_id)
+            .values(round_number=1),
+        )
+        await db_session.commit()
+    opened = await http_client.patch(
+        path,
+        json={"state": "waiting_start"},
+        headers=authed_user["headers"],
+    )
+    assert opened.status_code == 400, opened.text
+    details = await http_client.get(path, headers=authed_user["headers"])
+    assert details.json()["state"] == "created"
 
 
 async def test_create_lobby_requires_auth(http_client: AsyncClient):

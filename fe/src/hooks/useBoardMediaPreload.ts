@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import type { GameCategoryState, MediaReference } from '@/schemas';
+import type { GameCategoryState, GamePhaseEnum, MediaReference } from '@/schemas';
 
 const MAX_CONCURRENT_FETCHES = 4;
 
@@ -13,13 +13,32 @@ const blobUrls = new Map<string, string>();
 export const preloadedSrc = (media: MediaReference | null | undefined): string | null =>
   (media && blobUrls.get(media.url)) ?? null;
 
-const mediaUrls = (categories: GameCategoryState[] | undefined): string[] => {
+const mediaUrls = (
+  categories: GameCategoryState[] | undefined,
+  phase: GamePhaseEnum | undefined,
+  finalAnswerMedia: MediaReference | null | undefined,
+): string[] => {
   const urls = new Set<string>();
   for (const category of categories ?? []) {
+    if (
+      category.kind === 'final' &&
+      phase !== 'final_answering' &&
+      phase !== 'final_reveal' &&
+      phase !== 'finished'
+    )
+      continue;
     for (const prompt of category.prompts) {
       if (prompt.question_media) urls.add(prompt.question_media.url);
-      if (prompt.answer_media) urls.add(prompt.answer_media.url);
+      if (
+        prompt.answer_media &&
+        (category.kind !== 'final' || phase === 'final_reveal' || phase === 'finished')
+      ) {
+        urls.add(prompt.answer_media.url);
+      }
     }
+  }
+  if (finalAnswerMedia && (phase === 'final_reveal' || phase === 'finished')) {
+    urls.add(finalAnswerMedia.url);
   }
   return [...urls];
 };
@@ -33,8 +52,10 @@ export interface MediaPreloadProgress {
 // element still falls back to the network URL.
 export const useBoardMediaPreload = (
   categories: GameCategoryState[] | undefined,
+  phase?: GamePhaseEnum,
+  finalAnswerMedia?: MediaReference | null,
 ): MediaPreloadProgress => {
-  const urls = mediaUrls(categories);
+  const urls = mediaUrls(categories, phase, finalAnswerMedia);
   const key = urls.join('\n');
   const [done, setDone] = useState<ReadonlySet<string>>(new Set());
 

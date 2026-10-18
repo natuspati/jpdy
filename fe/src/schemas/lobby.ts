@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { LobbyStateEnum } from './enums';
+import { LobbyStateEnum, PromptCategoryKindEnum } from './enums';
 import { Paginated } from './pagination';
 import { MAX_BETTING_PROMPTS_PER_ROUND, PromptCategoryInDB } from './prompt';
 import { UserPublic } from './user';
@@ -70,6 +70,7 @@ export type LobbyRoundResult = z.infer<typeof LobbyRoundResult>;
 // LobbyRoundSchema; `results` is null until the lobby is completed.
 export const LobbyRound = z.object({
   round_number: z.number().int().positive(),
+  kind: PromptCategoryKindEnum.default('standard'),
   categories: z.array(PromptCategoryInDB),
   results: z.array(LobbyRoundResult).nullable(),
 });
@@ -89,6 +90,8 @@ export const LobbyUpdate = z
     state: LobbyStateEnum.optional(),
     // Category ids per round; list index + 1 is the round number.
     rounds: z.array(z.array(z.number().int())).optional(),
+    // Omitted preserves the selection; null disables the optional final.
+    final_category_id: z.number().int().nullable().optional(),
     // Betting prompts per round; null resets to the default.
     betting_prompt_count: z
       .number()
