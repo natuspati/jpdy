@@ -4,9 +4,9 @@ import { canSelectPrompt } from '@/services/game/phaseGuards';
 const COLS_CLASS_BY_COUNT: Record<number, string> = {
   1: 'grid-cols-1',
   2: 'grid-cols-2',
-  3: 'grid-cols-2 sm:grid-cols-3',
-  4: 'grid-cols-2 sm:grid-cols-4',
-  5: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
   6: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-6',
 };
 
@@ -29,14 +29,25 @@ const GameBoard = ({ state, currentUserId, onSelect, flashPromptId = null }: Pro
   // Tailwind JIT requires static class names — pick from a fixed map rather
   // than concatenating into the class string.
   const colsClass = COLS_CLASS_BY_COUNT[Math.min(categories.length, 6)];
+  // Up to 5 categories fit side by side on phones, so shrink the tiles; 6+ keep the roomy layout.
+  const compact = categories.length <= 5;
   return (
-    <div className={`grid gap-2 ${colsClass}`}>
+    <div className={`grid ${compact ? 'gap-1 sm:gap-2' : 'gap-2'} ${colsClass}`}>
       {categories.map((cat) => (
-        <div key={cat.category_id} className="grid grid-rows-[4.5rem_auto] gap-2">
-          <div className="flex min-h-[4.5rem] items-center justify-center overflow-hidden rounded-md bg-(--color-board-bg) p-2 text-center text-sm font-semibold uppercase tracking-wide text-amber-300">
-            <span className="line-clamp-2">{cat.name}</span>
+        <div
+          key={cat.category_id}
+          className={`grid gap-1 sm:gap-2 ${compact ? 'grid-rows-[3rem_auto] sm:grid-rows-[4.5rem_auto]' : 'grid-rows-[4.5rem_auto]'}`}
+        >
+          <div
+            className={`flex min-w-0 items-center justify-center overflow-hidden rounded-md bg-(--color-board-bg) text-center font-semibold uppercase tracking-wide text-amber-300 ${
+              compact
+                ? 'min-h-12 p-1 text-[10px] sm:min-h-[4.5rem] sm:p-2 sm:text-sm'
+                : 'min-h-[4.5rem] p-2 text-sm'
+            }`}
+          >
+            <span className="line-clamp-2 min-w-0 break-words">{cat.name}</span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1 sm:space-y-2">
             {[...cat.prompts]
               .sort((a, b) => a.order - b.order)
               .map((prompt) => {
@@ -47,7 +58,9 @@ const GameBoard = ({ state, currentUserId, onSelect, flashPromptId = null }: Pro
                     key={prompt.prompt_id}
                     disabled={!selectable}
                     onClick={() => onSelect(prompt.prompt_id)}
-                    className={`h-16 w-full rounded-md text-lg font-bold tabular-nums transition-colors sm:h-20 sm:text-2xl ${
+                    className={`w-full rounded-md font-bold tabular-nums transition-colors sm:h-20 sm:text-2xl ${
+                      compact ? 'h-11 text-sm' : 'h-16 text-lg'
+                    } ${
                       flashing
                         ? 'animate-prompt-flash bg-amber-400 text-slate-900 motion-reduce:animate-none'
                         : prompt.is_selected

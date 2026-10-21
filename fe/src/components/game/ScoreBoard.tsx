@@ -56,7 +56,7 @@ const ScoreBoard = ({ state, currentUserId, onBan, onUnban }: Props) => {
         data-testid={`player-tile-${player.user_id}`}
         data-active={isActive || undefined}
         data-muted={isMuted || undefined}
-        className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border px-3 py-1.5 shadow-sm transition-colors ${
+        className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border px-2 py-1 shadow-sm sm:px-3 sm:py-1.5 transition-colors ${
           isMuted
             ? 'border-slate-800 bg-slate-900/40 text-slate-500 opacity-70'
             : isActive
@@ -106,12 +106,12 @@ const ScoreBoard = ({ state, currentUserId, onBan, onUnban }: Props) => {
 
   return (
     <section aria-label="Players">
-      <ul className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-1.5">
+      <ul className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-1.5">
         <li
           data-testid="host-player-tile"
           data-active={hostAction || undefined}
           data-muted={state.host.connection_status === 'disconnected' || undefined}
-          className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border px-3 py-1.5 shadow-sm transition-colors ${
+          className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border px-2 py-1 shadow-sm sm:px-3 sm:py-1.5 transition-colors ${
             state.host.connection_status === 'disconnected'
               ? 'border-slate-800 bg-slate-900/40 text-slate-500 opacity-70'
               : hostAction
