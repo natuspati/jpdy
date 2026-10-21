@@ -8,12 +8,14 @@ import MyLobbyList from '@/components/lobby/MyLobbyList';
 import Card from '@/components/ui/Card';
 import { useAuth } from '@/hooks/useAuth';
 import { useActiveLobbies, useMyLobbies } from '@/hooks/useLobbies';
+import { useLobbyListSocket } from '@/hooks/useLobbyListSocket';
 
 const HomePage = () => {
   const { isAuthed } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const activeLobbies = useActiveLobbies();
   const myLobbies = useMyLobbies();
+  useLobbyListSocket();
 
   if (!isAuthed) {
     return (

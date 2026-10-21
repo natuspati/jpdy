@@ -1,9 +1,10 @@
 import { io, type Socket } from 'socket.io-client';
 
 import { env } from '@/config/env';
-import type { ClientToServerEvents, ServerToClientEvents } from './types';
+import type { ClientToServerEvents, LobbyListEvents, ServerToClientEvents } from './types';
 
 export type LobbySocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+export type LobbyListSocket = Socket<LobbyListEvents>;
 
 export function createLobbySocket(lobbyId: number, token: string): LobbySocket {
   return io(`${env.SOCKET_URL}/lobbies/${lobbyId}`, {
@@ -16,5 +17,18 @@ export function createLobbySocket(lobbyId: number, token: string): LobbySocket {
     reconnectionAttempts: Infinity,
     reconnectionDelay: 500,
     reconnectionDelayMax: 2_000,
+  });
+}
+
+export function createLobbyListSocket(token: string): LobbyListSocket {
+  return io(`${env.SOCKET_URL}/lobby-list`, {
+    path: env.SOCKET_PATH,
+    transports: ['websocket'],
+    query: { token },
+    autoConnect: false,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 5_000,
   });
 }

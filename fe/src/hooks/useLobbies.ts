@@ -14,13 +14,16 @@ import { useAuth } from '@/hooks/useAuth';
 import type { LobbyUpdate } from '@/schemas';
 import { toastError, toastSuccess } from '@/store/toastStore';
 
+// Safety net only: lobby changes arrive over the lobby-list socket.
+const FALLBACK_POLL_MS = 60_000;
+
 export function useActiveLobbies() {
   const { isAuthed } = useAuth();
   return useQuery({
     queryKey: queryKeys.lobbies.active(),
     queryFn: getActiveLobbies,
     enabled: isAuthed,
-    refetchInterval: 10_000,
+    refetchInterval: FALLBACK_POLL_MS,
   });
 }
 
@@ -30,7 +33,7 @@ export function useMyLobbies() {
     queryKey: queryKeys.lobbies.mine(),
     queryFn: getMyLobbies,
     enabled: isAuthed,
-    refetchInterval: 10_000,
+    refetchInterval: FALLBACK_POLL_MS,
   });
 }
 

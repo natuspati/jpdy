@@ -27,6 +27,11 @@ export interface ServerToClientEvents {
   error: (payload: SocketErrorPayload) => void;
 }
 
+/** Payload-less ping: the lists are refetched over REST. */
+export interface LobbyListEvents {
+  lobbies_changed: () => void;
+}
+
 export interface ClientToServerEvents {
   submit_final_wager: (p: SubmitFinalWagerPayload) => void;
   submit_final_answer: (p: SubmitFinalAnswerPayload) => void;
