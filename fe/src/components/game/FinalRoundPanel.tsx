@@ -162,7 +162,7 @@ const FinalRoundPanel = ({
               </p>
             </section>
             {final.correct_answer_media && final.correct_answer_type ? (
-              <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+              <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-2">
                 <PromptMedia
                   contentType={final.correct_answer_type}
                   media={final.correct_answer_media}

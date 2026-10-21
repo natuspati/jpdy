@@ -88,7 +88,7 @@ const PromptMedia = ({
         setBlockedIdentity(null);
         void mediaElementRef.current?.play();
       }}
-      className="rounded-md bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300"
+      className="shrink-0 whitespace-nowrap rounded-md bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300"
     >
       Tap to play
     </button>
