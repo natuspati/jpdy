@@ -16,7 +16,7 @@ const BuzzButton = ({ enabled, onBuzz, disabledReason }: Props) => (
       type="button"
       disabled={!enabled}
       onClick={onBuzz}
-      className={`flex size-24 flex-col items-center justify-center rounded-full border-b-8 text-lg font-black uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 sm:size-40 sm:text-2xl ${
+      className={`flex size-24 flex-col items-center justify-center rounded-full border-b-8 text-lg font-black uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 sm:size-32 sm:text-2xl [@media(min-height:800px)]:sm:size-40 ${
         enabled
           ? 'border-rose-800 bg-rose-500 text-white shadow-lg shadow-rose-950/30 hover:bg-rose-400 active:translate-y-2 active:border-b-0 active:shadow-none'
           : 'translate-y-2 border-slate-950 bg-slate-800 text-slate-500 shadow-inner shadow-slate-950/70'

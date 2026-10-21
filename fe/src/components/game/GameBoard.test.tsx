@@ -66,7 +66,7 @@ describe('GameBoard', () => {
       <GameBoard state={state} currentUserId={2} onSelect={() => undefined} />,
     );
 
-    expect(container.querySelectorAll('[class*="grid-rows-["]')).toHaveLength(2);
+    expect(container.querySelectorAll('.line-clamp-2')).toHaveLength(2);
     expect(screen.getByText(/long enough/i)).toHaveClass('line-clamp-2');
   });
 
@@ -122,7 +122,7 @@ describe('GameBoard', () => {
 
     expect(screen.getByText('Round two category')).toBeInTheDocument();
     expect(screen.queryByText('Animals')).not.toBeInTheDocument();
-    expect(container.querySelectorAll('[class*="grid-rows-["]')).toHaveLength(1);
+    expect(container.querySelectorAll('.line-clamp-2')).toHaveLength(1);
     expect(container.firstElementChild).toHaveClass('grid-cols-1');
     expect(screen.getByRole('button', { name: '200' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '400' })).toBeEnabled();

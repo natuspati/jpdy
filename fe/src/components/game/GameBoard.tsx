@@ -30,24 +30,25 @@ const GameBoard = ({ state, currentUserId, onSelect, flashPromptId = null }: Pro
   // than concatenating into the class string.
   const colsClass = COLS_CLASS_BY_COUNT[Math.min(categories.length, 6)];
   // Up to 5 categories fit side by side on phones, so shrink the tiles; 6+ keep the roomy layout.
+  // A single row of columns fills the height left by the page, and tiles shrink to fit, so the
+  // board never needs its own scrollbar. Wrapped 6+ layouts (below md) keep fixed tile heights.
   const compact = categories.length <= 5;
   return (
-    <div className={`grid ${compact ? 'gap-1 sm:gap-2' : 'gap-2'} ${colsClass}`}>
+    <div
+      className={`grid min-h-0 flex-1 ${compact ? 'grid-rows-1 gap-1 sm:gap-2' : 'gap-2 md:grid-rows-1'} ${colsClass}`}
+    >
       {categories.map((cat) => (
-        <div
-          key={cat.category_id}
-          className={`grid gap-1 sm:gap-2 ${compact ? 'grid-rows-[3rem_auto] sm:grid-rows-[4.5rem_auto]' : 'grid-rows-[4.5rem_auto]'}`}
-        >
+        <div key={cat.category_id} className="flex min-h-0 flex-col gap-1 sm:gap-2">
           <div
-            className={`flex min-w-0 items-center justify-center overflow-hidden rounded-md bg-(--color-board-bg) text-center font-semibold uppercase tracking-wide text-amber-300 ${
-              compact
-                ? 'min-h-12 p-1 text-[10px] sm:min-h-[4.5rem] sm:p-2 sm:text-sm'
-                : 'min-h-[4.5rem] p-2 text-sm'
+            className={`flex shrink-0 min-w-0 items-center justify-center overflow-hidden rounded-md bg-(--color-board-bg) text-center font-semibold uppercase tracking-wide text-amber-300 ${
+              compact ? 'h-12 p-1 text-[10px] sm:h-14 sm:p-2 sm:text-sm' : 'h-[4.5rem] p-2 text-sm'
             }`}
           >
             <span className="line-clamp-2 min-w-0 break-words">{cat.name}</span>
           </div>
-          <div className="space-y-1 sm:space-y-2">
+          <div
+            className={`flex flex-col gap-1 sm:gap-2 ${compact ? 'min-h-0 flex-1' : 'md:min-h-0 md:flex-1'}`}
+          >
             {[...cat.prompts]
               .sort((a, b) => a.order - b.order)
               .map((prompt) => {
@@ -58,8 +59,10 @@ const GameBoard = ({ state, currentUserId, onSelect, flashPromptId = null }: Pro
                     key={prompt.prompt_id}
                     disabled={!selectable}
                     onClick={() => onSelect(prompt.prompt_id)}
-                    className={`w-full rounded-md font-bold tabular-nums transition-colors sm:h-20 sm:text-2xl ${
-                      compact ? 'h-11 text-sm' : 'h-16 text-lg'
+                    className={`w-full rounded-md font-bold tabular-nums transition-colors ${
+                      compact
+                        ? 'min-h-8 max-h-16 flex-1 basis-0 text-sm sm:max-h-20 sm:text-2xl'
+                        : 'h-16 text-lg md:h-auto md:min-h-8 md:max-h-20 md:flex-1 md:basis-0 md:text-2xl'
                     } ${
                       flashing
                         ? 'animate-prompt-flash bg-amber-400 text-slate-900 motion-reduce:animate-none'
