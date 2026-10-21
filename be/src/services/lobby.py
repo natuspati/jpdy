@@ -17,7 +17,7 @@ from schemas.lobby.nested import (
 from schemas.user.base import UserPublicSchema
 from services import game_timers
 from services.game_state_materializer import GameStateMaterializer
-from sockets.lobby_lifecycle import notify_lobby_deleted_and_disconnect
+from sockets.lobby_lifecycle import notify_lobbies_changed, notify_lobby_deleted_and_disconnect
 from utils.lobby import (
     build_lobby_rounds,
     ensure_owned_lobby,
@@ -106,7 +106,9 @@ class LobbyService:
 
     async def create_lobby(self, owner_id: int) -> LobbyInDBSchema:
         async with self._uow as uow:
-            return await uow.lobby_repo.insert_lobby(owner_id=owner_id)
+            lobby = await uow.lobby_repo.insert_lobby(owner_id=owner_id)
+        await notify_lobbies_changed()
+        return lobby
 
     async def update_lobby(
         self,
@@ -174,6 +176,7 @@ class LobbyService:
                 await GameStateMaterializer(uow).materialize(lobby_id)
 
             updated = await uow.lobby_repo.select_lobby(lobby_id=lobby_id)
+        await notify_lobbies_changed()
         if updated is None:
             raise NotFoundError(f"Lobby {lobby_id} not found")
         return updated
@@ -189,3 +192,4 @@ class LobbyService:
             await uow.game_state_repo.delete_state(lobby_id)
         game_timers.cancel(lobby_id)
         await notify_lobby_deleted_and_disconnect(lobby_id)
+        await notify_lobbies_changed()

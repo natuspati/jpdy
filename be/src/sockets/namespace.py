@@ -1,5 +1,6 @@
 import re
 
+LOBBY_LIST_NAMESPACE = "/lobby-list"
 LOBBY_NAMESPACE_PATTERN = re.compile(r"^/lobbies/(?P<lobby_id>\d+)$")
 
 

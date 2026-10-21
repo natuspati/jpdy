@@ -1,6 +1,20 @@
+import logging
+
 from sockets.app import sio
 from sockets.broadcast import broadcast_lobby_deleted
-from sockets.namespace import lobby_namespace
+from sockets.namespace import LOBBY_LIST_NAMESPACE, lobby_namespace
+
+_logger = logging.getLogger(__name__)
+
+LOBBIES_CHANGED_EVENT = "lobbies_changed"
+
+
+async def notify_lobbies_changed() -> None:
+    """Tell lobby-list clients to refetch; call after the SQL commit. Never fails the caller."""
+    try:
+        await sio.emit(LOBBIES_CHANGED_EVENT, namespace=LOBBY_LIST_NAMESPACE)
+    except Exception:
+        _logger.exception("Failed to emit lobbies_changed")
 
 
 async def notify_lobby_deleted_and_disconnect(lobby_id: int) -> None:

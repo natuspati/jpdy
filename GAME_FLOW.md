@@ -38,6 +38,10 @@ created → waiting_start → in_progress → completed
 - REST is used for lobby setup and discovery.
 - Socket.IO is used for live gameplay at path `/ws`, with each lobby at
   `/lobbies/{lobby_id}`.
+- The home-page lobby lists are fetched over REST. The server pings the
+  authenticated `/lobby-list` namespace with a payload-less `lobbies_changed`
+  event after any lobby create, update, delete, join, ban or state change, and
+  clients refetch. A 60 second poll remains as a fallback.
 - Redis stores persisted live-game state at `game:{lobby_id}:state`, where the
   braces are a Redis Cluster hash tag. State is initialized when the lobby
   enters `waiting_start` and remains available through `finished`, unless the

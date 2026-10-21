@@ -3,6 +3,7 @@ from enums.game import GamePhaseEnum
 from enums.lobby import LobbyStateEnum
 from schemas.lobby.game_state import GameLobbyState
 from schemas.user.base import UserPublicSchema
+from sockets.lobby_lifecycle import notify_lobbies_changed
 from utils.game_state import find_game_player
 
 
@@ -15,10 +16,12 @@ class GameProjectionService:
     async def project_connected_player(self, state: GameLobbyState, user: UserPublicSchema) -> None:
         async with self._uow as uow:
             await uow.lobby_repo.ensure_participant(lobby_id=state.lobby_id, user=user)
+        await notify_lobbies_changed()
 
     async def project_game_started(self, state: GameLobbyState) -> None:
         async with self._uow as uow:
             await uow.lobby_repo.update_lobby_state(state.lobby_id, LobbyStateEnum.IN_PROGRESS)
+        await notify_lobbies_changed()
 
     async def project_participant(self, state: GameLobbyState, user_id: int) -> None:
         player = find_game_player(state, user_id)
@@ -34,6 +37,7 @@ class GameProjectionService:
                 user_id=player.user_id,
                 is_banned=player.is_banned,
             )
+        await notify_lobbies_changed()
 
     async def project_completion(self, state: GameLobbyState) -> None:
         if state.phase != GamePhaseEnum.FINISHED:
@@ -66,3 +70,4 @@ class GameProjectionService:
                 lobby_id=state.lobby_id,
                 state=LobbyStateEnum.COMPLETED,
             )
+        await notify_lobbies_changed()

@@ -17,10 +17,14 @@ from sockets.events.game import (
     on_submit_final_wager,
     on_unban_player,
 )
+from sockets.events.lobby_list import on_lobby_list_connect
+from sockets.namespace import LOBBY_LIST_NAMESPACE
 
 
 def register_socket_handlers() -> None:
     """Register Socket.IO handlers during explicit application setup."""
+    # An explicit handler wins over the "*" catch-all, so this namespace never reaches on_connect.
+    sio.on("connect", handler=on_lobby_list_connect, namespace=LOBBY_LIST_NAMESPACE)
     sio.on("connect", handler=on_connect, namespace="*")
     sio.on("disconnect", handler=on_disconnect, namespace="*")
     sio.on("set_assets_loaded", handler=on_set_assets_loaded, namespace="*")
