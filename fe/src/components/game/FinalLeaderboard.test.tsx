@@ -35,10 +35,10 @@ describe('FinalLeaderboard', () => {
     expect(items[2]).toContain('carol');
   });
 
-  it('shows the host as non-scoring', () => {
+  it('shows the host', () => {
     const state = buildGameState();
     render(<FinalLeaderboard state={state} />);
-    expect(screen.getByText(/non-scoring/i)).toBeInTheDocument();
+    expect(screen.queryByText(/non-scoring/i)).not.toBeInTheDocument();
     expect(screen.getByText(state.host.username)).toBeInTheDocument();
   });
 

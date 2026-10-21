@@ -56,7 +56,7 @@ const FinalLeaderboard = ({ state }: { state: GameLobbyState }) => {
           ))
         : null}
       <p className="text-center text-xs text-slate-400">
-        Host: <span className="text-amber-300">{state.host.username}</span> (non-scoring)
+        Host: <span className="text-amber-300">{state.host.username}</span>
       </p>
     </Card>
   );

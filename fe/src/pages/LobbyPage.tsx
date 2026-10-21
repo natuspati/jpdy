@@ -151,9 +151,6 @@ const LobbyPage = () => {
     !!view.currentPrompt &&
     revealingPromptId === null &&
     ['player_answering', 'buzz_open', 'answer_reveal'].includes(state.phase);
-  const answerer = state.answering_player_id
-    ? state.players.find((player) => player.user_id === state.answering_player_id)
-    : undefined;
   const buzzDisabledReason = (() => {
     if (canBuzz(state, userId)) return undefined;
     const player = state.players.find((item) => item.user_id === userId);
@@ -281,11 +278,8 @@ const LobbyPage = () => {
                   onJudge={(correct) => emit('judge_answer', { correct })}
                 />
               ) : null}
-              {state.phase === 'player_answering' && answerer && revealingPromptId === null ? (
-                <HostJudgePanel
-                  answeringPlayerName={answerer.username}
-                  expectedAnswer={hostAnswerKey?.expected_answer}
-                />
+              {state.phase === 'player_answering' && revealingPromptId === null ? (
+                <HostJudgePanel expectedAnswer={hostAnswerKey?.expected_answer} />
               ) : null}
             </>
           ) : (
