@@ -65,8 +65,6 @@ const MyLobbyList = ({ lobbies, loading, error }: Props) => {
         <Spinner />
       ) : error ? (
         <p className="text-rose-400">Your lobbies are unavailable.</p>
-      ) : lobbies.length === 0 ? (
-        <p className="text-slate-400">No owned or joined lobbies yet.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-800">
           <table className="min-w-full text-left text-sm">
@@ -81,6 +79,13 @@ const MyLobbyList = ({ lobbies, loading, error }: Props) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+              {lobbies.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-4 text-center text-slate-400">
+                    No owned or joined lobbies yet.
+                  </td>
+                </tr>
+              ) : null}
               {lobbies.map((lobby) => (
                 <tr key={lobby.id}>
                   <td className="whitespace-nowrap px-1.5 py-2 sm:px-3 sm:py-3 font-semibold text-slate-100">
