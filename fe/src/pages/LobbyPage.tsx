@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import BetPanel from '@/components/game/BetPanel';
+import BettingAnnouncement from '@/components/game/BettingAnnouncement';
 import BuzzButton from '@/components/game/BuzzButton';
 import FinalLeaderboard from '@/components/game/FinalLeaderboard';
 import FinalRoundPanel from '@/components/game/FinalRoundPanel';
@@ -143,8 +144,9 @@ const LobbyPage = () => {
     ['waiting_for_players', 'host_selecting_starting_player', 'player_selecting_prompt'].includes(
       state.phase,
     ) || revealingPromptId !== null;
-  const showBetPanel =
-    ['player_betting', 'betting_open'].includes(state.phase) && revealingPromptId === null;
+  const showBetPanel = state.phase === 'betting_open' && revealingPromptId === null;
+  const showBettingAnnouncement =
+    state.phase === 'betting_announcement' && revealingPromptId === null;
   const showPromptStage =
     !!view.currentPrompt &&
     revealingPromptId === null &&
@@ -161,7 +163,7 @@ const LobbyPage = () => {
     if (state.phase === 'waiting_for_players') return 'Game not started.';
     if (state.phase === 'host_selecting_starting_player') return 'Waiting for the host.';
     if (state.phase === 'player_selecting_prompt') return 'Waiting for a clue.';
-    if (state.phase === 'player_betting' || state.phase === 'betting_open') {
+    if (state.phase === 'betting_announcement' || state.phase === 'betting_open') {
       return 'Betting in progress.';
     }
     if (state.phase === 'player_answering') {
@@ -204,7 +206,9 @@ const LobbyPage = () => {
       <div data-panel-section="countdown" className="shrink-0 empty:hidden">
         <TimerBar
           deadline={
-            revealingPromptId === null && state.phase !== 'round_summary'
+            revealingPromptId === null &&
+            state.phase !== 'round_summary' &&
+            state.phase !== 'betting_announcement'
               ? state.timer_deadline
               : null
           }
@@ -232,6 +236,7 @@ const LobbyPage = () => {
             onSelect={(promptId) => emit('select_prompt', { prompt_id: promptId })}
           />
         ) : null}
+        {showBettingAnnouncement ? <BettingAnnouncement /> : null}
         {showBetPanel ? (
           <BetPanel
             state={state}

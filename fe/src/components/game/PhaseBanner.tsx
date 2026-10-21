@@ -22,18 +22,10 @@ function messageFor(state: GameLobbyState, role: Role): string {
       const who = personFor(state, state.selecting_player_id);
       return role === 'selector' ? 'Your turn - pick a prompt.' : `${who} is picking a prompt…`;
     }
-    case 'player_betting': {
-      const who = personFor(state, state.selecting_player_id);
-      return role === 'bettor'
-        ? 'Bet on this clue - you picked it.'
-        : `${who} is betting on the clue they picked…`;
-    }
+    case 'betting_announcement':
+      return 'Betting round!';
     case 'betting_open':
-      return role === 'bettor'
-        ? 'Outbid to answer this clue!'
-        : role === 'host'
-          ? 'Players are bidding.'
-          : 'Players are bidding…';
+      return role === 'bettor' ? 'Place your bet.' : 'Players are betting…';
     case 'player_answering': {
       const who = personFor(state, state.answering_player_id);
       return role === 'answerer'

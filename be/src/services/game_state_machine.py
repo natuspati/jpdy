@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from configs.constants import (
     ANSWER_REVEAL_TIME_SECONDS,
     ANSWERING_TIME_SECONDS,
+    BETTING_ANNOUNCEMENT_SECONDS,
     BETTING_TIME_SECONDS,
     BUZZING_TIME_SECONDS,
     FINAL_ANSWERING_TIME_SECONDS,
@@ -161,38 +162,32 @@ class GameStateMachine:
         if prompt.is_betting:
             state.answering_player_id = None
             state.min_bet = prompt.score_value
-            state.current_bet = 0
-            state.betting_player_id = None
-            state.max_bet = max(
-                round_score_value(NUM_PROMPTS_IN_CATEGORY, state.current_round),
-                max((p.score for p in state.players if not p.is_banned), default=0),
-            )
-            state.phase = GamePhaseEnum.PLAYER_BETTING
-            state.timer_deadline = self._deadline(BETTING_TIME_SECONDS)
+            state.bets = {}
+            state.max_bet = round_score_value(NUM_PROMPTS_IN_CATEGORY, state.current_round) * 3
+            state.phase = GamePhaseEnum.BETTING_ANNOUNCEMENT
+            state.timer_deadline = self._deadline(BETTING_ANNOUNCEMENT_SECONDS)
             return GameCommandOutcome(state=state, result=state, reason="prompt_selected")
         state.phase = GamePhaseEnum.PLAYER_ANSWERING
         state.timer_deadline = self._deadline(ANSWERING_TIME_SECONDS)
         return GameCommandOutcome(state=state, result=state, reason="prompt_selected")
 
     def place_bet(self, state: GameLobbyState, user_id: int, amount: int) -> GameCommandOutcome:
-        self._require_phase(state, GamePhaseEnum.PLAYER_BETTING, GamePhaseEnum.BETTING_OPEN)
+        self._require_phase(state, GamePhaseEnum.BETTING_OPEN)
         if state.timer_deadline is None or state.timer_deadline <= self._clock():
             raise BadRequestError("Betting time has expired")
         if not is_eligible_game_player(find_game_player(state, user_id)):
             raise ForbiddenError("Only connected, non-banned players may bet")
-        is_selector = user_id == state.selecting_player_id
-        if state.phase == GamePhaseEnum.PLAYER_BETTING and not is_selector:
-            raise ForbiddenError("Only the selecting player may bet right now")
-        if state.phase == GamePhaseEnum.BETTING_OPEN and is_selector:
-            raise ForbiddenError("The selecting player already had their turn to bet")
+        if user_id in state.bets:
+            raise BadRequestError("You already placed your bet")
         if not state.min_bet <= amount <= state.max_bet:
             raise BadRequestError(f"Bet must be between {state.min_bet} and {state.max_bet}")
-        if amount <= state.current_bet:
-            raise BadRequestError(f"Bet must be higher than {state.current_bet}")
-        state.current_bet = amount
-        state.betting_player_id = user_id
-        if state.phase == GamePhaseEnum.PLAYER_BETTING:
-            self._open_challenger_window(state)
+        state.bets[user_id] = amount
+        if all(
+            player.user_id in state.bets
+            for player in state.players
+            if is_eligible_game_player(player)
+        ):
+            self._resolve_betting(state)
         return GameCommandOutcome(state=state, result=state, reason="bet_placed")
 
     def judge_answer(
@@ -384,8 +379,9 @@ class GameStateMachine:
             return GameCommandOutcome(state=None, result=None, reason="stale_timer_deadline")
         if state.timer_deadline > self._clock():
             return GameCommandOutcome(state=None, result=None, reason="timer_not_due")
-        if state.phase == GamePhaseEnum.PLAYER_BETTING:
-            self._open_challenger_window(state)
+        if state.phase == GamePhaseEnum.BETTING_ANNOUNCEMENT:
+            state.phase = GamePhaseEnum.BETTING_OPEN
+            state.timer_deadline = self._deadline(BETTING_TIME_SECONDS)
         elif state.phase == GamePhaseEnum.BETTING_OPEN:
             self._resolve_betting(state)
         elif state.phase == GamePhaseEnum.PLAYER_ANSWERING:
@@ -471,30 +467,25 @@ class GameStateMachine:
         state.selecting_player_id = selector.user_id
         state.phase = GamePhaseEnum.PLAYER_SELECTING_PROMPT
 
-    def _open_challenger_window(self, state: GameLobbyState) -> None:
-        if any(
-            is_eligible_game_player(player) and player.user_id != state.selecting_player_id
-            for player in state.players
-        ):
-            state.phase = GamePhaseEnum.BETTING_OPEN
-            state.timer_deadline = self._deadline(BETTING_TIME_SECONDS)
-        else:
-            self._resolve_betting(state)
-
     def _resolve_betting(self, state: GameLobbyState) -> None:
-        bettor_id = state.betting_player_id
         prompt = find_game_prompt(state, state.current_prompt_id)
-        if bettor_id is None and is_eligible_game_player(
-            find_game_player(state, state.selecting_player_id),
-        ):
-            # Nobody bet: the selector answers at the prompt's default value.
-            bettor_id = state.selecting_player_id
-            state.current_bet = state.min_bet
+        selector_id = state.selecting_player_id
+        candidates = dict(state.bets)
+        if selector_id is not None and selector_id not in candidates:
+            # The selector's pre-filled bet counts, and as the earliest one it wins ties.
+            candidates = {selector_id: state.min_bet, **candidates}
+        bettor_id: int | None = None
+        best_bet = 0
+        for user_id, amount in candidates.items():
+            if not is_eligible_game_player(find_game_player(state, user_id)):
+                continue
+            if bettor_id is None or amount > best_bet:  # strict: ties go to the earliest
+                bettor_id, best_bet = user_id, amount
         if bettor_id is None or prompt is None:
             self._clear_betting(state)
             self._enter_answer_reveal(state, GameResolutionEnum.EXPIRED)
             return
-        prompt.score_value = state.current_bet
+        prompt.score_value = best_bet
         state.answering_player_id = state.selecting_player_id = bettor_id
         state.attempted_player_ids = []
         clear_game_player_selection_flags(state)
@@ -507,8 +498,8 @@ class GameStateMachine:
 
     @staticmethod
     def _clear_betting(state: GameLobbyState) -> None:
-        state.min_bet = state.max_bet = state.current_bet = 0
-        state.betting_player_id = None
+        state.min_bet = state.max_bet = 0
+        state.bets = {}
 
     def _enter_host_player_selection(self, state: GameLobbyState) -> None:
         clear_game_player_selection_flags(state)
@@ -530,15 +521,7 @@ class GameStateMachine:
         if state.phase == GamePhaseEnum.PLAYER_SELECTING_PROMPT and is_selector:
             self._enter_host_player_selection(state)
             return
-        if state.phase == GamePhaseEnum.PLAYER_BETTING and is_selector:
-            state.selecting_player_id = None
-            clear_game_player_selection_flags(state)
-            self._clear_betting(state)
-            self._enter_answer_reveal(state, GameResolutionEnum.UNANSWERED)
-            return
-        if state.phase == GamePhaseEnum.BETTING_OPEN and state.betting_player_id == user_id:
-            state.current_bet = 0
-            state.betting_player_id = None
+        state.bets.pop(user_id, None)
         if state.phase == GamePhaseEnum.PLAYER_ANSWERING and is_answerer:
             state.selecting_player_id = None
             clear_game_player_selection_flags(state)

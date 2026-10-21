@@ -157,7 +157,7 @@ def build_public_game_state(
 ) -> PublicGameLobbyState:
     """Project internal Redis state into a recipient-safe Socket.IO payload."""
     is_revealing_answer = state.phase == GamePhaseEnum.ANSWER_REVEAL
-    is_betting = state.phase in {GamePhaseEnum.PLAYER_BETTING, GamePhaseEnum.BETTING_OPEN}
+    is_betting = state.phase in {GamePhaseEnum.BETTING_ANNOUNCEMENT, GamePhaseEnum.BETTING_OPEN}
     players = (
         state.players
         if include_banned_players
@@ -255,10 +255,7 @@ def build_public_game_state(
         ],
         min_bet=state.min_bet,
         max_bet=state.max_bet,
-        current_bet=state.current_bet,
-        betting_player_id=(
-            state.betting_player_id if state.betting_player_id in visible_player_ids else None
-        ),
+        my_bet=state.bets.get(viewer_user_id) if viewer_user_id is not None else None,
         timer_deadline=state.timer_deadline,
         resolved_prompt_id=state.resolved_prompt_id if is_revealing_answer else None,
         resolved_answer=state.resolved_answer if is_revealing_answer else None,

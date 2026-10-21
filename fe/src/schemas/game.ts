@@ -123,8 +123,7 @@ export const GameLobbyState = z
     attempted_player_ids: z.array(z.number().int()).default([]),
     min_bet: z.number().int().nonnegative().default(0),
     max_bet: z.number().int().nonnegative().default(0),
-    current_bet: z.number().int().nonnegative().default(0),
-    betting_player_id: z.number().int().nullable().default(null),
+    my_bet: z.number().int().nonnegative().nullable().default(null),
     timer_deadline: z.string().nullable().default(null),
     resolved_prompt_id: z.number().int().nullable().default(null),
     resolved_answer: z.string().nullable().default(null),
@@ -152,7 +151,7 @@ export const GameLobbyState = z
       isFinal &&
       (state.selecting_player_id !== null ||
         state.answering_player_id !== null ||
-        state.betting_player_id !== null)
+        state.my_bet !== null)
     )
       invalid('Final phases cannot use normal selector, answerer, or auction state');
     if (

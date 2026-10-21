@@ -5,7 +5,7 @@ import type { GameLobbyState } from '@/schemas';
 export const SELECTION_REVEAL_MS = 1000;
 
 const isOpening = (phase: GameLobbyState['phase'] | undefined): boolean =>
-  phase === 'player_answering' || phase === 'player_betting';
+  phase === 'player_answering' || phase === 'betting_announcement';
 
 /**
  * Id of the prompt that was just picked, for the first second after the selection arrives.

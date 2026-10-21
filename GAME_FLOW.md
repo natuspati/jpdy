@@ -216,8 +216,7 @@ PublicGameLobbyState
 ├─ attempted_player_ids
 ├─ min_bet                        # betting phases only, else 0
 ├─ max_bet                        # betting phases only, else 0
-├─ current_bet                    # highest bet so far, else 0
-├─ betting_player_id              # holder of the highest bet, else null
+├─ my_bet                         # the viewer's own bet while betting is open, else null
 ├─ timer_deadline
 ├─ resolved_prompt_id             # set only in answer_reveal
 ├─ resolved_answer                # set only in answer_reveal
@@ -236,7 +235,7 @@ moderate and unban them. Non-host snapshots omit banned players entirely,
 including their scores, connection state, active labels, and their rows in
 `round_results`. The server emits
 recipient-specific snapshots to separate host and player Socket.IO rooms; during
-Final, each player receives a personalized frame in their existing per-user room. It
+Final and `betting_open`, each player receives a personalized frame in their existing per-user room. It
 never broadcasts a broad state frame before these recipient-specific frames.
 
 Public prompt data never contains expected-answer field. `question` and
@@ -246,7 +245,7 @@ exception is media: `question_media` and `answer_media` are present for every
 standard board prompt so clients can preload normal media during the lobby; this trades some
 secrecy of upcoming media for faster loads. Answer text is never sent early.
 `is_betting` is public only for the current prompt, so players learn a prompt is
-a betting prompt once it is selected, not before. During `player_betting` and
+a betting prompt once it is selected, not before. During `betting_announcement` and
 `betting_open` the current prompt's `question` is empty and its `question_type`
 is `text`; question media references are still sent for preloading, but clients
 must not render them during betting.
@@ -330,7 +329,7 @@ be exposed to browser clients.
 waiting_for_players
 host_selecting_starting_player
 player_selecting_prompt
-player_betting
+betting_announcement
 betting_open
 player_answering
 buzz_open
@@ -400,7 +399,7 @@ Prompt stage shows canonical question text, which can be an instruction or
 caption for image, audio, or video clue, plus optional question media.
 
 If the selected prompt is a betting prompt, the flow below goes to
-`player_betting` instead of `player_answering`.
+`betting_announcement` instead of `player_answering`.
 
 ### 3a. Betting prompts
 
@@ -409,42 +408,42 @@ Selecting a betting prompt: set `current_prompt_id`, clear
 everyone:
 
 - `min_bet` = the prompt's round-scaled `score_value`;
-- `max_bet` = `max(highest value of the current round, highest score among
-  non-banned players)`, where the highest value of round `r` is
-  `5 * 100 * 2^(r-1)`;
-- `current_bet = 0`, `betting_player_id = null`.
+- `max_bet` = 3 times the highest value of the current round, where the
+  highest value of round `r` is `5 * 100 * 2^(r-1)` (round 2: 3000);
+- `bets = {}`.
 
 The existing `clue_selected` cue still fires; there are no new cues. Bets are
-integers and public. A bet is valid only when `min_bet <= amount <= max_bet`
-and `amount` is strictly greater than `current_bet`, so there are no ties.
+integers and **private**: each player sees only their own (`my_bet`). A bet is
+valid only when `min_bet <= amount <= max_bet`; each eligible non-host player,
+the selector included, may bet exactly once.
 
-#### `player_betting` (10 seconds)
+#### `betting_announcement` (4 seconds)
 
-- Only `selecting_player_id` may bet. A bet ends the phase immediately.
-- If the timer expires with no bet, the selector has no bet yet; if nobody else
-  bets either, they answer at the prompt's default value (see Resolution).
-- Either way the game continues to `betting_open`; when no eligible player
-  other than the selector exists, `betting_open` is skipped and betting resolves
-  at once.
+The selected tile flashes for the first second, then every client shows a
+centered "Betting Round!" view. No bets are accepted. A looping betting sound
+starts here and plays until the clue opens. On expiry the game enters
+`betting_open`.
 
-#### `betting_open` (10 seconds, fixed)
+#### `betting_open` (15 seconds)
 
-- Every eligible non-host player **except the selector** may bet at any time.
-  The timer does not restart on a bet. A player may raise their own bet if it
-  is strictly higher than `current_bet`.
-- When the timer ends, betting resolves.
+- Every eligible non-host player may bet once. The selector's input is
+  pre-filled with `min_bet`; they need not change it.
+- The phase resolves when the timer ends, or immediately once every eligible
+  player has bet.
 
 #### Resolution
 
-- Nobody bet: the selector is treated as having bet the prompt's default value
-  (`min_bet`) and answers it as below. Only an ineligible (banned or
-  disconnected) selector spends the prompt: `answer_reveal` with
-  `resolution=expired`, nobody scores.
-- Otherwise the prompt's `score_value` is set to the winning bet, the highest
-  bettor becomes `answering_player_id` and `selecting_player_id`,
-  `attempted_player_ids` is emptied, and the game enters `player_answering`
-  with the usual 30-second timer and a `host_answer_key` for the host. The
-  betting fields are cleared.
+- The highest bet wins; on a tie the earliest submitted bet wins. Players who
+  did not bet are excluded.
+- The selector counts as having bet `min_bet` when they did not submit a bet.
+  That default is treated as the earliest bet, so it wins a tie at the
+  minimum. If nobody bets, the selector answers at the prompt's default value.
+  Only an ineligible (banned or disconnected) selector with no bets spends the
+  prompt: `answer_reveal` with `resolution=expired`, nobody scores.
+- The prompt's `score_value` is set to the winning bet, the winner becomes
+  `answering_player_id` and `selecting_player_id`, `attempted_player_ids` is
+  emptied, and the game enters `player_answering` with the usual 30-second
+  timer and a `host_answer_key` for the host. The betting fields are cleared.
 - **Nobody else may buzz.** A Wrong judgment deducts the bet and reveals with
   `resolution=unanswered`; a timeout deducts the bet and reveals with
   `resolution=expired`. Correct adds the bet.
@@ -696,11 +695,9 @@ Banning always updates both Redis game state and persistent
 
 - Ban current selector in `player_selecting_prompt`: clear active ownership
   and timer, then enter `host_selecting_starting_player`.
-- Ban the selector in `player_betting`: clear the selector, selection flags and
-  betting fields, then reveal the clue as `unanswered`. The prompt stays spent
-  and nothing is scored.
-- Ban the player holding the highest bet in `betting_open`: reset
-  `current_bet` to `0` and `betting_player_id` to `null`; the window continues.
+- Ban a player during `betting_announcement` or `betting_open`: their bet is
+  discarded and betting continues. A banned selector is cleared, so with no
+  other bets the clue is revealed as `expired`, spent, and unscored.
   Disconnects need no special handling.
 - Ban active answerer in `player_answering`: leave selected clue spent, do not
   score or deduct it, clear ownership, then reveal it as `unanswered` for
@@ -718,7 +715,7 @@ Timer durations are:
 
 ```text
 answering timer:     30 seconds
-betting timer:       10 seconds (player_betting), 10 seconds fixed (betting_open)
+betting timer:       4 seconds announcement, 15 seconds betting_open
 buzz timer:          10 seconds
 answer reveal timer: 30 seconds maximum
 round summary timer: 10 seconds
@@ -756,7 +753,7 @@ The server is authoritative:
 | `start_game` | host | `waiting_for_players` |
 | `select_starter` | host | `host_selecting_starting_player` |
 | `select_prompt` | current selector | `player_selecting_prompt` |
-| `place_bet` | selector in `player_betting`; eligible non-host non-selector in `betting_open` | `player_betting`, `betting_open` |
+| `place_bet` | eligible non-host player, once | `betting_open` |
 | `judge_answer` | host | `player_answering` |
 | `buzz` | eligible non-host player | `buzz_open` |
 | `advance_answer_reveal` | host | `answer_reveal` |
@@ -796,13 +793,12 @@ the authenticated session, never a client player ID.
 - Show only standard categories in the current normal round on the board.
 - Give every category header the same vertical space so prompt rows align
   despite title length.
-- During `player_betting` and `betting_open`, the board and prompt stage are
-  hidden and a betting panel is shown instead: category name, the range
-  `min_bet..max_bet`, the current highest bet and its holder (or "No bet yet"),
-  and the countdown. Players who may bet also get a number input (default
-  `max(min_bet, current_bet + 1)`) and a **Place bet** button; the host and
-  everyone else see it read-only. The selected tile flashes on the board first,
-  as for any clue. Client-side bet validation is UX only.
+- The selected tile flashes on the board for one second. In `betting_announcement`
+  the board is replaced by a centered "Betting Round!" view. In `betting_open`
+  a betting panel shows the category name, the `min_bet - max_bet` range, and
+  a number input pre-filled with `min_bet` plus a **Bet** button for players
+  who may bet. After submitting, the panel locks and shows the player's bet;
+  the host sees no input. Client-side bet validation is UX only.
 - Replace board with full prompt stage in:
   - `player_answering`;
   - `buzz_open`;

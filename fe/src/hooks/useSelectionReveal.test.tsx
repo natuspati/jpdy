@@ -27,7 +27,11 @@ describe('useSelectionReveal', () => {
   });
 
   it('also holds the picked prompt when it opens betting', () => {
-    const betting = { ...selecting, phase: 'player_betting' as const, current_prompt_id: 101 };
+    const betting = {
+      ...selecting,
+      phase: 'betting_announcement' as const,
+      current_prompt_id: 101,
+    };
     const { result, rerender } = renderHook(({ state }) => useSelectionReveal(state), {
       initialProps: { state: selecting },
     });

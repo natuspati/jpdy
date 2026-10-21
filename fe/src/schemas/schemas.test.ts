@@ -86,20 +86,14 @@ describe('schemas (round-trip)', () => {
       currentPromptId: 101,
       minBet: 100,
       maxBet: 500,
-      currentBet: 200,
-      bettingPlayerId: 2,
+      myBet: 200,
     });
     expect(GameLobbyState.parse(JSON.parse(JSON.stringify(built)))).toEqual(built);
 
     const old = JSON.parse(JSON.stringify(buildGameState())) as Record<string, unknown>;
-    for (const key of ['min_bet', 'max_bet', 'current_bet', 'betting_player_id']) delete old[key];
+    for (const key of ['min_bet', 'max_bet', 'my_bet']) delete old[key];
     const parsed = GameLobbyState.parse(old);
-    expect([parsed.min_bet, parsed.max_bet, parsed.current_bet, parsed.betting_player_id]).toEqual([
-      0,
-      0,
-      0,
-      null,
-    ]);
+    expect([parsed.min_bet, parsed.max_bet, parsed.my_bet]).toEqual([0, 0, null]);
   });
 
   it('GameLobbyState parses round fields and defaults them for legacy frames', () => {

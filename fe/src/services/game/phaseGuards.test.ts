@@ -145,16 +145,15 @@ describe('phaseGuards', () => {
     expect(canBan(state, 2)).toBe(false);
   });
 
-  it('canPlaceBet lets only the selector bet first, then everyone but the selector', () => {
-    const first = buildGameState({ phase: 'player_betting', selectingPlayerId: 2 });
-    expect(canPlaceBet(first, 2)).toBe(true);
-    expect(canPlaceBet(first, 3)).toBe(false);
-    expect(canPlaceBet(first, 1)).toBe(false);
-
+  it('canPlaceBet lets every connected player bet once while betting is open', () => {
     const open = buildGameState({ phase: 'betting_open', selectingPlayerId: 2 });
-    expect(canPlaceBet(open, 2)).toBe(false);
+    expect(canPlaceBet(open, 2)).toBe(true);
     expect(canPlaceBet(open, 3)).toBe(true);
     expect(canPlaceBet(open, 1)).toBe(false);
+    expect(canPlaceBet({ ...open, my_bet: 300 }, 3)).toBe(false);
+
+    const announcement = buildGameState({ phase: 'betting_announcement', selectingPlayerId: 2 });
+    expect(canPlaceBet(announcement, 2)).toBe(false);
 
     const banned = buildGameState({
       phase: 'betting_open',
@@ -168,16 +167,15 @@ describe('phaseGuards', () => {
     expect(canPlaceBet(buildGameState({ phase: 'buzz_open' }), 3)).toBe(false);
   });
 
-  it('betError checks range, whole numbers and strictly higher bets', () => {
+  it('betError checks range and whole numbers', () => {
     const state = buildGameState({
       phase: 'betting_open',
       minBet: 100,
       maxBet: 500,
-      currentBet: 200,
     });
     expect(betError(state, 50)).toMatch(/between 100 and 500/);
     expect(betError(state, 501)).toMatch(/between 100 and 500/);
-    expect(betError(state, 200)).toBe('Bet more than 200.');
+    expect(betError(state, 100)).toBeNull();
     expect(betError(state, 250.5)).toBe('Enter a whole number.');
     expect(betError(state, Number.NaN)).toBe('Enter a whole number.');
     expect(betError(state, 201)).toBeNull();

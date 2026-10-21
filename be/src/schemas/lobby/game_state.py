@@ -157,8 +157,10 @@ class PublicGameLobbyState(BaseSchema):
     )
     min_bet: int = 0
     max_bet: int = 0
-    current_bet: int = 0
-    betting_player_id: int | None = None
+    my_bet: int | None = Field(
+        default=None,
+        description="Viewer's own private bet while betting is open.",
+    )
     timer_deadline: datetime | None = None
     resolved_prompt_id: int | None = Field(
         default=None,
@@ -217,8 +219,8 @@ class GameLobbyState(BaseSchema):
     )
     min_bet: int = 0
     max_bet: int = 0
-    current_bet: int = 0
-    betting_player_id: int | None = None
+    # Submission order matters: it breaks ties (dicts keep insertion order in Redis JSON).
+    bets: dict[int, int] = Field(default_factory=dict)
     timer_deadline: datetime | None = None
     timer_revision: int | None = Field(
         default=None,

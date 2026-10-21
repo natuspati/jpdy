@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from configs.constants import ANSWER_REVEAL_TIME_SECONDS, BETTING_TIME_SECONDS
+from configs.constants import (
+    ANSWER_REVEAL_TIME_SECONDS,
+    BETTING_ANNOUNCEMENT_SECONDS,
+    BETTING_TIME_SECONDS,
+    NUM_PROMPTS_IN_CATEGORY,
+)
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from enums.prompt import AnswerTypeEnum, QuestionTypeEnum
 from errors.request import BadRequestError, ForbiddenError
@@ -18,7 +23,7 @@ from schemas.lobby.game_state import (
 )
 from services.game_state_machine import GameStateMachine
 from services.game_state_materializer import GameStateMaterializer, default_betting_prompt_count
-from utils.game_state import build_public_game_state
+from utils.game_state import build_public_game_state, round_score_value
 
 NOW = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
 HOST, ONE, TWO, THREE = 1, 2, 3, 4
@@ -60,16 +65,15 @@ def _state(*, player_count: int = 3, scores: tuple[int, ...] = (0, 0, 0)) -> Gam
     )
 
 
-def _betting_state(**kwargs) -> GameLobbyState:
+def _announcement_state(**kwargs) -> GameLobbyState:
     state = _state(**kwargs)
     _machine().select_prompt(state, ONE, BETTING_PROMPT)
-    state.timer_deadline = NOW + timedelta(seconds=BETTING_TIME_SECONDS)
     return state
 
 
-def _open_state(bet: int = 200) -> GameLobbyState:
-    state = _betting_state()
-    _machine().place_bet(state, ONE, bet)
+def _betting_state(**kwargs) -> GameLobbyState:
+    state = _announcement_state(**kwargs)
+    _expire(_machine(), state)
     return state
 
 
@@ -175,61 +179,65 @@ def test_public_projection_hides_betting_flag_and_question_until_selected() -> N
     current = projected.categories[0].prompts[0]
     assert current.is_betting
     assert current.question == ""
-    assert (projected.min_bet, projected.max_bet) == (200, 500)
-
-    _machine().place_bet(state, ONE, 300)
-    assert state.phase == GamePhaseEnum.BETTING_OPEN
-    assert build_public_game_state(state).categories[0].prompts[0].question == ""
-    assert build_public_game_state(state).current_bet == 300
+    assert (projected.min_bet, projected.max_bet) == (200, 1500)
 
 
-def test_select_betting_prompt_enters_player_betting() -> None:
+def test_bets_are_private_to_their_owner() -> None:
     state = _betting_state()
-    assert state.phase == GamePhaseEnum.PLAYER_BETTING
+    _machine().place_bet(state, ONE, 300)
+    assert build_public_game_state(state).categories[0].prompts[0].question == ""
+    assert build_public_game_state(state, viewer_user_id=ONE).my_bet == 300
+    assert build_public_game_state(state, viewer_user_id=TWO).my_bet is None
+    assert build_public_game_state(state).my_bet is None
+
+
+def test_select_betting_prompt_enters_announcement_then_betting_open() -> None:
+    machine = _machine()
+    state = _announcement_state()
+    assert state.phase == GamePhaseEnum.BETTING_ANNOUNCEMENT
     assert state.answering_player_id is None
     assert state.players[0].is_selected
-    assert (state.min_bet, state.current_bet, state.betting_player_id) == (200, 0, None)
+    assert (state.min_bet, state.bets) == (200, {})
+    assert state.timer_deadline == NOW + timedelta(seconds=BETTING_ANNOUNCEMENT_SECONDS)
+    with pytest.raises(BadRequestError, match="Action not allowed"):
+        machine.place_bet(state, ONE, 200)
+
+    _expire(machine, state)
+    assert state.phase == GamePhaseEnum.BETTING_OPEN
+    assert state.timer_deadline == NOW + timedelta(seconds=BETTING_TIME_SECONDS)
 
 
-def test_max_bet_uses_leader_score_when_above_round_maximum() -> None:
-    state = _betting_state(scores=(0, 1700, 5000))
-    assert state.max_bet == 5000
-    banned = _state(scores=(0, 1700, 5000))
-    banned.players[2].is_banned = True
-    _machine().select_prompt(banned, ONE, BETTING_PROMPT)
-    assert banned.max_bet == 1700
+def test_max_bet_is_three_times_the_round_maximum() -> None:
+    state = _state()
+    state.current_round = state.categories[0].round_number = 2
+    _machine().select_prompt(state, ONE, BETTING_PROMPT)
+    assert state.max_bet == 3 * round_score_value(NUM_PROMPTS_IN_CATEGORY, 2)
 
 
 @pytest.mark.parametrize(
     ("amount", "message"),
-    [(100, "between"), (501, "between"), (0, "between")],
+    [(100, "between"), (1501, "between"), (0, "between")],
 )
 def test_place_bet_enforces_limits(amount: int, message: str) -> None:
     with pytest.raises(BadRequestError, match=message):
         _machine().place_bet(_betting_state(), ONE, amount)
 
 
-def test_place_bet_must_be_strictly_higher() -> None:
-    state = _open_state(300)
-    with pytest.raises(BadRequestError, match="higher"):
-        _machine().place_bet(state, TWO, 300)
-    _machine().place_bet(state, TWO, 301)
-    assert (state.current_bet, state.betting_player_id) == (301, TWO)
-    with pytest.raises(BadRequestError, match="higher"):
-        _machine().place_bet(state, TWO, 301)
-    _machine().place_bet(state, TWO, 400)
+def test_place_bet_accepts_each_player_once() -> None:
+    state = _betting_state()
+    _machine().place_bet(state, TWO, 300)
+    assert state.bets == {TWO: 300}
+    with pytest.raises(BadRequestError, match="already"):
+        _machine().place_bet(state, TWO, 400)
 
 
-def test_place_bet_rejects_wrong_phase_sender_and_expired_deadline() -> None:
+def test_place_bet_rejects_ineligible_senders_and_expired_deadline() -> None:
     machine = _machine()
     with pytest.raises(BadRequestError, match="Action not allowed"):
         machine.place_bet(_state(), ONE, 200)
-    for sender in (HOST, TWO):
-        with pytest.raises(ForbiddenError):
-            machine.place_bet(_betting_state(), sender, 200)
-    with pytest.raises(ForbiddenError, match="already"):
-        machine.place_bet(_open_state(), ONE, 500)
-    banned = _open_state()
+    with pytest.raises(ForbiddenError):
+        machine.place_bet(_betting_state(), HOST, 200)
+    banned = _betting_state()
     banned.players[1].is_banned = True
     with pytest.raises(ForbiddenError):
         machine.place_bet(banned, TWO, 500)
@@ -239,41 +247,64 @@ def test_place_bet_rejects_wrong_phase_sender_and_expired_deadline() -> None:
         machine.place_bet(expired, ONE, 200)
 
 
-def test_selector_bet_opens_challenger_window_with_fixed_timer() -> None:
-    state = _open_state()
-    assert state.phase == GamePhaseEnum.BETTING_OPEN
-    deadline = state.timer_deadline
-    _machine().place_bet(state, TWO, 400)
-    assert state.phase == GamePhaseEnum.BETTING_OPEN
-    assert state.timer_deadline == deadline
-
-
-def test_betting_open_is_skipped_without_other_eligible_players() -> None:
-    state = _state(player_count=1)
-    _machine().select_prompt(state, ONE, BETTING_PROMPT)
-    _machine().place_bet(state, ONE, 200)
+def test_highest_bet_wins_and_sets_prompt_value() -> None:
+    machine = _machine()
+    state = _betting_state()
+    machine.place_bet(state, TWO, 500)
+    machine.place_bet(state, THREE, 800)
+    _expire(machine, state)
     assert state.phase == GamePhaseEnum.PLAYER_ANSWERING
+    assert state.answering_player_id == state.selecting_player_id == THREE
+    assert state.categories[0].prompts[0].score_value == 800
+    assert state.attempted_player_ids == []
+    assert [p.is_selected for p in state.players] == [False, False, True]
+    assert (state.min_bet, state.max_bet, state.bets) == (0, 0, {})
+
+
+def test_tied_bets_go_to_the_earliest_submitter() -> None:
+    machine = _machine()
+    state = _betting_state()
+    machine.place_bet(state, THREE, 500)
+    machine.place_bet(state, TWO, 500)
+    _expire(machine, state)
+    assert state.answering_player_id == THREE
+
+
+def test_selector_default_wins_a_tie_at_the_minimum() -> None:
+    machine = _machine()
+    state = _betting_state()
+    machine.place_bet(state, TWO, 200)
+    _expire(machine, state)
     assert state.answering_player_id == ONE
 
 
-def test_selector_no_bet_lets_challenger_win_and_answer() -> None:
+def test_selector_bet_is_ranked_by_submission_time() -> None:
     machine = _machine()
     state = _betting_state()
+    machine.place_bet(state, TWO, 400)
+    machine.place_bet(state, ONE, 400)
     _expire(machine, state)
+    assert state.answering_player_id == TWO
+
+
+def test_non_bettors_are_excluded() -> None:
+    machine = _machine()
+    state = _betting_state()
+    machine.place_bet(state, THREE, 300)
+    _expire(machine, state)
+    assert state.answering_player_id == THREE
+    assert state.categories[0].prompts[0].score_value == 300
+
+
+def test_betting_resolves_early_once_every_eligible_player_has_bet() -> None:
+    machine = _machine()
+    state = _betting_state()
+    machine.place_bet(state, ONE, 300)
+    machine.place_bet(state, TWO, 400)
     assert state.phase == GamePhaseEnum.BETTING_OPEN
-    machine.place_bet(state, TWO, 500)
-    _expire(machine, state)
+    machine.place_bet(state, THREE, 350)
     assert state.phase == GamePhaseEnum.PLAYER_ANSWERING
-    assert state.answering_player_id == state.selecting_player_id == TWO
-    assert state.categories[0].prompts[0].score_value == 500
-    assert state.attempted_player_ids == []
-    assert [p.is_selected for p in state.players] == [False, True, False]
-    assert (state.min_bet, state.max_bet, state.current_bet, state.betting_player_id) == (
-        0,
-        0,
-        0,
-        None,
-    )
+    assert state.answering_player_id == TWO
 
 
 def test_nobody_bets_selector_answers_at_default_value() -> None:
@@ -281,11 +312,9 @@ def test_nobody_bets_selector_answers_at_default_value() -> None:
     state = _betting_state()
     min_bet = state.min_bet
     _expire(machine, state)
-    _expire(machine, state)
     assert state.phase == GamePhaseEnum.PLAYER_ANSWERING
     assert state.answering_player_id == state.selecting_player_id == ONE
     assert state.categories[0].prompts[0].score_value == min_bet
-    assert state.current_bet == state.min_bet == 0
     state.timer_deadline = NOW + timedelta(seconds=10)
     machine.judge_answer(state, HOST, False)
     assert state.players[0].score == -min_bet
@@ -293,14 +322,9 @@ def test_nobody_bets_selector_answers_at_default_value() -> None:
     assert state.selecting_player_id == ONE
 
 
-def _with_deadline(state: GameLobbyState, deadline: datetime) -> GameLobbyState:
-    state.timer_deadline = deadline
-    return state
-
-
 def _answering_bettor(bet: int = 500) -> GameLobbyState:
     machine = _machine()
-    state = _open_state()
+    state = _betting_state()
     machine.place_bet(state, TWO, bet)
     _expire(machine, state)
     state.timer_deadline = NOW + timedelta(seconds=10)
@@ -335,27 +359,38 @@ def test_timeout_deducts_bet_with_expired_resolution() -> None:
     assert state.timer_deadline == NOW + timedelta(seconds=ANSWER_REVEAL_TIME_SECONDS)
 
 
-def test_ban_selector_during_player_betting_spends_prompt_without_scoring() -> None:
+def test_ban_selector_during_betting_leaves_others_to_compete() -> None:
+    machine = _machine()
+    state = _betting_state()
+    machine.place_bet(state, TWO, 400)
+    state.players[0].is_banned = True
+    machine.ban_player(state, HOST, ONE)
+    assert state.phase == GamePhaseEnum.BETTING_OPEN
+    _expire(machine, state)
+    assert state.answering_player_id == TWO
+
+
+def test_ban_selector_with_no_bets_spends_prompt_without_scoring() -> None:
+    machine = _machine()
     state = _betting_state()
     state.players[0].is_banned = True
-    _machine().ban_player(state, HOST, ONE)
+    machine.ban_player(state, HOST, ONE)
+    _expire(machine, state)
     assert state.phase == GamePhaseEnum.ANSWER_REVEAL
-    assert state.resolution == GameResolutionEnum.UNANSWERED
-    assert state.selecting_player_id is None
-    assert state.current_bet == state.max_bet == 0
+    assert state.resolution == GameResolutionEnum.EXPIRED
     assert state.categories[0].prompts[0].is_selected
     assert all(p.score == 0 for p in state.players)
 
 
-def test_ban_highest_bettor_during_betting_open_resets_bet() -> None:
+def test_ban_bettor_discards_their_bet() -> None:
     machine = _machine()
-    state = _open_state()
+    state = _betting_state()
     machine.place_bet(state, TWO, 400)
+    machine.place_bet(state, THREE, 300)
     machine.ban_player(state, HOST, TWO)
-    assert state.phase == GamePhaseEnum.BETTING_OPEN
-    assert (state.current_bet, state.betting_player_id) == (0, None)
-    machine.place_bet(state, THREE, 200)
-    assert state.betting_player_id == THREE
+    assert state.bets == {THREE: 300}
+    _expire(machine, state)
+    assert state.answering_player_id == THREE
 
 
 async def test_host_receives_answer_key_when_betting_resolves(monkeypatch) -> None:

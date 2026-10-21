@@ -1,5 +1,6 @@
 import answerReveal from '@/assets/game-audio/answer-reveal.mp3';
 import answeringLoop from '@/assets/game-audio/answering-loop.mp3';
+import bettingLoop from '@/assets/game-audio/betting-loop.mp3';
 import boardLoop from '@/assets/game-audio/board-loop.mp3';
 import buzz from '@/assets/game-audio/buzz.mp3';
 import clueSelected from '@/assets/game-audio/clue-selected.mp3';
@@ -13,6 +14,7 @@ export const gameSoundManifest = {
   intro,
   boardLoop,
   answeringLoop,
+  bettingLoop,
   clueSelected,
   buzz,
   correct,

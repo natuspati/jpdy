@@ -11,7 +11,7 @@ const EFFECT_GAIN = 0.2;
 const UNLOCK_EVENTS = ['pointerup', 'touchend', 'click', 'keydown'] as const;
 const BLOCKED_MESSAGE = 'Sound could not start. Tap the sound button to try again.';
 
-type BackgroundTrack = 'boardLoop' | 'answeringLoop' | null;
+type BackgroundTrack = 'boardLoop' | 'answeringLoop' | 'bettingLoop' | null;
 
 interface StoredAudioPreferences {
   enabled: boolean;
@@ -308,7 +308,8 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
         void startBackground('boardLoop');
         return;
       }
-      void startBackground('answeringLoop');
+      const betting = state.phase === 'betting_announcement' || state.phase === 'betting_open';
+      void startBackground(betting ? 'bettingLoop' : 'answeringLoop');
     },
     [startBackground],
   );
@@ -320,7 +321,7 @@ export const GameAudioProvider = ({ children }: { children: ReactNode }) => {
           void playEffect('intro', 'boardLoop');
           break;
         case 'clue_selected':
-          void playEffect('clueSelected', 'answeringLoop');
+          void playEffect('clueSelected', desiredBackgroundRef.current);
           break;
         case 'buzz_accepted':
           void playEffect('buzz', 'answeringLoop');

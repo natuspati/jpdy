@@ -84,6 +84,12 @@ const AudioHarness = () => {
       <button type="button" onClick={() => syncGameState(buildGameState())}>
         Board
       </button>
+      <button
+        type="button"
+        onClick={() => syncGameState(buildGameState({ phase: 'betting_announcement' }))}
+      >
+        Betting
+      </button>
       <button type="button" onClick={() => syncGameState(buildFinalGameState('final_answering'))}>
         Final answering
       </button>
@@ -162,6 +168,14 @@ describe('GameAudioProvider', () => {
 
     fireEvent.click(getByRole('button', { name: 'End second' }));
     await waitFor(() => expect(loops()).toHaveLength(2));
+  });
+
+  it('plays the betting loop from the announcement', async () => {
+    const { getByRole } = renderAudio();
+    fireEvent.click(getByRole('button', { name: 'Enable' }));
+    fireEvent.click(getByRole('button', { name: 'Betting' }));
+    await waitFor(() => expect(loops()).toHaveLength(1));
+    expect(loops()[0].buffer?.url).toContain('betting-loop');
   });
 
   it('uses the existing answering music for Final submissions and stays silent after reveal judgments', async () => {

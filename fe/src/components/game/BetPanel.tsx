@@ -2,7 +2,6 @@ import { useState } from 'react';
 
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import { useCountdown } from '@/hooks/useCountdown';
 import type { GameLobbyState } from '@/schemas';
 import { betError } from '@/services/game/phaseGuards';
 
@@ -13,11 +12,24 @@ interface Props {
   onBet: (amount: number) => void;
 }
 
+const CheckIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6 text-emerald-400">
+    <path
+      d="m5 12 5 5 9-10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const BetPanel = ({ state, categoryName, canBet, onBet }: Props) => {
-  const seconds = useCountdown(state.timer_deadline);
   const [draft, setDraft] = useState<string | null>(null);
-  const holder = state.players.find((p) => p.user_id === state.betting_player_id);
-  const value = draft ?? String(Math.max(state.min_bet, state.current_bet + 1));
+  const [submitted, setSubmitted] = useState<number | null>(null);
+  const placed = state.my_bet ?? submitted;
+  const value = draft ?? String(state.min_bet);
   const amount = Number(value);
   const error = value.trim() === '' ? 'Enter a whole number.' : betError(state, amount);
 
@@ -27,23 +39,25 @@ const BetPanel = ({ state, categoryName, canBet, onBet }: Props) => {
       className="mx-auto flex w-full max-w-md flex-col items-center gap-3 rounded-xl border border-amber-500/40 bg-slate-900/70 p-4 text-center"
     >
       {categoryName ? <p className="text-sm font-semibold text-amber-300">{categoryName}</p> : null}
-      <p className="text-slate-300">
-        Bet {state.min_bet} to {state.max_bet}
+      <p className="text-sm text-slate-400">
+        {state.min_bet} - {state.max_bet}
       </p>
-      <p className="text-lg font-bold text-slate-100">
-        {holder ? `${holder.username}: ${state.current_bet}` : 'No bet yet'}
-      </p>
-      {seconds !== null ? (
-        <p className="text-sm tabular-nums text-slate-400">{seconds}s left</p>
-      ) : null}
-      {canBet ? (
+      {placed !== null ? (
+        <p
+          aria-label={`Bet placed: ${placed}`}
+          className="flex items-center gap-2 text-2xl font-bold tabular-nums text-slate-100"
+        >
+          <CheckIcon />
+          {placed}
+        </p>
+      ) : canBet ? (
         <form
           className="flex w-full items-start gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             if (error) return;
+            setSubmitted(amount);
             onBet(amount);
-            setDraft(null);
           }}
         >
           <div className="flex-1 space-y-1 text-left">
@@ -60,7 +74,7 @@ const BetPanel = ({ state, categoryName, canBet, onBet }: Props) => {
             {error ? <p className="text-xs text-rose-400">{error}</p> : null}
           </div>
           <Button type="submit" disabled={!!error}>
-            Place bet
+            Bet
           </Button>
         </form>
       ) : null}

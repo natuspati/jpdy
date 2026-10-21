@@ -23,7 +23,7 @@ async def broadcast_state(lobby_id: int, state: GameLobbyState) -> None:
         include_banned_players=True,
         viewer_user_id=state.host.user_id,
     ).model_dump(mode="json")
-    if state.final_round is not None:
+    if state.final_round is not None or state.phase == GamePhaseEnum.BETTING_OPEN:
         for player in state.players:
             if player.is_banned:
                 continue

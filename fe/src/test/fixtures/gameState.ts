@@ -26,8 +26,7 @@ interface BuildArgs {
   resolution?: 'correct' | 'unanswered' | 'expired' | null;
   minBet?: number;
   maxBet?: number;
-  currentBet?: number;
-  bettingPlayerId?: number | null;
+  myBet?: number | null;
 }
 
 export function buildGameState(args: BuildArgs = {}): GameLobbyState {
@@ -52,8 +51,7 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
     resolution = null,
     minBet = 0,
     maxBet = 0,
-    currentBet = 0,
-    bettingPlayerId = null,
+    myBet = null,
   } = args;
   return {
     lobby_id: 100,
@@ -109,8 +107,7 @@ export function buildGameState(args: BuildArgs = {}): GameLobbyState {
     attempted_player_ids: attemptedPlayerIds,
     min_bet: minBet,
     max_bet: maxBet,
-    current_bet: currentBet,
-    betting_player_id: bettingPlayerId,
+    my_bet: myBet,
     timer_deadline: timerDeadline,
     resolved_prompt_id: resolvedPromptId,
     resolved_answer: resolvedAnswer,
