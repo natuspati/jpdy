@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 import HostJudgePanel from './HostJudgePanel';
 
 describe('HostJudgePanel', () => {
-  it('shows spoken-answer copy and expected answer', () => {
+  it('shows the answering player and expected answer', () => {
     render(<HostJudgePanel answeringPlayerName="Alex" expectedAnswer="kangaroo" />);
-    expect(screen.getByText(/listen to Alex's spoken answer/i)).toBeInTheDocument();
+    expect(screen.getByText('Alex')).toBeInTheDocument();
     expect(screen.getByText('kangaroo')).toBeInTheDocument();
   });
 

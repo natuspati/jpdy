@@ -20,7 +20,7 @@ describe('HostControls', () => {
     render(<HostControls {...props} />);
 
     expect(screen.getByRole('button', { name: 'Start game' })).toBeDisabled();
-    expect(screen.getByText(/Waiting for 2 players to load media/)).toBeInTheDocument();
+    expect(screen.getByText('2 loading…')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Start anyway' }));
     expect(props.onStart).toHaveBeenCalledWith(true);
   });

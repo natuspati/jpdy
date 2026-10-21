@@ -41,9 +41,7 @@ const HostControls = ({
         </Button>
         {loading > 0 ? (
           <div className="flex items-center justify-between gap-2 text-sm text-slate-400">
-            <span>
-              Waiting for {loading} {loading === 1 ? 'player' : 'players'} to load media…
-            </span>
+            <span>{loading} loading…</span>
             <Button
               size="sm"
               variant="secondary"
@@ -85,9 +83,6 @@ const HostControls = ({
 
   return (
     <div className="mx-auto w-full max-w-xs sm:max-w-md">
-      <p className="mb-1 text-center text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-        Host controls
-      </p>
       <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
         <button
           type="button"

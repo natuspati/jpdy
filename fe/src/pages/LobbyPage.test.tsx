@@ -80,7 +80,7 @@ describe('LobbyPage active-game layout', () => {
     const header = layout.firstElementChild;
     expect(header).toContainElement(screen.getByRole('region', { name: 'Players' }));
     expect(header).toContainElement(screen.getByText(/pick a prompt|picking a prompt/));
-    expect(screen.getByTestId('game-actions')).toHaveTextContent('Wait for a clue to be selected.');
+    expect(screen.getByTestId('game-actions')).toHaveTextContent('Waiting for a clue.');
     expect(screen.getByRole('button', { name: /buzz/i })).toBeDisabled();
     expect(screen.queryByText('Chat')).not.toBeInTheDocument();
     expect(screen.queryByTestId('side-panel')).not.toBeInTheDocument();

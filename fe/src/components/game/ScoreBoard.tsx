@@ -15,6 +15,26 @@ const StopSignIcon = () => (
   </svg>
 );
 
+const SpinnerIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 animate-spin text-slate-500">
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" opacity="0.3" />
+    <path d="M21 12a9 9 0 0 0-9-9" fill="none" stroke="currentColor" strokeWidth="3" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 text-emerald-400">
+    <path
+      d="m5 12 5 5 9-10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const ScoreBoard = ({ state, currentUserId, onBan, onUnban }: Props) => {
   const sorted = sortedScoreboard(state);
   const isHost = currentUserId === state.host.user_id;
@@ -55,9 +75,9 @@ const ScoreBoard = ({ state, currentUserId, onBan, onUnban }: Props) => {
           <span
             aria-label={player.assets_loaded ? 'Media loaded' : 'Loading media'}
             title={player.assets_loaded ? 'Media loaded' : 'Loading media'}
-            className={`text-xs font-semibold ${player.assets_loaded ? 'text-emerald-300' : 'text-amber-300'}`}
+            role="img"
           >
-            {player.assets_loaded ? '✓ Ready' : 'Loading…'}
+            {player.assets_loaded ? <CheckIcon /> : <SpinnerIcon />}
           </span>
         ) : null}
         <span className="text-lg font-bold tabular-nums">{player.score}</span>

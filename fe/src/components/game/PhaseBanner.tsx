@@ -15,16 +15,12 @@ const personFor = (state: GameLobbyState, id: number | null): string => {
 function messageFor(state: GameLobbyState, role: Role): string {
   switch (state.phase) {
     case 'waiting_for_players':
-      return role === 'host'
-        ? 'Waiting for players. Start when ready.'
-        : 'Waiting for the host to start the game…';
+      return role === 'host' ? 'Waiting for players.' : 'Waiting for the host…';
     case 'host_selecting_starting_player':
-      return role === 'host'
-        ? 'Choose the starting player.'
-        : 'Host is choosing the starting player…';
+      return role === 'host' ? 'Choose the starting player.' : 'Choosing the starting player…';
     case 'player_selecting_prompt': {
       const who = personFor(state, state.selecting_player_id);
-      return role === 'selector' ? 'Your turn — pick a prompt.' : `${who} is picking a prompt…`;
+      return role === 'selector' ? 'Your turn - pick a prompt.' : `${who} is picking a prompt…`;
     }
     case 'player_betting': {
       const who = personFor(state, state.selecting_player_id);
@@ -36,38 +32,28 @@ function messageFor(state: GameLobbyState, role: Role): string {
       return role === 'bettor'
         ? 'Outbid to answer this clue!'
         : role === 'host'
-          ? 'Players are bidding for the right to answer.'
-          : 'Players are bidding for the right to answer…';
+          ? 'Players are bidding.'
+          : 'Players are bidding…';
     case 'player_answering': {
       const who = personFor(state, state.answering_player_id);
       return role === 'answerer'
-        ? 'Answer aloud. Host will judge.'
+        ? 'Answer aloud.'
         : role === 'host'
-          ? `Listen to ${who}'s spoken answer and judge it.`
+          ? `${who} is answering.`
           : `${who} is answering…`;
     }
     case 'buzz_open':
       return role === 'buzzer' ? 'Buzz to answer!' : 'Buzz open…';
     case 'answer_reveal':
-      return role === 'host'
-        ? 'Answer revealed. Advance when ready.'
-        : 'Answer revealed. Waiting for the host…';
+      return 'Answer revealed.';
     case 'round_summary':
-      return role === 'host'
-        ? 'Round complete. Start the next round when ready.'
-        : 'Round complete. The next round starts soon…';
+      return 'Round complete.';
     case 'final_betting':
-      return role === 'bettor'
-        ? 'Final: commit a private wager or Pass. Your decision is final.'
-        : 'Final: waiting for private wager decisions…';
+      return role === 'bettor' ? 'Final: place your wager.' : 'Final: wagers are being placed…';
     case 'final_answering':
-      return role === 'answerer'
-        ? 'Final: submit your written answer once. An unsent draft does not count.'
-        : 'Final: players are writing their private answers…';
+      return role === 'answerer' ? 'Final: write your answer.' : 'Final: players are answering…';
     case 'final_reveal':
-      return role === 'host'
-        ? 'Final: judge the revealed answer, then advance when ready.'
-        : 'Final: revealing one answer at a time.';
+      return role === 'host' ? 'Final: judge the answer.' : 'Final: revealing answers.';
     case 'finished':
       return 'Game over.';
     default:

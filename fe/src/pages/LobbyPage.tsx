@@ -155,22 +155,20 @@ const LobbyPage = () => {
   const buzzDisabledReason = (() => {
     if (canBuzz(state, userId)) return undefined;
     const player = state.players.find((item) => item.user_id === userId);
-    if (!player || player.is_banned) return 'Banned players cannot buzz.';
-    if (player.connection_status !== 'connected') return 'Reconnect to buzz.';
-    if (state.attempted_player_ids.includes(userId)) return 'You already attempted this clue.';
-    if (state.phase === 'waiting_for_players') return 'The game has not started.';
-    if (state.phase === 'host_selecting_starting_player') return 'Waiting for the host to choose.';
-    if (state.phase === 'player_selecting_prompt') return 'Wait for a clue to be selected.';
+    if (!player || player.is_banned) return 'Banned.';
+    if (player.connection_status !== 'connected') return 'Reconnecting…';
+    if (state.attempted_player_ids.includes(userId)) return 'Already attempted.';
+    if (state.phase === 'waiting_for_players') return 'Game not started.';
+    if (state.phase === 'host_selecting_starting_player') return 'Waiting for the host.';
+    if (state.phase === 'player_selecting_prompt') return 'Waiting for a clue.';
     if (state.phase === 'player_betting' || state.phase === 'betting_open') {
-      return 'Betting is in progress.';
+      return 'Betting in progress.';
     }
     if (state.phase === 'player_answering') {
-      return state.answering_player_id === userId
-        ? 'You are answering this clue.'
-        : 'Another player is answering.';
+      return state.answering_player_id === userId ? 'You are answering.' : 'Someone is answering.';
     }
-    if (state.phase === 'answer_reveal') return 'Waiting for the next clue.';
-    if (state.phase === 'round_summary') return 'Waiting for the next round.';
+    if (state.phase === 'answer_reveal') return 'Next clue soon.';
+    if (state.phase === 'round_summary') return 'Next round soon.';
     return 'Buzzing is closed.';
   })();
 

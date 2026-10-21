@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -29,13 +29,17 @@ describe('ScoreBoard', () => {
     });
     const { rerender } = render(<ScoreBoard state={state} currentUserId={1} />);
 
-    expect(screen.getByTestId('player-tile-2')).toHaveTextContent('✓ Ready');
-    expect(screen.getByTestId('player-tile-3')).toHaveTextContent('Loading…');
+    expect(
+      within(screen.getByTestId('player-tile-2')).getByLabelText('Media loaded'),
+    ).toBeVisible();
+    expect(
+      within(screen.getByTestId('player-tile-3')).getByLabelText('Loading media'),
+    ).toBeVisible();
 
     rerender(
       <ScoreBoard state={{ ...state, phase: 'player_selecting_prompt' }} currentUserId={1} />,
     );
-    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Loading media')).not.toBeInTheDocument();
   });
 
   it('highlights the selected clue picker without status labels', () => {
