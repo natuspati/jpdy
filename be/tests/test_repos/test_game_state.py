@@ -3,11 +3,12 @@ from datetime import UTC, datetime, timedelta
 
 from fakeredis import FakeAsyncRedis
 
+from configs.constants import FINISHED_GAME_TTL_SECONDS, GAME_EVENTS_MAX_LENGTH
 from enums.game import GamePhaseEnum, PlayerConnectionStatusEnum
 from errors.request import BadRequestError
 from repos.game_state import GameStateRepo
 from schemas.lobby.game_state import GameHostState, GameLobbyState, GamePlayerState
-from utils.game_state import GameCommandOutcome, game_events_key
+from utils.game_state import GameCommandOutcome, game_events_key, game_state_key
 
 
 async def test_execute_serializes_simultaneous_buzzes(
@@ -91,3 +92,31 @@ async def test_execute_deduplicates_command_id(
     assert first.state_revision == second.state_revision == 1
     assert second.sound_cue_id == 1
     assert len(await redis_client.xrange(game_events_key(7))) == 1
+
+
+async def test_execute_caps_the_event_stream_and_expires_finished_games(
+    redis_client: FakeAsyncRedis,
+) -> None:
+    repo = GameStateRepo(redis_client)
+    await repo.save_state(
+        GameLobbyState(lobby_id=7, host=GameHostState(user_id=1, username="host")),
+    )
+
+    def transition(phase: GamePhaseEnum):
+        def apply(current: GameLobbyState) -> GameCommandOutcome:
+            current.phase = phase
+            return GameCommandOutcome(current, current, "test")
+
+        return apply
+
+    for index in range(GAME_EVENTS_MAX_LENGTH + 20):
+        await repo.execute(
+            7, f"c{index}", "test", transition(GamePhaseEnum.PLAYER_SELECTING_PROMPT),
+        )
+    assert await redis_client.xlen(game_events_key(7)) < GAME_EVENTS_MAX_LENGTH + 20
+    assert await redis_client.ttl(game_state_key(7)) == -1
+
+    await repo.execute(7, "finish", "test", transition(GamePhaseEnum.FINISHED))
+    await repo.execute(7, "after", "test", transition(GamePhaseEnum.FINISHED))
+    assert 0 < await redis_client.ttl(game_state_key(7)) <= FINISHED_GAME_TTL_SECONDS
+    assert 0 < await redis_client.ttl(game_events_key(7)) <= FINISHED_GAME_TTL_SECONDS

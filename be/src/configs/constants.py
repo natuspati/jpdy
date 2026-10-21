@@ -18,6 +18,10 @@ FINAL_BETTING_TIME_SECONDS = 30
 FINAL_ANSWERING_TIME_SECONDS = 60
 # A dropped socket is only shown as disconnected after this long, so a network blip is invisible.
 DISCONNECT_GRACE_SECONDS = 15
+# A finished game is already in SQL; Redis keeps it briefly so late reconnects still see the result.
+FINISHED_GAME_TTL_SECONDS = 24 * 60 * 60
+# The event stream is an unread audit trail of full snapshots; keep only the recent tail.
+GAME_EVENTS_MAX_LENGTH = 200
 
 MEDIA_MAX_BYTES_BY_KIND = {
     "image": 10 * 1024 * 1024,

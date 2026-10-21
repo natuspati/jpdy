@@ -45,7 +45,9 @@ created → waiting_start → in_progress → completed
 - Redis stores persisted live-game state at `game:{lobby_id}:state`, where the
   braces are a Redis Cluster hash tag. State is initialized when the lobby
   enters `waiting_start` and remains available through `finished`, unless the
-  lobby is deleted.
+  lobby is deleted. A finished game's state and event stream expire 24 hours
+  after the last write (the results stay in SQL), and the event stream keeps
+  only its most recent ~200 entries.
 - Each accepted live command uses Redis `WATCH`/`MULTI`/`EXEC` to atomically
   write one incremented state revision, a command-result deduplication entry,
   a Redis Stream transition event, and a durable timer schedule.

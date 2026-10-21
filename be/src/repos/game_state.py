@@ -5,6 +5,8 @@ from redis.asyncio import Redis
 from redis.asyncio.client import Pipeline
 from redis.exceptions import WatchError
 
+from configs.constants import FINISHED_GAME_TTL_SECONDS, GAME_EVENTS_MAX_LENGTH
+from enums.game import GamePhaseEnum
 from schemas.lobby.game_state import GameLobbyState
 from utils.game_state import (
     GameCommandOutcome,
@@ -118,7 +120,13 @@ class GameStateRepo:
                             "revision": str(next_state.state_revision),
                             "state": next_state.model_dump_json(),
                         },
+                        maxlen=GAME_EVENTS_MAX_LENGTH,
+                        approximate=True,
                     )
+                    if next_state.phase == GamePhaseEnum.FINISHED:
+                        # SET drops any TTL, so re-apply it on every write after the finish.
+                        pipe.expire(state_key, FINISHED_GAME_TTL_SECONDS)
+                        pipe.expire(game_events_key(lobby_id), FINISHED_GAME_TTL_SECONDS)
                     self._queue_timer_schedule(pipe, next_state, current)
                     await pipe.execute()
                     return outcome.result
