@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { GameAudioContext, type GameAudioContextValue } from '@/audio/gameAudioContext';
@@ -109,5 +109,24 @@ describe('PromptMedia', () => {
     );
 
     expect(document.querySelector('audio')).toHaveProperty('autoplay', false);
+  });
+
+  it('shows a tap-to-play button when the browser blocks autoplay', async () => {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockRejectedValueOnce(new DOMException('blocked', 'NotAllowedError'))
+      .mockResolvedValue(undefined);
+    render(
+      <GameAudioContext.Provider value={audioContextValue()}>
+        <PromptMedia contentType="audio" media={media} alt="Audio clue" playbackId="101:question" />
+      </GameAudioContext.Provider>,
+    );
+
+    const button = await screen.findByRole('button', { name: 'Tap to play' });
+    fireEvent.click(button);
+
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Tap to play' })).toBeNull();
+    play.mockRestore();
   });
 });
