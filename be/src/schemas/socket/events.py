@@ -47,7 +47,7 @@ class SetAssetsLoadedPayload(BaseSchema):
 
 
 class SubmitFinalWagerPayload(BaseSchema):
-    amount: StrictInt | None = Field(ge=1)
+    amount: StrictInt | None = Field(ge=0)
     command_id: UUID | None = None
 
 

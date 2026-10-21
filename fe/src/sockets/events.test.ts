@@ -48,7 +48,7 @@ describe('emit', () => {
     for (const [, payload] of socket.emit.mock.calls) {
       expect(payload.command_id).toMatch(/^[a-f0-9-]{36}$/);
     }
-    expect(emit(typed, 'submit_final_wager', { amount: 0 })).toBe(false);
+    expect(emit(typed, 'submit_final_wager', { amount: -1 })).toBe(false);
     expect(emit(typed, 'submit_final_answer', { answer: 'x'.repeat(257) })).toBe(false);
     expect(socket.emit).toHaveBeenCalledTimes(4);
   });

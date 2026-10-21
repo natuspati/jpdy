@@ -93,6 +93,7 @@ export type FinalPlayerState = z.infer<typeof FinalPlayerState>;
 
 export const FinalRoundState = z
   .object({
+    max_wager: z.number().int().nonnegative().default(0),
     players: z.array(FinalPlayerState),
     current_user_id: z.number().int().nullable(),
     is_last_reveal: z.boolean(),
@@ -240,9 +241,9 @@ export const GameLobbyState = z
         }
         if (
           player.wager !== null &&
-          (!player.decision_submitted || player.wager > player.score_before_final)
+          (!player.decision_submitted || player.wager > final.max_wager)
         ) {
-          invalid('Final wager requires a decision within the starting score');
+          invalid('Final wager requires a decision within the maximum wager');
         }
         if (player.answer !== null && !player.answer_submitted && player.answer.trim() !== '') {
           invalid('Final answer requires a submission');

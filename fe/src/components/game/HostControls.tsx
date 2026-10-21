@@ -1,4 +1,5 @@
 import Button from '@/components/ui/Button';
+import JudgeButtons from './JudgeButtons';
 import type { GameLobbyState } from '@/schemas';
 import {
   canAdvanceAnswerReveal,
@@ -83,32 +84,12 @@ const HostControls = ({
 
   return (
     <div className="mx-auto w-full max-w-xs sm:max-w-md">
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-        <button
-          type="button"
-          disabled={!canJudgeAnswer}
-          onClick={() => onJudge(true)}
-          className="rounded-md bg-emerald-500 px-2 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
-        >
-          Accept
-        </button>
-        <button
-          type="button"
-          disabled={!canJudgeAnswer}
-          onClick={() => onJudge(false)}
-          className="rounded-md bg-rose-600 px-2 py-2.5 text-sm font-bold text-white transition-colors hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
-        >
-          Decline
-        </button>
-        <button
-          type="button"
-          disabled={!canAdvance}
-          onClick={onAdvanceAnswerReveal}
-          className="rounded-md bg-amber-400 px-2 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:bg-slate-800 disabled:text-slate-500"
-        >
-          Next
-        </button>
-      </div>
+      <JudgeButtons
+        canJudge={canJudgeAnswer}
+        canAdvance={canAdvance}
+        onJudge={onJudge}
+        onNext={onAdvanceAnswerReveal}
+      />
     </div>
   );
 };

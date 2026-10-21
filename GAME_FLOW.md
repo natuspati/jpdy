@@ -614,7 +614,7 @@ still goes directly to `finished`.
 ```text
 last normal answer_reveal -> round_summary (10 seconds, host may advance)
   -> final_betting (30 seconds, or all decisions)
-  -> final_answering (30 seconds, or all submissions)
+  -> final_answering (60 seconds, or all submissions)
   -> final_reveal (judge, then explicit Next for each participant)
   -> finished (host presses Finish game after the last judgment)
 ```
@@ -623,32 +623,34 @@ last normal answer_reveal -> round_summary (10 seconds, host may advance)
 
 - Entering Final sets `current_round=N+1` and freezes all non-host, non-banned
   players with strictly positive cumulative scores, including disconnected
-  players. Each saved starting score is the maximum wager.
+  players. The maximum wager (`final_round.max_wager`) is the highest score
+  among non-banned players, so a wager may exceed the player's own score and
+  a wrong answer can leave them negative.
 - Everyone sees the category name, never its question, canonical answer, or
   either media reference during wagering.
-- An eligible player submits once: an integer in `1..score_before_final`, or
-  explicit Pass (`amount=null`). Booleans, fractions, zero, excessive amounts,
-  duplicate decisions, unauthorized actors, and late decisions are rejected.
-- One shared server deadline applies to everyone. Missing decisions become Pass.
+- An eligible player submits once: an integer in `0..max_wager`, or `null`.
+  `0` and `null` both mean the player sits out. Booleans, fractions, negative
+  or excessive amounts, duplicate decisions, unauthorized actors, and late
+  decisions are rejected.
+- One shared server deadline applies to everyone. Missing decisions sit out.
   Advance early when all remaining eligible players decide. No eligible players
-  or all Pass finishes with unchanged scores, a zero-delta Final result, and
+  or everyone sitting out finishes with unchanged scores, a zero-delta Final result, and
   `skipped_reason` (`no_eligible_players` or `all_passed`), without exposing content.
 
 ### Written answers and privacy
 
 - Only players who wagered may submit plain text, once, at most 256 characters.
   Trimmed empty/whitespace answers are accepted as empty. An unsent draft is not
-  a submission. Passers and ineligible players watch without answer controls.
+  a submission. Players who sit out and ineligible players watch without answer controls.
 - Entering `final_answering` reveals the question and question media to everyone
-  and arms a shared 30-second deadline. There is no buzz or spoken-answer flow.
+  and arms a shared 60-second deadline. There is no buzz or spoken-answer flow.
   All remaining participants submitting ends answering early.
 - A reconnect restores accepted decisions/submissions and the original deadline;
   disconnect/reconnect never resets the clock or removes eligibility.
 - `final_round.players` exposes identity, saved score, decision/submission flags,
   removal/reveal status, and nullable answer/outcome fields. A player's accepted
-  wager and answer are visible to that player. Other wagers remain hidden even
-  from the host until their judgment; other answers remain hidden even from the
-  host until their individual reveal. No raw internal Final state is emitted.
+  wager and answer are visible to that player. Other wagers and answers remain
+  hidden, even from the host, until that player's individual reveal. No raw internal Final state is emitted.
 - The public `final_round` additionally contains `current_user_id`,
   `is_last_reveal`, `skipped_reason`, and canonical `correct_answer`,
   `correct_answer_type`, and `correct_answer_media`. Canonical fields are null
@@ -666,12 +668,13 @@ last normal answer_reveal -> round_summary (10 seconds, host may advance)
 - Correct adds the wager; Wrong subtracts it. Missing or empty responses display
   **Not submitted** and automatically lose the wager when their own reveal opens,
   not earlier. Every empty response still has its own visible reveal.
-- At judgment, reveal the wager, verdict, delta, and updated score. Apply each
+- At judgment, reveal the verdict, delta, and updated score (the wager is already
+  public from the reveal). Apply each
   adjustment exactly once in Redis. The reveal has no timer and stays visible
   until the host presses **Next**, disabled until judgment. The final button is
   **Finish game**; final standings and completion are published only afterward.
 - Append one Final round result with cumulative scores and deltas from the last
-  normal round. Passers, ineligible players, and removed-unjudged players have
+  normal round. Players who sat out, ineligible players, and removed-unjudged players have
   zero delta. Existing tied rankings remain; no tie-breaker is added.
 - Persist participant completion and per-round results on every finish path,
   including skips, timer expiry, and ban exhaustion. Projection retries replace
@@ -686,7 +689,7 @@ last normal answer_reveal -> round_summary (10 seconds, host may advance)
   the next remaining reveal or finishes; no participants remaining finishes
   immediately (`no_participants` if no reveal ever opened).
 - Unbanning never re-enters the frozen roster. Existing banned-row redaction
-  applies to Final progress, reveal history, and results.
+  applies to reveal history, and results.
 
 ## Ban recovery
 
@@ -720,7 +723,7 @@ buzz timer:          10 seconds
 answer reveal timer: 30 seconds maximum
 round summary timer: 10 seconds
 Final wagering:     30 seconds shared
-Final answering:    30 seconds shared
+Final answering:    60 seconds shared
 Final reveal:       no timer
 ```
 
@@ -817,10 +820,12 @@ the authenticated session, never a client player ID.
   native and manually usable.
 - Canonical answer text and optional answer media remain hidden until
   `answer_reveal` for normal prompts or the first `final_reveal` for Final.
-- Final uses a dedicated wager/Pass form, written-answer form, and per-player
-  reveal panel. Hide normal buzz, selector, and public-auction controls. Native
-  accessible inputs show accepted/pending/error states; spectators and host
-  cannot submit. Label the extra round **Final** in recaps and completed details.
+- Final uses a single wager input (`0..max_wager`), a written-answer form, and a
+  simplified showdown: the canonical answer and one large centered
+  `username (wager): answer` line. The host has the same Accept/Decline/Next
+  buttons as normal rounds, and every client flashes green or red when the
+  verdict arrives. Hide normal buzz and selector controls. Native accessible
+  inputs show accepted/pending/error states; spectators and host cannot submit. Label the extra round **Final** in recaps and completed details.
 
 ### Participant and control panel
 

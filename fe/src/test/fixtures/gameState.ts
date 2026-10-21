@@ -152,6 +152,7 @@ export function buildFinalGameState(
     ],
   });
   state.final_round = {
+    max_wager: Math.max(...state.players.map((player) => player.score)),
     players: state.players.map((player) => ({
       user_id: player.user_id,
       username: player.username,

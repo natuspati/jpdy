@@ -100,6 +100,7 @@ class FinalPlayerState(BaseSchema):
 
 
 class FinalRoundState(BaseSchema):
+    max_wager: int = Field(default=0, ge=0, description="Highest non-banned score in the lobby.")
     players: list[FinalPlayerState] = Field(default_factory=list)
     reveal_order: list[int] = Field(default_factory=list)
     reveal_index: int = 0
@@ -122,6 +123,7 @@ class PublicFinalPlayerState(BaseSchema):
 
 
 class PublicFinalRoundState(BaseSchema):
+    max_wager: int = 0
     players: list[PublicFinalPlayerState] = Field(default_factory=list)
     current_user_id: int | None = None
     is_last_reveal: bool = False

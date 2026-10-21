@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const SubmitFinalWagerPayload = z.object({
-  amount: z.number().int().positive().nullable(),
+  amount: z.number().int().nonnegative().nullable(),
   command_id: z.string().uuid().optional(),
 });
 export type SubmitFinalWagerPayload = z.infer<typeof SubmitFinalWagerPayload>;

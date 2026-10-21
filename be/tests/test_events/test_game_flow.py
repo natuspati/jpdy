@@ -129,7 +129,8 @@ async def test_final_socket_frames_are_private_reconnectable_and_completion_is_p
     reveal = await frames()
     assert all(frame["phase"] == "final_reveal" for frame in reveal)
     assert reveal[0]["final_round"]["players"][0]["answer"] == "one-secret"
-    assert reveal[0]["final_round"]["players"][0]["wager"] is None
+    assert reveal[0]["final_round"]["players"][0]["wager"] == 73
+    assert reveal[0]["final_round"]["players"][1]["wager"] is None
     assert reveal[0]["final_round"]["players"][1]["answer"] is None
     assert reveal[1]["final_round"]["players"][1]["answer"] is None
     assert reveal[0]["final_round"]["correct_answer"] == final_category.prompts[0].answer

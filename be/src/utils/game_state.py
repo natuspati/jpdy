@@ -286,6 +286,7 @@ def _build_public_final_round(
         None,
     )
     return PublicFinalRoundState(
+        max_wager=final.max_wager,
         players=[
             PublicFinalPlayerState(
                 user_id=player.user_id,
@@ -296,9 +297,7 @@ def _build_public_final_round(
                 removed=player.removed,
                 revealed=player.revealed,
                 wager=(
-                    player.wager
-                    if player.correct is not None or player.user_id == viewer_user_id
-                    else None
+                    player.wager if player.revealed or player.user_id == viewer_user_id else None
                 ),
                 answer=(
                     player.answer if player.revealed or player.user_id == viewer_user_id else None

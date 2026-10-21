@@ -1,25 +1,28 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { buildFinalGameState } from '@/test/fixtures/gameState';
 import FinalRoundPanel from './FinalRoundPanel';
 
 describe('FinalRoundPanel', () => {
-  it('commits an integer wager or explicit Pass and waits for server confirmation', () => {
+  it('commits an integer wager from 0 to the top score and waits for server confirmation', () => {
     const state = buildFinalGameState();
     const emit = vi.fn(() => true);
     const { rerender } = render(<FinalRoundPanel state={state} userId={2} connected emit={emit} />);
     expect(screen.queryByText('The final question')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pass' })).not.toBeInTheDocument();
     const wager = screen.getByLabelText('Your Final wager');
+    expect(wager).toHaveValue(0);
+    fireEvent.change(wager, { target: { value: '-1' } });
+    expect(screen.getByRole('button', { name: 'Bet' })).toBeDisabled();
+    fireEvent.change(wager, { target: { value: '1001' } });
+    expect(screen.getByRole('button', { name: 'Bet' })).toBeDisabled();
+    fireEvent.change(wager, { target: { value: '1000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Bet' }));
+    expect(emit).toHaveBeenLastCalledWith('submit_final_wager', { amount: 1000 });
     fireEvent.change(wager, { target: { value: '0' } });
-    expect(screen.getByRole('button', { name: 'Commit wager' })).toBeDisabled();
-    fireEvent.change(wager, { target: { value: '501' } });
-    expect(screen.getByRole('button', { name: 'Commit wager' })).toBeDisabled();
-    fireEvent.change(wager, { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Commit wager' }));
-    expect(emit).toHaveBeenLastCalledWith('submit_final_wager', { amount: 200 });
-    fireEvent.click(screen.getByRole('button', { name: 'Pass' }));
-    expect(emit).toHaveBeenLastCalledWith('submit_final_wager', { amount: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Bet' }));
+    expect(emit).toHaveBeenLastCalledWith('submit_final_wager', { amount: 0 });
 
     rerender(
       <FinalRoundPanel
@@ -30,13 +33,12 @@ describe('FinalRoundPanel', () => {
         pendingCommand="submit_final_wager"
       />,
     );
-    expect(screen.getByRole('button', { name: 'Pass' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('Waiting for server confirmation');
+    expect(screen.getByRole('button', { name: 'Bet' })).toBeDisabled();
 
     state.final_round!.players[0].decision_submitted = true;
     state.final_round!.players[0].wager = 200;
     rerender(<FinalRoundPanel state={state} userId={2} connected emit={emit} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Wager accepted: 200');
+    expect(screen.getByRole('status')).toHaveTextContent('✓ 200');
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
   });
 
@@ -50,14 +52,14 @@ describe('FinalRoundPanel', () => {
     state.final_round!.players[1].answer_submitted = true;
     const emit = vi.fn(() => true);
     const { rerender } = render(<FinalRoundPanel state={state} userId={2} connected emit={emit} />);
-    expect(screen.getByText(/Your committed wager: 200/)).toBeInTheDocument();
-    expect(screen.getByText(/Answer accepted: Own accepted answer/)).toBeInTheDocument();
+    expect(screen.getByText('Your wager: 200')).toBeInTheDocument();
+    expect(screen.getByText(/Own accepted answer/)).toBeInTheDocument();
     expect(screen.queryByText(/Opponent secret|987/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Submit answer' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
 
     rerender(<FinalRoundPanel state={state} userId={1} connected emit={emit} />);
     expect(screen.queryByText(/Own accepted answer|Opponent secret|987/)).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Final progress')).toHaveTextContent('bob: Answer received');
+    expect(screen.queryByLabelText('Final progress')).not.toBeInTheDocument();
   });
 
   it('submits written text once, enforces its cap, and displays errors without losing a draft', () => {
@@ -67,7 +69,7 @@ describe('FinalRoundPanel', () => {
     const answer = screen.getByLabelText('Your Final answer');
     expect(answer).toHaveAttribute('maxlength', '256');
     fireEvent.change(answer, { target: { value: 'My answer' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
     expect(emit).toHaveBeenCalledWith('submit_final_answer', { answer: 'My answer' });
     rerender(
       <FinalRoundPanel
@@ -87,7 +89,7 @@ describe('FinalRoundPanel', () => {
     expect(answer).toBeEnabled();
   });
 
-  it('makes Pass/ineligible/removed players read-only and closes expired submissions', () => {
+  it('makes sit-out/ineligible/removed players read-only and closes expired submissions', () => {
     const state = buildFinalGameState('final_answering');
     const emit = vi.fn(() => true);
     const { rerender } = render(<FinalRoundPanel state={state} userId={3} connected emit={emit} />);
@@ -107,17 +109,22 @@ describe('FinalRoundPanel', () => {
     const { rerender } = render(<FinalRoundPanel state={state} userId={1} connected emit={emit} />);
     expect(screen.getByLabelText('Correct Final answer')).toHaveTextContent('The correct answer');
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Correct' }));
+    expect(screen.getByLabelText('Current Final response')).toHaveTextContent(
+      'alice (200): A written response',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
     expect(emit).toHaveBeenCalledWith('judge_final_answer', { user_id: 2, correct: true });
     const player = state.final_round!.players[0];
     Object.assign(player, { correct: false, score_delta: -200, updated_score: 300, answer: '' });
     state.final_round!.is_last_reveal = true;
     rerender(<FinalRoundPanel state={state} userId={1} connected emit={emit} />);
-    const response = within(screen.getByLabelText('Current Final response'));
-    expect(response.getByText('Not submitted')).toBeInTheDocument();
-    expect(response.getByRole('status')).toHaveTextContent('Wrong · Wager 200 · -200 · Score 300');
-    expect(screen.queryByRole('button', { name: 'Correct' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Finish game' }));
+    expect(screen.getByLabelText('Current Final response')).toHaveTextContent(
+      'alice (200): Not submitted',
+    );
+    expect(screen.getByTestId('final-showdown')).toHaveClass('animate-verdict-wrong');
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
     expect(emit).toHaveBeenLastCalledWith('advance_final_reveal', { user_id: 2 });
   });
 

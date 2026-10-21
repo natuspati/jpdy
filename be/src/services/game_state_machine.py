@@ -271,14 +271,13 @@ class GameStateMachine:
         player = self._final_player(state, user_id)
         if player.decision_submitted:
             raise BadRequestError("Final decision has already been submitted")
-        if amount is not None and (
-            type(amount) is not int or not 1 <= amount <= player.score_before_final
-        ):
-            raise BadRequestError("Wager must be an integer between 1 and your starting score")
-        player.decision_submitted = True
-        player.wager = amount
         final = state.final_round
         assert final is not None
+        if amount is not None and (type(amount) is not int or not 0 <= amount <= final.max_wager):
+            raise BadRequestError(f"Wager must be an integer between 0 and {final.max_wager}")
+        player.decision_submitted = True
+        # A wager of 0 means the same as no wager: the player sits out.
+        player.wager = amount or None
         if all(p.decision_submitted for p in final.players if not p.removed):
             self._lock_final_wagers(state)
         return GameCommandOutcome(state=state, result=state, reason="final_wager_submitted")
@@ -561,6 +560,7 @@ class GameStateMachine:
         self._clear_betting(state)
         self._clear_resolution(state)
         state.final_round = FinalRoundState(
+            max_wager=max((p.score for p in state.players if not p.is_banned), default=0),
             players=[
                 FinalPlayerState(
                     user_id=player.user_id,

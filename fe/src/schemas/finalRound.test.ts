@@ -106,10 +106,11 @@ describe('Final public snapshot contract', () => {
     const state = buildFinalGameState();
     Object.assign(state.final_round!.players[0], { wager: 100, decision_submitted: true });
     expect(GameLobbyState.safeParse(state).success).toBe(true);
-    for (const amount of [0, -1, 0.5, true, '10', undefined]) {
+    for (const amount of [-1, 0.5, true, '10', undefined]) {
       expect(SubmitFinalWagerPayload.safeParse({ amount }).success).toBe(false);
     }
     expect(SubmitFinalWagerPayload.safeParse({ amount: null }).success).toBe(true);
+    expect(SubmitFinalWagerPayload.safeParse({ amount: 0 }).success).toBe(true);
     expect(SubmitFinalAnswerPayload.safeParse({ answer: '' }).success).toBe(true);
     expect(SubmitFinalAnswerPayload.safeParse({ answer: 'x'.repeat(257) }).success).toBe(false);
   });

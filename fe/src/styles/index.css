@@ -5,6 +5,26 @@
   --color-board-tile: #0d4ea6;
   --color-board-tile-spent: #1e293b;
   --animate-prompt-flash: prompt-flash 250ms ease-in-out 4;
+  --animate-verdict-correct: verdict-correct 900ms ease-out 1;
+  --animate-verdict-wrong: verdict-wrong 900ms ease-out 1;
+
+  @keyframes verdict-correct {
+    0% {
+      background-color: rgb(16 185 129 / 0.7);
+    }
+    100% {
+      background-color: rgb(16 185 129 / 0.1);
+    }
+  }
+
+  @keyframes verdict-wrong {
+    0% {
+      background-color: rgb(244 63 94 / 0.7);
+    }
+    100% {
+      background-color: rgb(244 63 94 / 0.1);
+    }
+  }
 
   @keyframes prompt-flash {
     0%,

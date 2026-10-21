@@ -154,14 +154,14 @@ def test_final_freezes_positive_non_banned_roster_even_offline():
         machine.submit_final_wager(state, HOST, 1)
 
 
-@pytest.mark.parametrize("amount", [True, False, 0, -1, 1.5, "10", 101])
+@pytest.mark.parametrize("amount", [True, False, -1, 1.5, "10", 201])
 def test_final_rejects_invalid_wagers(amount):
     machine, state = _start()
     with pytest.raises(BadRequestError, match="integer"):
         machine.submit_final_wager(state, ONE, amount)
 
 
-@pytest.mark.parametrize("amount", [True, False, 0, -1, 1.5, "10"])
+@pytest.mark.parametrize("amount", [True, False, -1, 1.5, "10"])
 def test_socket_wager_validation_is_strict(amount):
     with pytest.raises(ValidationError):
         SubmitFinalWagerPayload(amount=amount)
@@ -200,6 +200,36 @@ def test_submission_at_deadline_rejected_before_timer_worker(phase):
     )
     with pytest.raises(BadRequestError, match="expired"):
         submission()
+
+
+def test_final_wager_may_exceed_own_score_up_to_the_top_score():
+    machine, state = _start()
+    assert state.final_round.max_wager == 200
+    machine.submit_final_wager(state, ONE, 200)
+    assert state.final_round.players[0].wager == 200
+    assert SubmitFinalWagerPayload(amount=0).amount == 0
+
+
+def test_final_wager_of_zero_sits_out_like_no_wager():
+    machine, state = _start()
+    machine.submit_final_wager(state, ONE, 0)
+    machine.submit_final_wager(state, TWO, 50)
+    assert state.final_round.players[0].wager is None
+    assert state.phase == GamePhaseEnum.FINAL_ANSWERING
+    assert state.final_round.reveal_order == [TWO]
+    assert state.timer_deadline == NOW + timedelta(seconds=60)
+    with pytest.raises(ForbiddenError):
+        machine.submit_final_answer(state, ONE, "x")
+
+
+def test_wrong_final_wager_above_own_score_goes_negative():
+    machine, state = _start()
+    machine.submit_final_wager(state, ONE, 200)
+    machine.submit_final_wager(state, TWO, 1)
+    machine.submit_final_answer(state, ONE, "guess")
+    machine.submit_final_answer(state, TWO, "guess")
+    machine.judge_final_answer(state, HOST, ONE, False)
+    assert state.players[0].score == -100
 
 
 def test_pass_timeout_and_no_eligible_skip_without_revealing_question():
@@ -262,6 +292,17 @@ def test_reveal_ties_use_username_then_id_not_current_score():
     assert state.final_round.reveal_order == [TWO, TWO + 1, ONE]
 
 
+def test_wager_becomes_public_when_the_response_is_revealed():
+    machine, state = _answering()
+    machine.submit_final_answer(state, ONE, "first")
+    machine.submit_final_answer(state, TWO, "second")
+    view = build_public_game_state(state, viewer_user_id=TWO).final_round
+    assert (view.players[0].answer, view.players[0].wager) == ("first", 100)
+    assert view.players[1].wager == 150
+    other = build_public_game_state(state, viewer_user_id=HOST).final_round
+    assert other.players[1].wager is None
+
+
 def test_empty_and_missing_answers_score_only_when_their_visible_reveal_opens():
     machine, state = _answering()
     machine.submit_final_answer(state, ONE, " \n ")
@@ -316,7 +357,8 @@ def test_final_privacy_for_host_and_players_across_all_phases():
         assert view.final_round.correct_answer == "SECRET CANONICAL"
         assert view.final_round.correct_answer_media is not None
         assert view.resolved_answer is None
-    assert build_public_game_state(state, viewer_user_id=HOST).final_round.players[0].wager is None
+    assert build_public_game_state(state, viewer_user_id=HOST).final_round.players[0].wager == 73
+    assert build_public_game_state(state, viewer_user_id=HOST).final_round.players[1].wager is None
     machine.judge_final_answer(state, HOST, ONE, True)
     assert build_public_game_state(state, viewer_user_id=HOST).final_round.players[0].wager == 73
 
@@ -437,7 +479,7 @@ async def test_recovered_final_timer_uses_original_deadline_and_stale_timer_is_n
     expired_machine.expire_timer(recovered, 1, deadline)
     assert recovered.phase == GamePhaseEnum.FINAL_ANSWERING
     assert recovered.final_round.players[1].wager is None
-    assert recovered.timer_deadline == deadline + timedelta(seconds=30)
+    assert recovered.timer_deadline == deadline + timedelta(seconds=60)
 
 
 def test_older_snapshot_defaults_final_fields_to_ordinary_game():
