@@ -154,13 +154,15 @@ const FinalRoundPanel = ({
         <>
           <div
             data-testid="final-showdown"
-            className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto rounded-xl border p-4 text-center ${verdictClass(current?.correct ?? null)}`}
+            className={`flex min-h-0 flex-1 flex-col items-center justify-between gap-4 overflow-y-auto rounded-xl border p-4 text-center sm:p-6 ${verdictClass(current?.correct ?? null)}`}
           >
-            <section aria-label="Correct Final answer" className="space-y-2">
-              <p className="text-balance text-2xl font-bold text-amber-300 sm:text-4xl">
+            <section aria-label="Correct Final answer" className="w-full">
+              <p className="text-balance text-4xl font-black text-amber-300 sm:text-6xl">
                 {final.correct_answer}
               </p>
-              {final.correct_answer_media && final.correct_answer_type ? (
+            </section>
+            {final.correct_answer_media && final.correct_answer_type ? (
+              <div className="flex min-h-0 w-full flex-1 items-center justify-center">
                 <PromptMedia
                   contentType={final.correct_answer_type}
                   media={final.correct_answer_media}
@@ -168,12 +170,14 @@ const FinalRoundPanel = ({
                   alt={`Correct answer: ${final.correct_answer ?? ''}`}
                   playbackId={`final:${state.current_prompt_id}:answer`}
                 />
-              ) : null}
-            </section>
+              </div>
+            ) : (
+              <div className="flex-1" />
+            )}
             {current?.revealed ? (
               <p
                 aria-label="Current Final response"
-                className="text-balance text-3xl font-black text-slate-50 sm:text-5xl"
+                className="w-full text-balance text-3xl font-black text-slate-50 sm:text-5xl"
               >
                 {current.username} ({current.wager ?? 0}):{' '}
                 {current.answer?.trim() || 'Not submitted'}
