@@ -26,16 +26,27 @@ const LobbyDetailsPage = () => {
 
   return (
     <Card className="mx-auto max-w-2xl space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm uppercase tracking-wide text-slate-400">Lobby details</p>
-          <h1 className="text-2xl font-bold text-slate-50">Lobby #{data.id}</h1>
+      <div className="flex items-center gap-3">
+        <div className="group relative">
+          <Button
+            aria-label="Back to lobbies"
+            size="icon"
+            title="Back to lobbies"
+            variant="secondary"
+            onClick={() => navigate('/')}
+          >
+            <span aria-hidden="true">←</span>
+          </Button>
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-0 top-full z-10 mt-2 whitespace-nowrap rounded bg-slate-700 px-2 py-1 text-xs font-medium text-slate-50 opacity-0 shadow transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          >
+            Back to lobbies
+          </span>
         </div>
-        <Button variant="secondary" onClick={() => navigate('/')}>
-          Back to lobbies
-        </Button>
+        <h1 className="text-2xl font-bold text-slate-50">Lobby #{data.id}</h1>
       </div>
-      <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+      <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <div>
           <dt className="text-slate-400">Host</dt>
           <dd className="mt-1 font-medium text-slate-100">
@@ -57,36 +68,6 @@ const LobbyDetailsPage = () => {
           <dd className="mt-1 font-medium text-slate-100">{data.prompt_categories.length}</dd>
         </div>
       </dl>
-      <div>
-        <h2 className="mb-2 font-semibold text-slate-100">Category list</h2>
-        {data.rounds.length === 0 ? (
-          <p className="text-sm text-slate-400">No categories attached.</p>
-        ) : (
-          <div className="space-y-3">
-            {data.rounds.map((round) => (
-              <div
-                key={round.round_number}
-                className="rounded border border-slate-800 bg-slate-950/50 p-3"
-              >
-                <RoundRecap
-                  roundNumber={round.round_number}
-                  isFinal={round.kind === 'final'}
-                  categoryNames={round.categories.map((category) => category.name)}
-                  standings={
-                    round.results?.map((result) => ({
-                      key: `${result.user_id ?? 'deleted'}-${result.username}`,
-                      username: result.username,
-                      score: result.score,
-                      scoreDelta: result.score_delta,
-                      isBanned: result.is_banned,
-                    })) ?? null
-                  }
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
       {data.final_rankings ? (
         <div>
           <h2 className="mb-2 font-semibold text-slate-100">Final rankings</h2>
@@ -121,10 +102,35 @@ const LobbyDetailsPage = () => {
           )}
         </div>
       ) : null}
-      <p className="text-sm text-slate-400">
-        This view is lobby metadata only. It does not open a game connection or provide spectator
-        access.
-      </p>
+      <div>
+        {data.rounds.length === 0 ? (
+          <p className="text-sm text-slate-400">No categories attached.</p>
+        ) : (
+          <div className="space-y-3">
+            {data.rounds.map((round) => (
+              <div
+                key={round.round_number}
+                className="rounded border border-slate-800 bg-slate-950/50 p-3"
+              >
+                <RoundRecap
+                  roundNumber={round.round_number}
+                  isFinal={round.kind === 'final'}
+                  categoryNames={round.categories.map((category) => category.name)}
+                  standings={
+                    round.results?.map((result) => ({
+                      key: `${result.user_id ?? 'deleted'}-${result.username}`,
+                      username: result.username,
+                      score: result.score,
+                      scoreDelta: result.score_delta,
+                      isBanned: result.is_banned,
+                    })) ?? null
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </Card>
   );
 };
