@@ -173,6 +173,12 @@ async def test_list_counts_played_and_hosted_lobbies(
     assert by_name["intruder_user"]["lobbies_played"] == 2
     assert by_name["intruder_user"]["lobbies_hosted"] == 0
 
+    # unsorted is by id; role and count columns sort too
+    assert await _names(http_client, admin_user) == ["admin_user", "owner_user", "intruder_user"]
+    assert (await _names(http_client, admin_user, sort="lobbies_hosted_desc"))[0] == "owner_user"
+    assert (await _names(http_client, admin_user, sort="lobbies_played_desc"))[0] == "intruder_user"
+    assert (await _names(http_client, admin_user, sort="role_asc"))[0] == "admin_user"
+
 
 async def test_delete_rejects_self_admins_and_unknown(
     http_client: AsyncClient,

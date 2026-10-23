@@ -15,7 +15,7 @@ class AdminUserFilterSchema(PaginationSchema):
     username: str | None = Field(default=None, min_length=1, max_length=20)
     created_from: date | None = None
     created_to: date | None = Field(default=None, description="Inclusive.")
-    sort: AdminUserSortEnum = AdminUserSortEnum.CREATED_AT_DESC
+    sort: AdminUserSortEnum | None = Field(default=None, description="Unsorted is by id.")
 
 
 class AdminUserListItemSchema(BaseSchema):

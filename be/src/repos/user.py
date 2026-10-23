@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from enums.lobby import LobbyStateEnum
-from enums.user import AdminUserSortEnum, UserRole
+from enums.user import UserRole
 from errors.base import BaseError
 from models.lobby import Lobby, LobbyParticipant
 from models.user import User
@@ -105,12 +105,21 @@ class UserRepo:
                 User.created_at
                 < datetime.combine(filters.created_to + timedelta(days=1), time.min, tzinfo=UTC),
             )
-        order = {
-            AdminUserSortEnum.USERNAME_ASC: [func.lower(User.username).asc(), User.id.asc()],
-            AdminUserSortEnum.USERNAME_DESC: [func.lower(User.username).desc(), User.id.desc()],
-            AdminUserSortEnum.CREATED_AT_ASC: [User.created_at.asc(), User.id.asc()],
-            AdminUserSortEnum.CREATED_AT_DESC: [User.created_at.desc(), User.id.desc()],
-        }[filters.sort]
+        order = [User.id.asc()]
+        if filters.sort is not None:
+            column, _, direction = filters.sort.rpartition("_")
+            sort_column = {
+                "username": func.lower(User.username),
+                "role": User.role,
+                "created_at": User.created_at,
+                "lobbies_played": played,
+                "lobbies_hosted": hosted,
+            }[column]
+            order = (
+                [sort_column.asc(), User.id.asc()]
+                if direction == "asc"
+                else [sort_column.desc(), User.id.desc()]
+            )
         total = (
             await self._session.execute(select(func.count(User.id)).where(*conditions))
         ).scalar_one()
