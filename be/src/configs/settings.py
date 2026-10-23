@@ -41,6 +41,10 @@ class Settings(BaseSettings):
         default=None,
         description="When set, registration requires this invite code.",
     )
+    admin_key: str | None = Field(
+        default=None,
+        description="When set, a user can claim the admin role once with this key.",
+    )
 
     db_apply_migrations: bool = False
     db_driver: str = "sqlite+aiosqlite"

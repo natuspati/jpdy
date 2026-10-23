@@ -5,6 +5,7 @@ from fastapi import Depends
 
 from configs import settings
 from database import UnitOfWork
+from enums.user import UserRole
 from errors.request import (
     ForbiddenError,
     NotFoundError,
@@ -55,3 +56,17 @@ class UserService:
         if user is None:
             raise NotFoundError(f"User {user_id} not found")
         return user
+
+    async def claim_admin(self, user_id: int, key: str) -> None:
+        """Spend the user's one attempt; every failure is the same bare 403."""
+        if not settings.admin_key:
+            raise ForbiddenError
+        async with self._uow as uow:
+            if not await uow.user_repo.claim_admin_attempt(user_id):
+                raise ForbiddenError
+            granted = secrets.compare_digest(key.encode(), settings.admin_key.encode())
+            if granted:
+                await uow.user_repo.update_role(user_id, UserRole.ADMIN)
+        # raised after the commit so a wrong guess stays consumed
+        if not granted:
+            raise ForbiddenError

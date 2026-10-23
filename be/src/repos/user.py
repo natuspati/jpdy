@@ -1,7 +1,8 @@
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from enums.user import UserRole
 from errors.base import BaseError
 from models.user import User
 from schemas.user.base import UserInDBSchema
@@ -47,3 +48,20 @@ class UserRepo:
         )
         user = (await self._session.execute(stmt)).scalar_one()
         return validate_model(user, UserInDBSchema)
+
+    async def claim_admin_attempt(self, user_id: int) -> bool:
+        """Atomically spend the user's single admin-key attempt; ``False`` if already spent."""
+        stmt = (
+            update(User)
+            .where(
+                User.id == user_id,
+                User.role == UserRole.GENERIC,
+                User.admin_key_attempted.is_(False),
+            )
+            .values(admin_key_attempted=True)
+        )
+        return (await self._session.execute(stmt)).rowcount > 0
+
+    async def update_role(self, user_id: int, role: UserRole) -> bool:
+        stmt = update(User).where(User.id == user_id).values(role=role)
+        return (await self._session.execute(stmt)).rowcount > 0

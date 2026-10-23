@@ -165,3 +165,65 @@ async def test_me_reflects_categories_after_creation(
     assert me.status_code == 200
     categories = me.json()["prompt_categories"]
     assert [c["name"] for c in categories] == ["Movies"]
+
+
+async def _claim(http_client: AsyncClient, user: AuthedUser, key: str):
+    return await http_client.post(
+        "/api/v1/user/admin-key",
+        json={"key": key},
+        headers=user["headers"],
+    )
+
+
+async def _me(http_client: AsyncClient, user: AuthedUser) -> dict:
+    return (await http_client.get("/api/v1/user/me", headers=user["headers"])).json()
+
+
+async def test_admin_key_correct_promotes_user(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "admin_key", "s3cret-admin-key")
+
+    response = await _claim(http_client, authed_user, "s3cret-admin-key")
+
+    assert response.status_code == 204, response.text
+    me = await _me(http_client, authed_user)
+    assert me["role"] == "admin"
+    assert me["admin_key_attempted"] is True
+
+
+async def test_admin_key_wrong_guess_consumes_the_attempt(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "admin_key", "s3cret-admin-key")
+
+    wrong = await _claim(http_client, authed_user, "guess")
+    retry = await _claim(http_client, authed_user, "s3cret-admin-key")
+
+    assert wrong.status_code == 403
+    assert retry.status_code == 403
+    me = await _me(http_client, authed_user)
+    assert me["role"] == "generic"
+    assert me["admin_key_attempted"] is True
+
+
+async def test_admin_key_unset_always_fails_without_consuming_attempt(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "admin_key", None)
+
+    response = await _claim(http_client, authed_user, "")
+
+    assert response.status_code == 403
+    assert (await _me(http_client, authed_user))["admin_key_attempted"] is False
+
+
+async def test_admin_key_requires_auth(http_client: AsyncClient):
+    response = await http_client.post("/api/v1/user/admin-key", json={"key": "x"})
+    assert response.status_code == 401

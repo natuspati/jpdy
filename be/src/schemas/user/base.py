@@ -10,6 +10,10 @@ class UserCreateSchema(BaseSchema):
     invite_code: str | None = None
 
 
+class AdminKeySchema(BaseSchema):
+    key: str = Field(max_length=256)
+
+
 class UserPublicSchema(BaseSchema):
     id: int
     username: str

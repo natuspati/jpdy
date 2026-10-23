@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from auth.authenticate import get_current_user
 from schemas.error import ErrorResponse
 from schemas.token import TokenSchema
-from schemas.user.base import UserCreateSchema, UserInDBSchema, UserPublicSchema
+from schemas.user.base import AdminKeySchema, UserCreateSchema, UserInDBSchema, UserPublicSchema
 from schemas.user.nested import UserWithPromptsLobbiesPublicSchema
 from services import UserService
 from utils.route_response import generate_responses
@@ -77,3 +77,21 @@ async def me(
     service: Annotated[UserService, Depends()],
 ) -> UserWithPromptsLobbiesPublicSchema:
     return await service.get_user(current_user.id)
+
+
+@router.post(
+    "/admin-key",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=generate_responses(
+        ErrorResponse(
+            status.HTTP_403_FORBIDDEN,
+            "Wrong key, attempt already used, or feature disabled",
+        ),
+    ),
+)
+async def claim_admin(
+    schema: AdminKeySchema,
+    current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
+    service: Annotated[UserService, Depends()],
+) -> None:
+    await service.claim_admin(current_user.id, schema.key)
