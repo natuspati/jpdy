@@ -4,9 +4,17 @@ from fastapi import Depends
 
 from configs import settings
 from database import UnitOfWork
+from enums.admin import HealthStatusEnum
 from enums.user import UserRole
 from errors.request import ForbiddenError, NotFoundError
-from schemas.admin import AdminUserFilterSchema, PaginatedAdminUserSchema
+from schemas.admin import (
+    AdminUserFilterSchema,
+    CategoryStatsFilterSchema,
+    GameStatsSchema,
+    PaginatedAdminUserSchema,
+    PaginatedCategoryStatsSchema,
+    ServerStatusSchema,
+)
 from services.lobby import LobbyService
 from sockets.lobby_lifecycle import notify_lobbies_changed
 
@@ -23,6 +31,31 @@ class AdminService:
     async def search_users(self, filters: AdminUserFilterSchema) -> PaginatedAdminUserSchema:
         async with self._uow as uow:
             return await uow.user_repo.search_users(filters)
+
+    async def get_server_status(self) -> ServerStatusSchema:
+        async with self._uow as uow:
+            redis = await uow.admin_repo.probe_redis()
+            database = await uow.admin_repo.probe_database()
+            backend = await uow.admin_repo.probe_backend()
+        statuses = {redis.status, database.status, backend.status}
+        if statuses == {HealthStatusEnum.OK}:
+            overall = HealthStatusEnum.OK
+        elif statuses == {HealthStatusEnum.DOWN}:
+            overall = HealthStatusEnum.DOWN
+        else:
+            overall = HealthStatusEnum.DEGRADED
+        return ServerStatusSchema(status=overall, redis=redis, database=database, backend=backend)
+
+    async def get_game_stats(self) -> GameStatsSchema:
+        async with self._uow as uow:
+            return await uow.admin_repo.select_game_stats()
+
+    async def search_category_stats(
+        self,
+        filters: CategoryStatsFilterSchema,
+    ) -> PaginatedCategoryStatsSchema:
+        async with self._uow as uow:
+            return await uow.admin_repo.select_category_stats(filters)
 
     async def promote_user(self, user_id: int) -> None:
         async with self._uow as uow:

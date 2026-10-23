@@ -1,3 +1,4 @@
+from repos.admin import AdminRepo
 from repos.game_state import GameStateRepo
 from repos.lobby import LobbyRepo
 from repos.media_asset import MediaAssetRepo

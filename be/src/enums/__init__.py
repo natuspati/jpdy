@@ -1,3 +1,4 @@
+from enums.admin import HealthStatusEnum
 from enums.application import AppEnvironmentEnum
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
 from enums.lobby import LobbyStateEnum

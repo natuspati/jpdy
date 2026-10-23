@@ -30,3 +30,8 @@ MEDIA_MAX_BYTES_BY_KIND = {
     "audio": 20 * 1024 * 1024,
     "video": 100 * 1024 * 1024,
 }
+
+# Every replica refreshes an `instance:{id}` key so the admin page can count live instances.
+INSTANCE_HEARTBEAT_INTERVAL_SECONDS = 5
+INSTANCE_HEARTBEAT_TTL_SECONDS = 15
+INSTANCE_KEY_PREFIX = "instance:"

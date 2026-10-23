@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from fakeredis import FakeAsyncRedis
@@ -11,14 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from configs import settings
 from enums.lobby import LobbyStateEnum
 from fixtures.auth_fixtures import AuthedUser
-from models.lobby import Lobby, LobbyParticipant, LobbyRoundResult
+from models.lobby import Lobby, LobbyParticipant, LobbyPromptCategory, LobbyRoundResult
 from models.media_asset import MediaAsset
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
 from models.user import User
 from repos.game_state import GameStateRepo
 from schemas.lobby.game_state import GameLobbyState
-from utils.game_state import game_state_key
+from services.instance_heartbeat import publish_heartbeat
+from utils.game_state import game_connection_key, game_state_key
 
 USERS = "/api/v1/admin/users"
 
@@ -303,3 +305,127 @@ async def test_delete_user_removes_unattached_media_and_keeps_attached(
     assert attached is not None
     assert attached.owner_id is None
     assert (tmp_path / "used.png").exists()
+
+
+async def test_game_stats_count_active_completed_and_connected_players(
+    http_client: AsyncClient,
+    admin_user: AuthedUser,
+    authed_user: AuthedUser,
+    db_session: AsyncSession,
+    redis_client: FakeAsyncRedis,
+):
+    owner = authed_user["user_id"]
+    for state in (
+        LobbyStateEnum.CREATED,
+        LobbyStateEnum.WAITING_START,
+        LobbyStateEnum.IN_PROGRESS,
+        LobbyStateEnum.COMPLETED,
+        LobbyStateEnum.COMPLETED,
+    ):
+        await _lobby(db_session, owner, state)
+    await redis_client.set(game_connection_key(1, 10), "sid-a")
+    await redis_client.set(game_connection_key(1, 11), "sid-b")
+
+    response = await http_client.get("/api/v1/admin/stats", headers=admin_user["headers"])
+
+    assert response.json() == {"active_lobbies": 2, "active_players": 2, "completed_lobbies": 2}
+
+
+async def test_category_stats_count_distinct_played_lobbies_ordered_and_paginated(
+    http_client: AsyncClient,
+    admin_user: AuthedUser,
+    authed_user: AuthedUser,
+    db_session: AsyncSession,
+):
+    owner = authed_user["user_id"]
+    categories = {}
+    for name, kind in (("Rare", "standard"), ("Popular", "standard"), ("Finale", "final")):
+        result = await db_session.execute(
+            insert(PromptCategory).values(name=name, kind=kind, owner_id=owner),
+        )
+        categories[name] = result.inserted_primary_key[0]
+    unused = await db_session.execute(insert(PromptCategory).values(name="Unused", owner_id=owner))
+    states = [LobbyStateEnum.COMPLETED, LobbyStateEnum.IN_PROGRESS, LobbyStateEnum.WAITING_START]
+    for state in states:
+        lobby_id = await _lobby(db_session, owner, state)
+        links = (
+            ["Popular", "Finale"] if state != LobbyStateEnum.IN_PROGRESS else ["Popular", "Rare"]
+        )
+        for name in links:
+            await db_session.execute(
+                insert(LobbyPromptCategory).values(
+                    lobby_id=lobby_id,
+                    prompt_category_id=categories[name],
+                ),
+            )
+    await db_session.commit()
+    assert unused  # never linked, must not appear
+    url = "/api/v1/admin/stats/categories"
+
+    response = await http_client.get(url, headers=admin_user["headers"])
+    body = response.json()
+
+    # waiting lobbies do not count as played
+    assert [(c["name"], c["kind"], c["lobbies_played"]) for c in body["contents"]] == [
+        ("Popular", "standard", 2),
+        ("Rare", "standard", 1),
+        ("Finale", "final", 1),
+    ]
+    assert body["total"] == 3
+    second = await http_client.get(
+        url,
+        params={"size": 2, "page": 1},
+        headers=admin_user["headers"],
+    )
+    assert [c["name"] for c in second.json()["contents"]] == ["Finale"]
+
+
+async def test_server_status_reports_every_dependency(
+    http_client: AsyncClient,
+    admin_user: AuthedUser,
+    authed_user: AuthedUser,
+    db_session: AsyncSession,
+    redis_client: FakeAsyncRedis,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # fakeredis has no INFO
+    monkeypatch.setattr(redis_client, "info", AsyncMock(return_value={"used_memory": 1024}))
+    await publish_heartbeat(redis_client)
+    await _lobby(db_session, authed_user["user_id"], LobbyStateEnum.IN_PROGRESS)
+    await redis_client.set(game_connection_key(1, 10), "sid")
+
+    response = await http_client.get("/api/v1/admin/server", headers=admin_user["headers"])
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["redis"]["used_memory"] == 1024
+    assert body["redis"]["ping_ms"] is not None
+    assert body["database"]["dialect"] == "sqlite"
+    assert body["database"]["user_count"] == 2
+    assert body["database"]["lobby_count"] == 1
+    assert body["database"]["size_bytes"] is None
+    backend = body["backend"]
+    assert len(backend["instances"]) == 1
+    assert backend["instances"][0]["version"] == settings.version
+    assert backend["instances"][0]["rss_bytes"] > 0
+    assert backend["connected_sockets"] == 1
+    assert backend["live_games"] == 1
+
+
+async def test_server_status_degrades_instead_of_failing_when_redis_is_down(
+    http_client: AsyncClient,
+    admin_user: AuthedUser,
+    redis_client: FakeAsyncRedis,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(redis_client, "ping", AsyncMock(side_effect=ConnectionError("refused")))
+
+    response = await http_client.get("/api/v1/admin/server", headers=admin_user["headers"])
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["redis"]["status"] == "down"
+    assert "refused" in body["redis"]["error"]
+    assert body["database"]["status"] == "ok"

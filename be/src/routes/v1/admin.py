@@ -3,7 +3,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from auth.authenticate import require_admin
-from schemas.admin import AdminUserFilterSchema, PaginatedAdminUserSchema
+from schemas.admin import (
+    AdminUserFilterSchema,
+    CategoryStatsFilterSchema,
+    GameStatsSchema,
+    PaginatedAdminUserSchema,
+    PaginatedCategoryStatsSchema,
+    ServerStatusSchema,
+)
 from schemas.error import ErrorResponse
 from schemas.user.base import UserInDBSchema
 from services import AdminService
@@ -16,6 +23,24 @@ _ADMIN_ONLY = [
     ErrorResponse(status.HTTP_403_FORBIDDEN, "Admin access required"),
 ]
 _USER_NOT_FOUND = ErrorResponse(status.HTTP_404_NOT_FOUND, "User not found")
+
+
+@router.get("/server", responses=generate_responses(*_ADMIN_ONLY))
+async def get_server_status(service: Annotated[AdminService, Depends()]) -> ServerStatusSchema:
+    return await service.get_server_status()
+
+
+@router.get("/stats", responses=generate_responses(*_ADMIN_ONLY))
+async def get_game_stats(service: Annotated[AdminService, Depends()]) -> GameStatsSchema:
+    return await service.get_game_stats()
+
+
+@router.get("/stats/categories", responses=generate_responses(*_ADMIN_ONLY))
+async def search_category_stats(
+    filters: Annotated[CategoryStatsFilterSchema, Query()],
+    service: Annotated[AdminService, Depends()],
+) -> PaginatedCategoryStatsSchema:
+    return await service.search_category_stats(filters)
 
 
 @router.get("/users", responses=generate_responses(*_ADMIN_ONLY))

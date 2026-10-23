@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from lifespan.database import apply_migrations
-from services import game_timers
+from services import game_timers, instance_heartbeat
 from sockets.timer_hooks import run_redis_schedule_pass
 
 _logger = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ async def run_startup_events(app: FastAPI) -> None:
     """
     await apply_migrations()
     game_timers.start_scheduler(run_redis_schedule_pass)
+    instance_heartbeat.start_heartbeat()
 
 
 async def run_shutdown_events(app: FastAPI) -> None:
@@ -48,3 +49,4 @@ async def run_shutdown_events(app: FastAPI) -> None:
     :return:
     """
     await game_timers.stop_scheduler()
+    await instance_heartbeat.stop_heartbeat()

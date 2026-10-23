@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.session import get_db_session, get_redis_session
 from repos import (
+    AdminRepo,
     GameStateRepo,
     LobbyRepo,
     MediaAssetRepo,
@@ -24,6 +25,10 @@ class UnitOfWork:
     ):
         self._session = session
         self._redis = redis
+
+    @cached_property
+    def admin_repo(self) -> AdminRepo:
+        return AdminRepo(self._session, self._redis)
 
     @cached_property
     def user_repo(self) -> UserRepo:
