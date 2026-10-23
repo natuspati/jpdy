@@ -27,6 +27,7 @@ const TopBar = () => {
   const { blockedMessage, enabled, setVolume, toggleMuted, volume } = useGameAudio();
   const [soundMenuOpen, setSoundMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const soundMenuRef = useRef<HTMLDivElement>(null);
 
   // Touch screens have no hover or blur, so the panel needs an explicit way to close.
@@ -66,7 +67,7 @@ const TopBar = () => {
   const isAdminActive = location.pathname === '/admin';
   const navLinkClass = (isActive: boolean): string =>
     [
-      'rounded-md px-2 py-1 text-sm font-medium transition-colors',
+      'rounded-md px-2 py-2 text-sm font-medium transition-colors sm:py-1',
       isActive
         ? 'bg-slate-800 text-amber-300'
         : 'text-slate-300 hover:bg-slate-800 hover:text-amber-300',
@@ -76,11 +77,32 @@ const TopBar = () => {
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-1 sm:gap-2">
-          <Link to="/" className="shrink-0 text-lg font-bold text-amber-400">
+          {isAuthed ? (
+            <button
+              type="button"
+              aria-controls="primary-nav"
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen((open) => !open)}
+              className="shrink-0 rounded-md text-lg font-bold text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400 sm:hidden"
+            >
+              Jeopardy <span aria-hidden="true">{navOpen ? '▴' : '▾'}</span>
+            </button>
+          ) : null}
+          <Link
+            to="/"
+            className={`shrink-0 text-lg font-bold text-amber-400 ${isAuthed ? 'hidden sm:inline' : ''}`}
+          >
             Jeopardy
           </Link>
           {isAuthed ? (
-            <nav aria-label="Primary navigation" className="flex items-center gap-1">
+            <nav
+              id="primary-nav"
+              aria-label="Primary navigation"
+              onClick={() => setNavOpen(false)}
+              className={`absolute inset-x-0 top-full flex-col gap-1 border-b border-slate-800 bg-slate-950 p-2 sm:static sm:flex sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0 ${
+                navOpen ? 'flex' : 'hidden'
+              }`}
+            >
               <Link
                 to="/"
                 aria-current={isLobbiesActive ? 'page' : undefined}

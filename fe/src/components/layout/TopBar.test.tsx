@@ -172,6 +172,22 @@ describe('TopBar', () => {
     me.role = 'generic';
   });
 
+  it('toggles the navigation from the brand button and closes it after a link is chosen', () => {
+    authenticate();
+    renderTopBar();
+
+    const brand = screen.getByRole('button', { name: /Jeopardy/ });
+    expect(brand).toHaveAttribute('aria-expanded', 'false');
+    expect(document.getElementById('primary-nav')).toHaveClass('hidden');
+
+    fireEvent.click(brand);
+    expect(brand).toHaveAttribute('aria-expanded', 'true');
+    expect(document.getElementById('primary-nav')).toHaveClass('flex', 'flex-col');
+
+    fireEvent.click(screen.getByRole('link', { name: 'Categories' }));
+    expect(brand).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('does not mark lobby or category navigation active in a game route', () => {
     authenticate();
     renderTopBar(audioValue(), '/lobby/12/details');
