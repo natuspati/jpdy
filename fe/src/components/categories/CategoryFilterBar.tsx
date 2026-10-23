@@ -23,10 +23,10 @@ const KIND_OPTIONS = [
 ] as const satisfies ReadonlyArray<{ value: CategoryListFilters['kind']; label: string }>;
 
 const SORT_OPTIONS = [
-  { value: 'updated_desc', label: 'Most recently updated' },
-  { value: 'updated_asc', label: 'Least recently updated' },
-  { value: 'name_asc', label: 'Name A-Z' },
-  { value: 'name_desc', label: 'Name Z-A' },
+  { value: 'updated_desc', label: 'Newest' },
+  { value: 'updated_asc', label: 'Oldest' },
+  { value: 'name_asc', label: 'A-Z' },
+  { value: 'name_desc', label: 'Z-A' },
 ] as const satisfies ReadonlyArray<{ value: CategoryListFilters['sort']; label: string }>;
 
 const selectClass =
@@ -63,7 +63,7 @@ const FilterSelect = <T extends string>({ label, value, options, onChange }: Sel
 const FilterSelects: FC<Props & { className: string }> = ({ value, onChange, className }) => (
   <div className={className}>
     <FilterSelect
-      label="Readiness"
+      label="Completeness"
       value={value.readiness}
       options={READINESS_OPTIONS}
       onChange={(readiness) => onChange({ ...value, readiness })}

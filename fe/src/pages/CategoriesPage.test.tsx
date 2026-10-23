@@ -129,7 +129,7 @@ describe('CategoriesPage', () => {
       name: undefined,
     });
 
-    const bar = screen.getAllByLabelText('Readiness')[0];
+    const bar = screen.getAllByLabelText('Completeness')[0];
     await userEvent.selectOptions(bar, 'complete');
     await userEvent.selectOptions(screen.getAllByLabelText('Type')[0], 'final');
     await userEvent.selectOptions(screen.getAllByLabelText('Sort')[0], 'name_asc');
@@ -148,7 +148,7 @@ describe('CategoriesPage', () => {
 
   it('maps Incomplete to is_complete=false', async () => {
     renderPage();
-    await userEvent.selectOptions(screen.getAllByLabelText('Readiness')[0], 'incomplete');
+    await userEvent.selectOptions(screen.getAllByLabelText('Completeness')[0], 'incomplete');
     expect(myCategories).toHaveBeenLastCalledWith(expect.objectContaining({ is_complete: false }));
   });
 
