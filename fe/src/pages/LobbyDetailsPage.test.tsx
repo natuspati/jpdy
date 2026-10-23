@@ -98,6 +98,17 @@ describe('LobbyDetailsPage', () => {
     expect(deleteLobby).toHaveBeenCalledWith(7);
   });
 
+  it('shows the kept host name, or a placeholder, once the host account is gone', () => {
+    lobby.current = { ...completedLobby, owner: null, owner_username_snapshot: 'host' };
+    const { unmount } = renderPage();
+    expect(screen.getByText('host')).toBeInTheDocument();
+    unmount();
+
+    lobby.current = { ...completedLobby, owner: null, owner_username_snapshot: null };
+    renderPage();
+    expect(screen.getByText('(deleted user)')).toBeInTheDocument();
+  });
+
   it('hides delete from non-owners', () => {
     lobby.current = { ...completedLobby, is_owner: false, is_participant: true };
     renderPage();

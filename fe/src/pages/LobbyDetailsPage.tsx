@@ -65,7 +65,7 @@ const LobbyDetailsPage = () => {
         <div>
           <dt className="text-slate-400">Host</dt>
           <dd className="mt-1 font-medium text-slate-100">
-            {data.owner?.username ?? '(deleted user)'}
+            {data.owner?.username ?? data.owner_username_snapshot ?? '(deleted user)'}
           </dd>
         </div>
         <div>

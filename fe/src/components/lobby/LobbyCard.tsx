@@ -11,7 +11,7 @@ interface Props {
 
 const LobbyCard = ({ lobby }: Props) => {
   const navigate = useNavigate();
-  const ownerName = lobby.owner?.username ?? '(deleted user)';
+  const ownerName = lobby.owner?.username ?? lobby.owner_username_snapshot ?? '(deleted user)';
   return (
     <Card>
       <div className="flex items-start justify-between gap-3">

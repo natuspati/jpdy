@@ -9,6 +9,8 @@ import { UserPublic } from './user';
 export const LobbyInDB = z.object({
   id: z.number().int(),
   owner_id: z.number().int().nullable(),
+  // Host name kept after the host's account is deleted.
+  owner_username_snapshot: z.string().nullable().optional(),
   state: LobbyStateEnum,
   created_at: z.string(),
   updated_at: z.string(),
