@@ -71,7 +71,7 @@ const MyLobbyList = ({ lobbies, loading, error, hasMore, loadingMore, onLoadMore
       ) : error ? (
         <p className="text-rose-400">Your lobbies are unavailable.</p>
       ) : (
-        <div className="max-h-[28rem] min-h-0 overflow-auto rounded-lg border border-slate-800 md:max-h-none md:flex-1">
+        <div className="max-h-[28rem] min-h-0 overflow-auto rounded-lg border border-slate-800 md:max-h-none">
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 z-[1] bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
               <tr>
