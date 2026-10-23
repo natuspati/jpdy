@@ -53,6 +53,26 @@ class MediaAssetRepo:
         )
         return bool((await self._session.execute(stmt)).scalar_one())
 
+    async def delete_unattached_by_owner(self, owner_id: int) -> list[str]:
+        """Delete the owner's assets no prompt uses; returns their storage keys."""
+        attached = exists().where(
+            (Prompt.question_media_asset_id == MediaAsset.id)
+            | (Prompt.answer_media_asset_id == MediaAsset.id),
+        )
+        rows = (
+            await self._session.execute(
+                select(MediaAsset.id, MediaAsset.storage_key).where(
+                    MediaAsset.owner_id == owner_id,
+                    ~attached,
+                ),
+            )
+        ).all()
+        if rows:
+            await self._session.execute(
+                delete(MediaAsset).where(MediaAsset.id.in_([row.id for row in rows])),
+            )
+        return [row.storage_key for row in rows]
+
     async def delete_media_asset(self, asset_id: int) -> bool:
         result = await self._session.execute(
             delete(MediaAsset).where(MediaAsset.id == asset_id),

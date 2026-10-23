@@ -41,6 +41,7 @@ class Lobby(Base):
         ForeignKey("user.id", ondelete="SET NULL"),
     )
     state: Mapped[str] = mapped_column()
+    owner_username_snapshot: Mapped[str | None] = mapped_column()
     betting_prompt_count: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

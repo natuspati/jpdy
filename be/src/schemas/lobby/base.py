@@ -11,6 +11,7 @@ from schemas.pagination import PaginationSchema
 class LobbyInDBSchema(BaseSchema):
     id: int
     owner_id: int | None
+    owner_username_snapshot: str | None = None
     state: LobbyStateEnum
     created_at: datetime
     updated_at: datetime

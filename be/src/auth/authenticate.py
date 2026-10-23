@@ -7,6 +7,7 @@ from fastapi.security import HTTPBasicCredentials
 from auth.scheme import basic_security, oauth2_scheme
 from configs import settings
 from database import UnitOfWork
+from enums.user import UserRole
 from errors.request import ForbiddenError, UnauthorizedError
 from schemas.user.base import UserInDBSchema
 from utils.auth import decode_access_token
@@ -51,4 +52,13 @@ async def get_current_user(
             "User no longer exists",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return user
+
+
+async def require_admin(
+    user: Annotated[UserInDBSchema, Depends(get_current_user)],
+) -> UserInDBSchema:
+    """Role is read from the DB on every request, so a promotion applies immediately."""
+    if user.role != UserRole.ADMIN:
+        raise ForbiddenError("Admin access required")
     return user

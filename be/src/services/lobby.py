@@ -193,8 +193,16 @@ class LobbyService:
     ) -> None:
         async with self._uow as uow:
             await ensure_owned_lobby(uow, lobby_id, user)
-            await uow.lobby_repo.delete_lobby(lobby_id=lobby_id)
-            await uow.game_state_repo.delete_state(lobby_id)
+            await self.remove_lobby(lobby_id)
+        await self.announce_lobby_removed(lobby_id)
+        await notify_lobbies_changed()
+
+    async def remove_lobby(self, lobby_id: int) -> None:
+        """Ownership-free delete of SQL rows and Redis state; caller owns the transaction."""
+        await self._uow.lobby_repo.delete_lobby(lobby_id=lobby_id)
+        await self._uow.game_state_repo.delete_state(lobby_id)
+
+    async def announce_lobby_removed(self, lobby_id: int) -> None:
+        """After commit: stop timers and disconnect the lobby's sockets."""
         game_timers.cancel(lobby_id)
         await notify_lobby_deleted_and_disconnect(lobby_id)
-        await notify_lobbies_changed()

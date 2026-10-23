@@ -1,3 +1,4 @@
+from services.admin import AdminService
 from services.game import GameService
 from services.lobby import LobbyService
 from services.media import MediaService

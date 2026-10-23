@@ -157,7 +157,7 @@ class LobbyRepo:
             select(
                 Lobby.id.label("id"),
                 Lobby.owner_id.label("owner_id"),
-                User.username.label("host_username"),
+                func.coalesce(User.username, Lobby.owner_username_snapshot).label("host_username"),
                 player_count.label("player_count"),
                 Lobby.state.label("state"),
                 Lobby.created_at.label("created_at"),
@@ -396,6 +396,21 @@ class LobbyRepo:
         stmt = delete(Lobby).where(Lobby.id == lobby_id)
         result = await self._session.execute(stmt)
         return result.rowcount > 0
+
+    async def select_unfinished_lobby_ids_by_owner(self, owner_id: int) -> list[int]:
+        query = select(Lobby.id).where(
+            Lobby.owner_id == owner_id,
+            Lobby.state != LobbyStateEnum.COMPLETED,
+        )
+        return list((await self._session.execute(query)).scalars().all())
+
+    async def snapshot_owner_username(self, owner_id: int, username: str) -> None:
+        """Remember the host's name on their remaining lobbies before the account goes."""
+        await self._session.execute(
+            update(Lobby)
+            .where(Lobby.owner_id == owner_id)
+            .values(owner_username_snapshot=username),
+        )
 
     async def select_existing_category_ids(self, category_ids: list[int]) -> set[int]:
         """

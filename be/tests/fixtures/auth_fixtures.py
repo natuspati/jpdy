@@ -3,6 +3,11 @@ from typing import TypedDict
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from enums.user import UserRole
+from models.user import User
 
 
 class AuthedUser(TypedDict):
@@ -63,3 +68,18 @@ def register_user(
         return await _register_and_sign_in(http_client, username, password)
 
     return _make
+
+
+@pytest.fixture
+async def admin_user(
+    register_user: Callable[[str, str], Awaitable[AuthedUser]],
+    db_session_maker: async_sessionmaker[AsyncSession],
+) -> AuthedUser:
+    """A registered user promoted straight in the DB (the API has no first-admin path)."""
+    user = await register_user("admin_user", "admin_pw1")
+    async with db_session_maker() as session:
+        await session.execute(
+            update(User).where(User.id == user["user_id"]).values(role=UserRole.ADMIN),
+        )
+        await session.commit()
+    return user
