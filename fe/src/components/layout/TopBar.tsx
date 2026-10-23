@@ -29,6 +29,23 @@ const TopBar = () => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const soundMenuRef = useRef<HTMLDivElement>(null);
+  const brandRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!brandRef.current?.contains(event.target as Node)) setNavOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNavOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePress);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [navOpen]);
 
   // Touch screens have no hover or blur, so the panel needs an explicit way to close.
   useEffect(() => {
@@ -76,7 +93,7 @@ const TopBar = () => {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+        <div ref={brandRef} className="flex min-w-0 items-center gap-1 sm:gap-2">
           {isAuthed ? (
             <button
               type="button"

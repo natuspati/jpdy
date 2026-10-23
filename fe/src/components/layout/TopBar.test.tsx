@@ -172,7 +172,7 @@ describe('TopBar', () => {
     me.role = 'generic';
   });
 
-  it('toggles the navigation from the brand button and closes it after a link is chosen', () => {
+  it('toggles the navigation from the brand button and closes it on outside tap or after a link is chosen', () => {
     authenticate();
     renderTopBar();
 
@@ -184,6 +184,12 @@ describe('TopBar', () => {
     expect(brand).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById('primary-nav')).toHaveClass('flex', 'flex-col');
 
+    fireEvent.pointerDown(screen.getByRole('link', { name: 'Lobbies' }));
+    expect(brand).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.pointerDown(document.body);
+    expect(brand).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(brand);
     fireEvent.click(screen.getByRole('link', { name: 'Categories' }));
     expect(brand).toHaveAttribute('aria-expanded', 'false');
   });
