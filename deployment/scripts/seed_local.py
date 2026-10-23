@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database.session import async_session_maker
+from enums.user import UserRole
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
 from models.user import User
@@ -23,6 +24,7 @@ from utils.auth import hash_password
 class SeedUser:
     username: str
     password: str
+    role: UserRole = UserRole.GENERIC
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ USERS: Final = (
     SeedUser(username="alice", password="alice123"),
     SeedUser(username="bob", password="bob123"),
     SeedUser(username="carol", password="carol123"),
+    SeedUser(username="admin", password="admin123", role=UserRole.ADMIN),
 )
 
 CATEGORIES: Final = (
@@ -135,6 +138,7 @@ async def _ensure_users(session: AsyncSession) -> dict[str, User]:
             user = User(
                 username=seed_user.username,
                 hashed_password=hash_password(seed_user.password),
+                role=seed_user.role,
             )
             session.add(user)
             await session.flush()
@@ -210,7 +214,7 @@ async def _reconcile_prompts(
 async def main() -> None:
     async with async_session_maker.begin() as session:
         await seed_local_database(session)
-    print("Seed complete: 4 users, 5 host-owned categories, and 25 text prompts.")
+    print("Seed complete: 5 users, 5 host-owned categories, and 25 text prompts.")
 
 
 if __name__ == "__main__":
