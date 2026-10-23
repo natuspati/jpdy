@@ -1,4 +1,10 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import {
   createCategory,
@@ -16,25 +22,34 @@ import { useAuth } from '@/hooks/useAuth';
 import type {
   PromptCategoryCreate,
   PromptCategoryKindEnum,
+  PromptCategorySortEnum,
   PromptCategoryUpdate,
   PromptCreate,
   PromptUpdate,
 } from '@/schemas';
 import { toastError, toastSuccess } from '@/store/toastStore';
+import { flattenPages, nextPageParam } from '@/utils/pagination';
 
-interface CategoryFilters {
-  page?: number;
-  size?: number;
+export const MY_CATEGORIES_PAGE_SIZE = 30;
+
+interface MyCategoryFilters {
   is_complete?: boolean;
   kind?: PromptCategoryKindEnum;
+  sort?: PromptCategorySortEnum;
+  name?: string;
 }
 
-export function useMyCategories(filters: CategoryFilters = {}) {
+/** The viewer's own categories, loaded page by page; a different filter set starts a new list. */
+export function useMyCategories(filters: MyCategoryFilters = {}) {
   const { userId, isAuthed } = useAuth();
   const merged = { ...filters, owner_ids: userId ? [userId] : undefined };
-  return useQuery({
-    queryKey: queryKeys.categories.list(merged),
-    queryFn: () => searchCategories(merged),
+  return useInfiniteQuery({
+    queryKey: queryKeys.categories.mine(merged),
+    queryFn: ({ pageParam }) =>
+      searchCategories({ ...merged, page: pageParam, size: MY_CATEGORIES_PAGE_SIZE }),
+    initialPageParam: 0,
+    getNextPageParam: nextPageParam,
+    select: ({ pages }) => flattenPages(pages),
     enabled: isAuthed,
   });
 }

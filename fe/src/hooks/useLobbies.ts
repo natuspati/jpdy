@@ -13,6 +13,7 @@ import { queryKeys } from '@/api/queryKeys';
 import { useAuth } from '@/hooks/useAuth';
 import type { LobbyUpdate } from '@/schemas';
 import { toastError, toastSuccess } from '@/store/toastStore';
+import { flattenPages, nextPageParam } from '@/utils/pagination';
 
 // Safety net only: lobby changes arrive over the lobby-list socket.
 const FALLBACK_POLL_MS = 60_000;
@@ -35,12 +36,8 @@ export function useMyLobbies() {
     queryKey: queryKeys.lobbies.mine(),
     queryFn: ({ pageParam }) => getMyLobbies(pageParam, MY_LOBBIES_PAGE_SIZE),
     initialPageParam: 0,
-    getNextPageParam: (last) =>
-      (last.page + 1) * last.size < last.total ? last.page + 1 : undefined,
-    // Offset paging can repeat a row when a lobby moves to the top between page loads.
-    select: ({ pages }) => [
-      ...new Map(pages.flatMap((page) => page.contents).map((lobby) => [lobby.id, lobby])).values(),
-    ],
+    getNextPageParam: nextPageParam,
+    select: ({ pages }) => flattenPages(pages),
     enabled: isAuthed,
     refetchInterval: FALLBACK_POLL_MS,
   });
