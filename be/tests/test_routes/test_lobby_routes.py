@@ -1026,6 +1026,29 @@ async def test_my_lobbies_are_paginated_newest_first(
     assert [row["id"] for row in second.json()["contents"]] == ids[::-1][2:]
 
 
+async def test_my_lobbies_list_live_lobbies_first(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    db_session,
+):
+    live_id = await _prepare_lobby(http_client, authed_user)
+    completed_id = await _prepare_lobby(http_client, authed_user)
+    newest_draft_id = await _create_lobby(http_client, authed_user)
+    await db_session.execute(
+        update(Lobby).where(Lobby.id == completed_id).values(state=LobbyStateEnum.COMPLETED),
+    )
+    await db_session.commit()
+
+    response = await http_client.get("/api/v1/lobby/mine", headers=authed_user["headers"])
+
+    assert response.status_code == 200, response.text
+    assert [row["id"] for row in response.json()["contents"]] == [
+        live_id,
+        newest_draft_id,
+        completed_id,
+    ]
+
+
 async def test_completed_lobby_details_returns_competition_rankings_to_allowed_users(
     http_client: AsyncClient,
     authed_user: AuthedUser,

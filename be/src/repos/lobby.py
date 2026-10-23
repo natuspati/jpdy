@@ -149,6 +149,10 @@ class LobbyRepo:
             ),
             else_=False,
         )
+        is_live = case(
+            (Lobby.state.in_([LobbyStateEnum.WAITING_START, LobbyStateEnum.IN_PROGRESS]), 0),
+            else_=1,
+        )
         query = (
             select(
                 Lobby.id.label("id"),
@@ -184,7 +188,7 @@ class LobbyRepo:
         ).scalar_one()
         rows = (
             await self._session.execute(
-                query.order_by(Lobby.updated_at.desc(), Lobby.id.desc())
+                query.order_by(is_live, Lobby.updated_at.desc(), Lobby.id.desc())
                 .limit(pagination.limit)
                 .offset(pagination.offset),
             )
