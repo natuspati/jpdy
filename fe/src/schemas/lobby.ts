@@ -48,6 +48,9 @@ export const MyLobby = z.object({
 });
 export type MyLobby = z.infer<typeof MyLobby>;
 
+export const PaginatedMyLobbies = Paginated(MyLobby);
+export type PaginatedMyLobbies = z.infer<typeof PaginatedMyLobbies>;
+
 export const LobbyFinalRanking = z.object({
   user_id: z.number().int().nullable(),
   username: z.string(),

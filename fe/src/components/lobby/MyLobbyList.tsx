@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import { useDeleteLobby } from '@/hooks/useLobbies';
 import type { MyLobby } from '@/schemas';
 import { formatLocalDateTime } from '@/utils/formatDateTime';
@@ -13,6 +14,9 @@ interface Props {
   lobbies: MyLobby[];
   loading: boolean;
   error: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
 }
 
 const stateLabels = {
@@ -47,8 +51,9 @@ const canJoin = (lobby: MyLobby): boolean =>
   (lobby.is_owner || lobby.is_participant) &&
   (lobby.state === 'waiting_start' || lobby.state === 'in_progress');
 
-const MyLobbyList = ({ lobbies, loading, error }: Props) => {
+const MyLobbyList = ({ lobbies, loading, error, hasMore, loadingMore, onLoadMore }: Props) => {
   const navigate = useNavigate();
+  const sentinelRef = useInfiniteScroll(onLoadMore, hasMore && !loadingMore);
   const remove = useDeleteLobby();
   const [deleteTarget, setDeleteTarget] = useState<MyLobby | null>(null);
 
@@ -59,16 +64,16 @@ const MyLobbyList = ({ lobbies, loading, error }: Props) => {
   };
 
   return (
-    <section className="min-w-0 space-y-3">
+    <section className="flex min-h-0 min-w-0 flex-col gap-3">
       <h2 className="text-lg font-semibold text-slate-100">My lobbies</h2>
       {loading ? (
         <Spinner />
       ) : error ? (
         <p className="text-rose-400">Your lobbies are unavailable.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-800">
+        <div className="max-h-[28rem] min-h-0 overflow-auto rounded-lg border border-slate-800 md:max-h-none md:flex-1">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
+            <thead className="sticky top-0 z-[1] bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="whitespace-nowrap sm:w-20 px-1.5 py-2 sm:px-3 sm:py-3">Lobby ID</th>
                 <th className="px-1.5 py-2 sm:px-3 sm:py-3">Host</th>
@@ -94,7 +99,9 @@ const MyLobbyList = ({ lobbies, loading, error }: Props) => {
                   <td className="max-w-24 truncate px-1.5 py-2 text-slate-300 sm:max-w-none sm:px-3 sm:py-3">
                     {lobby.host_username ?? '(deleted user)'}
                   </td>
-                  <td className="px-1.5 py-2 sm:px-3 sm:py-3 text-slate-300">{lobby.player_count}</td>
+                  <td className="px-1.5 py-2 sm:px-3 sm:py-3 text-slate-300">
+                    {lobby.player_count}
+                  </td>
                   <td className="whitespace-nowrap px-1.5 py-2 sm:px-3 sm:py-3">
                     <span
                       className="group relative inline-flex"
@@ -151,6 +158,12 @@ const MyLobbyList = ({ lobbies, loading, error }: Props) => {
               ))}
             </tbody>
           </table>
+          {loadingMore ? (
+            <div className="flex justify-center py-3">
+              <Spinner />
+            </div>
+          ) : null}
+          <div ref={sentinelRef} aria-hidden className="h-px" />
         </div>
       )}
       <DeleteLobbyModal

@@ -69,6 +69,9 @@ describe('lobby lists', () => {
       <MyLobbyList
         loading={false}
         error={false}
+        hasMore={false}
+        loadingMore={false}
+        onLoadMore={vi.fn()}
         lobbies={[
           {
             id: 4,
@@ -114,6 +117,9 @@ describe('lobby lists', () => {
       <MyLobbyList
         loading={false}
         error={false}
+        hasMore={false}
+        loadingMore={false}
+        onLoadMore={vi.fn()}
         lobbies={[
           {
             id: 6,

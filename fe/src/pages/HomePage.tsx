@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import SignInForm from '@/components/auth/SignInForm';
@@ -15,6 +15,8 @@ const HomePage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const activeLobbies = useActiveLobbies();
   const myLobbies = useMyLobbies();
+  const { fetchNextPage } = myLobbies;
+  const loadMoreMyLobbies = useCallback(() => void fetchNextPage(), [fetchNextPage]);
   useLobbyListSocket();
 
   if (!isAuthed) {
@@ -35,8 +37,8 @@ const HomePage = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className="md:h-full">
+      <div className="grid grid-cols-1 gap-6 md:h-full md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
         <ActiveLobbyList
           lobbies={activeLobbies.data ?? []}
           loading={activeLobbies.isLoading}
@@ -47,6 +49,9 @@ const HomePage = () => {
           lobbies={myLobbies.data ?? []}
           loading={myLobbies.isLoading}
           error={myLobbies.isError}
+          hasMore={myLobbies.hasNextPage}
+          loadingMore={myLobbies.isFetchingNextPage}
+          onLoadMore={loadMoreMyLobbies}
         />
       </div>
       <CreateLobbyModal open={createOpen} onClose={() => setCreateOpen(false)} />

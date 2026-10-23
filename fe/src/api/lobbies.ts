@@ -7,8 +7,8 @@ import {
   LobbyInDB,
   LobbyUpdate,
   LobbyWithCategories,
-  MyLobby,
   PaginatedLobbies,
+  PaginatedMyLobbies,
 } from '@/schemas';
 import { request } from './http';
 
@@ -24,8 +24,8 @@ export async function getActiveLobbies() {
   return request('/lobby/active', z.array(ActiveLobby));
 }
 
-export async function getMyLobbies() {
-  return request('/lobby/mine', z.array(MyLobby));
+export async function getMyLobbies(page: number, size: number) {
+  return request('/lobby/mine', PaginatedMyLobbies, { search: { page, size } });
 }
 
 export async function createLobby() {

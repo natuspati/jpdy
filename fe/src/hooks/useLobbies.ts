@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   createLobby,
@@ -27,11 +27,20 @@ export function useActiveLobbies() {
   });
 }
 
+export const MY_LOBBIES_PAGE_SIZE = 10;
+
 export function useMyLobbies() {
   const { isAuthed } = useAuth();
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: queryKeys.lobbies.mine(),
-    queryFn: getMyLobbies,
+    queryFn: ({ pageParam }) => getMyLobbies(pageParam, MY_LOBBIES_PAGE_SIZE),
+    initialPageParam: 0,
+    getNextPageParam: (last) =>
+      (last.page + 1) * last.size < last.total ? last.page + 1 : undefined,
+    // Offset paging can repeat a row when a lobby moves to the top between page loads.
+    select: ({ pages }) => [
+      ...new Map(pages.flatMap((page) => page.contents).map((lobby) => [lobby.id, lobby])).values(),
+    ],
     enabled: isAuthed,
     refetchInterval: FALLBACK_POLL_MS,
   });
