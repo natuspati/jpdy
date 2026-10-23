@@ -135,6 +135,8 @@ async def test_me_returns_nested_user_without_hashed_password(
     assert body["username"] == authed_user["username"]
     assert body["prompt_categories"] == []
     assert body["lobbies"] == []
+    assert body["role"] == "generic"
+    assert body["admin_key_attempted"] is False
     assert "hashed_password" not in body
 
 

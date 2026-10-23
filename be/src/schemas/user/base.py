@@ -1,5 +1,6 @@
 from pydantic import Field
 
+from enums.user import UserRole
 from schemas.base import BaseSchema
 
 
@@ -14,5 +15,10 @@ class UserPublicSchema(BaseSchema):
     username: str
 
 
-class UserInDBSchema(UserPublicSchema):
+class UserRoleSchema(UserPublicSchema):
+    role: UserRole
+    admin_key_attempted: bool
+
+
+class UserInDBSchema(UserRoleSchema):
     hashed_password: str
