@@ -1,3 +1,4 @@
+import random
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
@@ -9,6 +10,7 @@ from configs.constants import (
     BUZZING_TIME_SECONDS,
     FINAL_ANSWERING_TIME_SECONDS,
     FINAL_BETTING_TIME_SECONDS,
+    MAX_BET_MULTIPLIER,
     NUM_PROMPTS_IN_CATEGORY,
     ROUND_SUMMARY_TIME_SECONDS,
 )
@@ -37,8 +39,13 @@ from utils.game_state import (
 class GameStateMachine:
     """Pure, synchronous transitions for Redis-authoritative game state."""
 
-    def __init__(self, clock: Callable[[], datetime] | None = None):
+    def __init__(
+        self,
+        clock: Callable[[], datetime] | None = None,
+        rng: random.Random | None = None,
+    ):
         self._clock = clock or _utc_now
+        self._rng = rng or random.Random()
 
     def connect_user(
         self,
@@ -163,7 +170,9 @@ class GameStateMachine:
             state.answering_player_id = None
             state.min_bet = prompt.score_value
             state.bets = {}
-            state.max_bet = round_score_value(NUM_PROMPTS_IN_CATEGORY, state.current_round) * 3
+            state.max_bet = (
+                round_score_value(NUM_PROMPTS_IN_CATEGORY, state.current_round) * MAX_BET_MULTIPLIER
+            )
             state.phase = GamePhaseEnum.BETTING_ANNOUNCEMENT
             state.timer_deadline = self._deadline(BETTING_ANNOUNCEMENT_SECONDS)
             return GameCommandOutcome(state=state, result=state, reason="prompt_selected")
@@ -219,7 +228,7 @@ class GameStateMachine:
                 state.attempted_player_ids.append(answerer.user_id)
             state.answering_player_id = None
             if prompt.is_betting:
-                state.selecting_player_id = answerer.user_id
+                self._select_comeback_player(state)
                 self._enter_answer_reveal(state, GameResolutionEnum.UNANSWERED)
             elif get_eligible_buzzers(state):
                 state.phase = GamePhaseEnum.BUZZ_OPEN
@@ -394,10 +403,9 @@ class GameStateMachine:
                     # Timing out counts as a host decline.
                     if prompt is not None:
                         expired.score -= prompt.score_value
-                    if prompt is not None and prompt.is_betting:
-                        state.selecting_player_id = expired.user_id
             state.answering_player_id = None
             if prompt is not None and prompt.is_betting:
+                self._select_comeback_player(state)
                 self._enter_answer_reveal(state, GameResolutionEnum.EXPIRED)
             elif get_eligible_buzzers(state):
                 state.phase = GamePhaseEnum.BUZZ_OPEN
@@ -494,6 +502,15 @@ class GameStateMachine:
         self._clear_betting(state)
         state.phase = GamePhaseEnum.PLAYER_ANSWERING
         state.timer_deadline = self._deadline(ANSWERING_TIME_SECONDS)
+
+    def _select_comeback_player(self, state: GameLobbyState) -> None:
+        """After a failed bet the lowest score picks next; ties are random, bettor included."""
+        eligible = [player for player in state.players if is_eligible_game_player(player)]
+        lowest = min((player.score for player in eligible), default=None)
+        lowest_players = [player for player in eligible if player.score == lowest]
+        state.selecting_player_id = (
+            self._rng.choice(lowest_players).user_id if lowest_players else None
+        )
 
     @staticmethod
     def _clear_betting(state: GameLobbyState) -> None:

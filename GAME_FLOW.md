@@ -414,8 +414,9 @@ Selecting a betting prompt: set `current_prompt_id`, clear
 everyone:
 
 - `min_bet` = the prompt's round-scaled `score_value`;
-- `max_bet` = 3 times the highest value of the current round, where the
-  highest value of round `r` is `5 * 100 * 2^(r-1)` (round 2: 3000);
+- `max_bet` = 5 times (`MAX_BET_MULTIPLIER`) the highest value of the current
+  round, where the highest value of round `r` is `5 * 100 * 2^(r-1)` (round 2:
+  5000);
 - `bets = {}`.
 
 The existing `clue_selected` cue still fires; there are no new cues. Bets are
@@ -453,7 +454,15 @@ starts here and plays until the clue opens. On expiry the game enters
 - **Nobody else may buzz.** A Wrong judgment deducts the bet and reveals with
   `resolution=unanswered`; a timeout deducts the bet and reveals with
   `resolution=expired`. Correct adds the bet.
-- The highest bettor is the next selector whether they answered correctly or not.
+- A correct answer makes the bettor the next selector. After a Wrong judgment
+  or a timeout, the score is updated first and the next selector is the
+  connected, non-banned player with the smallest score. The bettor is part of
+  that pool, so a bettor who is uniquely lowest keeps selecting. Several
+  players sharing the smallest score are picked from at random (unlike the
+  round start, where a tie goes to the host). The pick is made when the answer
+  is judged or the timer expires, not after the reveal. If nobody is eligible,
+  `selecting_player_id` is cleared and the usual
+  `host_selecting_starting_player` fallback applies after the reveal.
 
 ### 4. Answer by voice; host judges directly
 

@@ -9,6 +9,7 @@ from configs.constants import (
     ANSWER_REVEAL_TIME_SECONDS,
     BETTING_ANNOUNCEMENT_SECONDS,
     BETTING_TIME_SECONDS,
+    MAX_BET_MULTIPLIER,
     NUM_PROMPTS_IN_CATEGORY,
 )
 from enums.game import GamePhaseEnum, GameResolutionEnum, PlayerConnectionStatusEnum
@@ -179,7 +180,7 @@ def test_public_projection_hides_betting_flag_and_question_until_selected() -> N
     current = projected.categories[0].prompts[0]
     assert current.is_betting
     assert current.question == ""
-    assert (projected.min_bet, projected.max_bet) == (200, 1500)
+    assert (projected.min_bet, projected.max_bet) == (200, 2500)
 
 
 def test_bets_are_private_to_their_owner() -> None:
@@ -207,16 +208,16 @@ def test_select_betting_prompt_enters_announcement_then_betting_open() -> None:
     assert state.timer_deadline == NOW + timedelta(seconds=BETTING_TIME_SECONDS)
 
 
-def test_max_bet_is_three_times_the_round_maximum() -> None:
+def test_max_bet_is_the_multiplier_times_the_round_maximum() -> None:
     state = _state()
     state.current_round = state.categories[0].round_number = 2
     _machine().select_prompt(state, ONE, BETTING_PROMPT)
-    assert state.max_bet == 3 * round_score_value(NUM_PROMPTS_IN_CATEGORY, 2)
+    assert state.max_bet == MAX_BET_MULTIPLIER * round_score_value(NUM_PROMPTS_IN_CATEGORY, 2)
 
 
 @pytest.mark.parametrize(
     ("amount", "message"),
-    [(100, "between"), (1501, "between"), (0, "between")],
+    [(100, "between"), (2501, "between"), (0, "between")],
 )
 def test_place_bet_enforces_limits(amount: int, message: str) -> None:
     with pytest.raises(BadRequestError, match=message):
@@ -322,41 +323,77 @@ def test_nobody_bets_selector_answers_at_default_value() -> None:
     assert state.selecting_player_id == ONE
 
 
-def _answering_bettor(bet: int = 500) -> GameLobbyState:
-    machine = _machine()
-    state = _betting_state()
+def _answering_bettor(
+    bet: int = 500,
+    scores: tuple[int, ...] = (0, 1000, 0),
+    rng: random.Random | None = None,
+) -> tuple[GameStateMachine, GameLobbyState]:
+    machine = GameStateMachine(clock=lambda: NOW, rng=rng)
+    state = _betting_state(scores=scores)
     machine.place_bet(state, TWO, bet)
     _expire(machine, state)
     state.timer_deadline = NOW + timedelta(seconds=10)
-    return state
+    return machine, state
 
 
 def test_correct_bet_adds_bet_and_bettor_selects_next() -> None:
-    state = _answering_bettor()
-    _machine().judge_answer(state, HOST, True)
-    assert state.players[1].score == 500
+    machine, state = _answering_bettor()
+    machine.judge_answer(state, HOST, True)
+    assert state.players[1].score == 1500
     assert state.resolution == GameResolutionEnum.CORRECT
     assert state.selecting_player_id == TWO
 
 
-def test_wrong_bet_deducts_without_buzz_window() -> None:
-    state = _answering_bettor()
-    _machine().judge_answer(state, HOST, False)
-    assert state.players[1].score == -500
+def test_wrong_bet_deducts_without_buzz_window_and_lowest_selects_next() -> None:
+    machine, state = _answering_bettor(scores=(100, 1000, 300))
+    machine.judge_answer(state, HOST, False)
+    assert state.players[1].score == 500
     assert state.phase == GamePhaseEnum.ANSWER_REVEAL
     assert state.resolution == GameResolutionEnum.UNANSWERED
-    assert state.selecting_player_id == TWO
+    assert state.selecting_player_id == ONE
 
 
-def test_timeout_deducts_bet_with_expired_resolution() -> None:
-    machine = _machine()
-    state = _answering_bettor()
+def test_timeout_deducts_bet_and_lowest_selects_next() -> None:
+    machine, state = _answering_bettor(scores=(300, 1000, 100))
     _expire(machine, state)
-    assert state.players[1].score == -500
+    assert state.players[1].score == 500
     assert state.phase == GamePhaseEnum.ANSWER_REVEAL
     assert state.resolution == GameResolutionEnum.EXPIRED
-    assert state.selecting_player_id == TWO
+    assert state.selecting_player_id == THREE
     assert state.timer_deadline == NOW + timedelta(seconds=ANSWER_REVEAL_TIME_SECONDS)
+
+
+def test_bettor_who_becomes_uniquely_lowest_keeps_selecting() -> None:
+    machine, state = _answering_bettor(scores=(100, 300, 200))
+    machine.judge_answer(state, HOST, False)
+    assert state.players[1].score == -200
+    assert state.selecting_player_id == TWO
+
+
+def test_tied_lowest_players_are_picked_with_the_seeded_rng() -> None:
+    expected = random.Random(3).choice([ONE, TWO])
+    machine, state = _answering_bettor(bet=300, scores=(0, 300, 500), rng=random.Random(3))
+    machine.judge_answer(state, HOST, False)
+    assert state.players[0].score == state.players[1].score == 0
+    assert state.selecting_player_id == expected
+
+
+def test_disconnected_and_banned_players_are_not_picked() -> None:
+    machine, state = _answering_bettor(scores=(0, 1000, 100))
+    state.players[0].connection_status = PlayerConnectionStatusEnum.DISCONNECTED
+    machine.judge_answer(state, HOST, False)
+    assert state.selecting_player_id == THREE
+
+
+def test_no_eligible_player_clears_selector_and_falls_back_to_host() -> None:
+    machine, state = _answering_bettor(scores=(0, 1000, 0))
+    for player in (state.players[0], state.players[2]):
+        player.connection_status = PlayerConnectionStatusEnum.DISCONNECTED
+    state.players[1].connection_status = PlayerConnectionStatusEnum.DISCONNECTED
+    machine.judge_answer(state, HOST, False)
+    assert state.selecting_player_id is None
+    machine.advance_answer_reveal(state, HOST)
+    assert state.phase == GamePhaseEnum.HOST_SELECTING_STARTING_PLAYER
 
 
 def test_ban_selector_during_betting_leaves_others_to_compete() -> None:
@@ -398,7 +435,7 @@ async def test_host_receives_answer_key_when_betting_resolves(monkeypatch) -> No
 
     emit = AsyncMock()
     monkeypatch.setattr(broadcast.sio, "emit", emit)
-    state = _answering_bettor()
+    _, state = _answering_bettor()
 
     await broadcast.broadcast_state(state.lobby_id, state)
 
