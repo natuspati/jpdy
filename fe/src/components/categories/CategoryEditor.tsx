@@ -47,8 +47,8 @@ const CategoryEditor = ({ categoryId, onDeleted }: Props) => {
         <div className="mb-2">
           <Badge>{isFinal ? 'Final' : 'Standard'}</Badge>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="flex-1">
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
             <Field label="Name" htmlFor="cat-name">
               <Input
                 id="cat-name"
