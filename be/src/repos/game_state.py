@@ -183,7 +183,7 @@ class GameStateRepo:
 
     async def scan_active_lobby_ids(self) -> list[int]:
         lobby_ids: list[int] = []
-        async for raw_key in self._redis.scan_iter(match="game:*:state"):
+        async for raw_key in self._redis.scan_iter(match="game:*:state", count=1000):
             key = raw_key.decode() if isinstance(raw_key, bytes) else raw_key
             if not key.startswith("game:{") or not key.endswith("}:state"):
                 continue
