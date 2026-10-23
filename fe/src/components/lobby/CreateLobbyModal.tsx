@@ -233,7 +233,7 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
                   : 'No ready categories yet. Create one in the Categories page first.'}
               </p>
             ) : (
-              <ul className="max-h-72 space-y-2 overflow-y-auto">
+              <ul className="max-h-32 space-y-2 overflow-y-auto md:max-h-72">
                 {categories.map((c) => {
                   const used = usedIds.has(c.id);
                   return (
@@ -307,7 +307,7 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
               ))}
           </ul>
         ) : null}
-        <div className="flex justify-end gap-2">
+        <div className="sticky bottom-0 -mb-2 flex justify-end gap-2 bg-slate-900 pb-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
