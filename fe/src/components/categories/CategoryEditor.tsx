@@ -40,7 +40,7 @@ const CategoryEditor = ({ categoryId, onDeleted }: Props) => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-x-hidden">
       <Card>
         <div className="mb-2">
           <Badge>{isFinal ? 'Final' : 'Standard'}</Badge>

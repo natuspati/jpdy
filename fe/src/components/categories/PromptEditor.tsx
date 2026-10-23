@@ -215,7 +215,7 @@ const MediaControl = ({
   };
 
   return (
-    <div className="space-y-2 rounded border border-slate-700 bg-slate-950/30 p-3">
+    <div className="min-w-0 space-y-2 rounded border border-slate-700 bg-slate-950/30 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <p className="text-sm font-medium text-slate-200">{label} media</p>
@@ -490,7 +490,7 @@ const PromptEditor = ({ categoryId, order, existing, kind = 'standard' }: Props)
 
   return (
     <form
-      className="space-y-2 rounded-md border border-slate-800 bg-slate-900/50 p-3"
+      className="min-w-0 space-y-2 rounded-md border border-slate-800 bg-slate-900/50 p-3"
       onSubmit={onSubmit}
     >
       <div className="flex items-center justify-between">
