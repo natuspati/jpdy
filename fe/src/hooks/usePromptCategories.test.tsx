@@ -31,11 +31,13 @@ describe('ready category selection', () => {
       kind: 'standard',
       is_complete: true,
       size: 200,
+      sort: 'own_first',
     });
     expect(searchCategories).toHaveBeenCalledWith({
       kind: 'final',
       is_complete: true,
       size: 200,
+      sort: 'own_first',
     });
   });
 });

@@ -1,14 +1,20 @@
 import { type ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
+const sizeClasses = {
+  md: 'max-w-md',
+  wide: 'max-h-[90dvh] max-w-4xl overflow-y-auto',
+} as const;
+
 interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
+  size?: keyof typeof sizeClasses;
   children: ReactNode;
 }
 
-const Modal = ({ open, onClose, title, children }: ModalProps) => {
+const Modal = ({ open, onClose, title, size = 'md', children }: ModalProps) => {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -25,7 +31,7 @@ const Modal = ({ open, onClose, title, children }: ModalProps) => {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-lg bg-slate-900 p-4 shadow-2xl sm:rounded-lg"
+        className={`w-full rounded-t-lg bg-slate-900 p-4 shadow-2xl sm:rounded-lg ${sizeClasses[size]}`}
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}

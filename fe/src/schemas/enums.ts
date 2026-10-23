@@ -3,6 +3,16 @@ import { z } from 'zod';
 export const PromptCategoryKindEnum = z.enum(['standard', 'final']);
 export type PromptCategoryKindEnum = z.infer<typeof PromptCategoryKindEnum>;
 
+// Mirrors be/src/enums/prompt.py
+export const PromptCategorySortEnum = z.enum([
+  'updated_desc',
+  'updated_asc',
+  'name_asc',
+  'name_desc',
+  'own_first',
+]);
+export type PromptCategorySortEnum = z.infer<typeof PromptCategorySortEnum>;
+
 // Mirrors be/src/enums/lobby.py
 export const LobbyStateEnum = z.enum(['created', 'waiting_start', 'in_progress', 'completed']);
 export type LobbyStateEnum = z.infer<typeof LobbyStateEnum>;

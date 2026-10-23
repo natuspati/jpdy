@@ -7,6 +7,8 @@ import Field from '@/components/ui/Field';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import Spinner from '@/components/ui/Spinner';
+import { useAuth } from '@/hooks/useAuth';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useAvailableCategories } from '@/hooks/usePromptCategories';
 import { useCreateLobby, useUpdateLobby } from '@/hooks/useLobbies';
 import {
@@ -16,49 +18,77 @@ import {
   MAX_ROUNDS_IN_LOBBY,
   MIN_ROUNDS_IN_LOBBY,
   ROUND_SCORE_MULTIPLIER,
+  type PromptCategoryWithPrompts,
 } from '@/schemas';
 import { toastError } from '@/store/toastStore';
+import { formatLocalDateTime } from '@/utils/formatDateTime';
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
+type Category = PromptCategoryWithPrompts;
+
+const SEARCH_DEBOUNCE_MS = 300;
+
 const CreateLobbyModal = ({ open, onClose }: Props) => {
   const navigate = useNavigate();
-  const { data, isLoading } = useAvailableCategories('standard');
+  const { userId } = useAuth();
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
+  const { data, isLoading } = useAvailableCategories('standard', debouncedSearch);
   const { data: finalData, isLoading: finalLoading } = useAvailableCategories('final');
   const createLobby = useCreateLobby();
   const updateLobby = useUpdateLobby();
-  // Category ids per round; the list index + 1 is the round number.
-  const [rounds, setRounds] = useState<number[][]>([[]]);
+  // Picked categories per round (kept whole, so they survive new searches); the list index + 1
+  // is the round number.
+  const [rounds, setRounds] = useState<Category[][]>([[]]);
+  const [activeRound, setActiveRound] = useState(0);
   // Blank means the server default (10% of a round's prompts, rounded down).
   const [bettingCount, setBettingCount] = useState('');
   const [finalCategoryId, setFinalCategoryId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) {
+      setSearch('');
       setRounds([[]]);
+      setActiveRound(0);
       setBettingCount('');
       setFinalCategoryId(null);
     }
   }, [open]);
 
-  const toggle = (roundIndex: number, id: number) => {
+  const usedIds = new Set(rounds.flat().map((category) => category.id));
+  const activeFull = rounds[activeRound].length >= MAX_CATEGORIES_PER_ROUND;
+
+  const addToActiveRound = (category: Category) => {
+    if (activeFull || usedIds.has(category.id)) return;
     setRounds((prev) =>
-      prev.map((ids, index) => {
-        if (index !== roundIndex) return ids;
-        if (ids.includes(id)) return ids.filter((existing) => existing !== id);
-        return ids.length < MAX_CATEGORIES_PER_ROUND ? [...ids, id] : ids;
-      }),
+      prev.map((picked, index) => (index === activeRound ? [...picked, category] : picked)),
     );
   };
 
-  const addRound = () => setRounds((prev) => [...prev, []]);
-  const removeRound = (roundIndex: number) =>
-    setRounds((prev) => prev.filter((_, index) => index !== roundIndex));
+  const removeFromRound = (roundIndex: number, id: number) => {
+    setRounds((prev) =>
+      prev.map((picked, index) =>
+        index === roundIndex ? picked.filter((category) => category.id !== id) : picked,
+      ),
+    );
+  };
 
-  const everyRoundHasCategory = rounds.every((ids) => ids.length > 0);
+  const addRound = () => {
+    setRounds((prev) => [...prev, []]);
+    setActiveRound(rounds.length);
+  };
+  const removeRound = (roundIndex: number) => {
+    setRounds((prev) => prev.filter((_, index) => index !== roundIndex));
+    setActiveRound(
+      Math.min(activeRound > roundIndex ? activeRound - 1 : activeRound, rounds.length - 2),
+    );
+  };
+
+  const everyRoundHasCategory = rounds.every((picked) => picked.length > 0);
   const bettingValue = Number(bettingCount);
   const bettingInvalid =
     bettingCount !== '' &&
@@ -79,7 +109,7 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
     await updateLobby.mutateAsync({
       id: lobby.id,
       payload: {
-        rounds,
+        rounds: rounds.map((picked) => picked.map((category) => category.id)),
         final_category_id: finalCategoryId,
         ...(bettingCount === '' ? {} : { betting_prompt_count: bettingValue }),
       },
@@ -99,10 +129,8 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
   // Mirrors the server: an explicit count is clamped to the round's size, else a percent of it.
   const bettingPreview = bettingInvalid
     ? []
-    : rounds.map((ids, index) => {
-        const promptCount = categories
-          .filter((c) => ids.includes(c.id))
-          .reduce((sum, c) => sum + c.prompts.length, 0);
+    : rounds.map((picked, index) => {
+        const promptCount = picked.reduce((sum, c) => sum + c.prompts.length, 0);
         const count =
           bettingCount === ''
             ? Math.floor((promptCount * BETTING_PROMPT_DEFAULT_PERCENT) / 100)
@@ -111,77 +139,136 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
       });
 
   return (
-    <Modal open={open} onClose={onClose} title="New lobby">
+    <Modal open={open} onClose={onClose} title="New lobby" size="wide">
       <div className="space-y-3">
         <p className="text-sm text-slate-400">
-          Pick the categories for each round. A category can be used once, and prompt values double
-          every round. Only categories with all prompts filled are shown.
+          Search for categories and click one to add it to the selected round. A category can be
+          used once, and prompt values double every round. Only categories with all prompts filled
+          are shown.
         </p>
-        {isLoading ? (
-          <Spinner />
-        ) : categories.length === 0 ? (
-          <p className="text-sm text-slate-400">
-            No ready categories yet. Create one in the Categories page first.
-          </p>
-        ) : (
-          <div className="max-h-96 space-y-4 overflow-y-auto">
-            {rounds.map((ids, roundIndex) => (
-              <fieldset key={roundIndex} className="space-y-2">
-                <legend className="flex w-full items-center justify-between gap-2 text-sm font-semibold text-slate-100">
-                  <span>
-                    Round {roundIndex + 1}{' '}
-                    <span className="font-normal text-slate-400">
-                      (values ×{ROUND_SCORE_MULTIPLIER ** roundIndex}, {ids.length}/
-                      {MAX_CATEGORIES_PER_ROUND} categories)
-                    </span>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <section aria-label="Rounds" className="min-w-0 space-y-3 md:col-start-2 md:row-start-1">
+            <div className="flex flex-wrap gap-2">
+              {rounds.map((picked, roundIndex) => (
+                <Button
+                  key={roundIndex}
+                  type="button"
+                  size="compact"
+                  variant={roundIndex === activeRound ? 'primary' : 'secondary'}
+                  aria-pressed={roundIndex === activeRound}
+                  onClick={() => setActiveRound(roundIndex)}
+                >
+                  Round {roundIndex + 1}
+                  <span aria-hidden="true" className="ml-1 font-normal">
+                    ({picked.length})
                   </span>
-                  {rounds.length > MIN_ROUNDS_IN_LOBBY ? (
-                    <Button
+                </Button>
+              ))}
+              <Button
+                type="button"
+                size="compact"
+                variant="ghost"
+                disabled={rounds.length >= MAX_ROUNDS_IN_LOBBY}
+                onClick={addRound}
+              >
+                Add round
+              </Button>
+            </div>
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="text-slate-400">
+                Round {activeRound + 1}: values ×{ROUND_SCORE_MULTIPLIER ** activeRound},{' '}
+                {rounds[activeRound].length}/{MAX_CATEGORIES_PER_ROUND} categories
+              </span>
+              {rounds.length > MIN_ROUNDS_IN_LOBBY ? (
+                <Button
+                  type="button"
+                  size="compact"
+                  variant="ghost"
+                  aria-label={`Remove round ${activeRound + 1}`}
+                  onClick={() => removeRound(activeRound)}
+                >
+                  Remove round
+                </Button>
+              ) : null}
+            </div>
+            {rounds[activeRound].length === 0 ? (
+              <p className="text-sm text-slate-500">No categories in this round yet.</p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {rounds[activeRound].map((category) => (
+                  <li
+                    key={category.id}
+                    className="flex min-w-0 items-center gap-1 rounded-full bg-slate-800 py-1 pl-3 pr-1 text-sm text-slate-100"
+                  >
+                    <span className="max-w-40 truncate">{category.name}</span>
+                    <button
                       type="button"
-                      size="compact"
-                      variant="ghost"
-                      aria-label={`Remove round ${roundIndex + 1}`}
-                      onClick={() => removeRound(roundIndex)}
+                      aria-label={`Remove ${category.name} from round ${activeRound + 1}`}
+                      className="h-5 w-5 rounded-full leading-none hover:bg-slate-700"
+                      onClick={() => removeFromRound(activeRound, category.id)}
                     >
-                      Remove round
-                    </Button>
-                  ) : null}
-                </legend>
-                <ul className="space-y-2">
-                  {categories.map((c) => {
-                    const checked = ids.includes(c.id);
-                    const usedElsewhere = !checked && rounds.some((other) => other.includes(c.id));
-                    const roundFull = !checked && ids.length >= MAX_CATEGORIES_PER_ROUND;
-                    return (
-                      <li key={c.id}>
-                        <label
-                          className={`flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/40 p-2 ${
-                            usedElsewhere || roundFull
-                              ? 'cursor-not-allowed opacity-50'
-                              : 'cursor-pointer hover:bg-slate-900'
-                          }`}
-                        >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section
+            aria-label="Categories"
+            className="min-w-0 space-y-2 md:col-start-1 md:row-start-1"
+          >
+            <Input
+              type="search"
+              aria-label="Search categories"
+              placeholder="Search categories"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            {isLoading ? (
+              <Spinner />
+            ) : categories.length === 0 ? (
+              <p className="text-sm text-slate-400">
+                {debouncedSearch
+                  ? 'No ready categories match your search.'
+                  : 'No ready categories yet. Create one in the Categories page first.'}
+              </p>
+            ) : (
+              <ul className="max-h-72 space-y-2 overflow-y-auto">
+                {categories.map((c) => {
+                  const used = usedIds.has(c.id);
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        aria-label={`Add ${c.name} to round ${activeRound + 1}`}
+                        disabled={used || activeFull}
+                        onClick={() => addToActiveRound(c)}
+                        className="flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/40 p-2 text-left hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-slate-900/40"
+                      >
+                        <span className="min-w-0">
                           <span className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-amber-400"
-                              aria-label={`${c.name} in round ${roundIndex + 1}`}
-                              checked={checked}
-                              disabled={usedElsewhere || roundFull}
-                              onChange={() => toggle(roundIndex, c.id)}
-                            />
-                            <span className="text-sm text-slate-100">{c.name}</span>
+                            <span className="truncate text-sm text-slate-100">{c.name}</span>
+                            {userId !== null && c.owner_id === userId ? (
+                              <Badge tone="info">Yours</Badge>
+                            ) : null}
                           </span>
+                          <span className="block text-xs text-slate-400">
+                            Updated {formatLocalDateTime(c.updated_at)}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          {used ? <Badge tone="success">Added</Badge> : null}
                           <Badge>{c.prompts.length} prompts</Badge>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </fieldset>
-            ))}
-          </div>
-        )}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </div>
         <Field
           label="Final category (optional)"
           htmlFor="final-category"
@@ -237,27 +324,17 @@ const CreateLobbyModal = ({ open, onClose }: Props) => {
               ))}
           </ul>
         ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             type="button"
-            variant="secondary"
-            disabled={rounds.length >= MAX_ROUNDS_IN_LOBBY}
-            onClick={addRound}
+            disabled={busy || !everyRoundHasCategory || bettingInvalid}
+            onClick={handleStart}
           >
-            Add round
+            {busy ? 'Creating…' : 'Create & open'}
           </Button>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={busy || !everyRoundHasCategory || bettingInvalid}
-              onClick={handleStart}
-            >
-              {busy ? 'Creating…' : 'Create & open'}
-            </Button>
-          </div>
         </div>
       </div>
     </Modal>

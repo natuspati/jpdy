@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   createCategory,
@@ -39,13 +39,21 @@ export function useMyCategories(filters: CategoryFilters = {}) {
   });
 }
 
-export function useAvailableCategories(kind: PromptCategoryKindEnum = 'standard') {
+/** Ready categories, the viewer's own first, then most recently updated; optional name search. */
+export function useAvailableCategories(kind: PromptCategoryKindEnum = 'standard', name?: string) {
   const { isAuthed } = useAuth();
-  const filters = { is_complete: true, size: 200, kind };
+  const filters = {
+    is_complete: true,
+    size: 200,
+    kind,
+    sort: 'own_first' as const,
+    name: name || undefined,
+  };
   return useQuery({
     queryKey: queryKeys.categories.list(filters),
     queryFn: () => searchCategories(filters),
     enabled: isAuthed,
+    placeholderData: keepPreviousData,
   });
 }
 
