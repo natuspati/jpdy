@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-import { type AdminUserSortEnum, PaginatedAdminUsers, type UserRole } from '@/schemas';
+import {
+  type AdminUserSortEnum,
+  GameStats,
+  PaginatedAdminUsers,
+  PaginatedCategoryStats,
+  ServerStatus,
+  type UserRole,
+} from '@/schemas';
 import { request } from './http';
 
 export interface AdminUserSearch {
@@ -23,4 +30,16 @@ export async function promoteUser(id: number) {
 
 export async function deleteUser(id: number) {
   return request(`/admin/users/${id}`, z.void(), { method: 'DELETE' });
+}
+
+export async function getServerStatus() {
+  return request('/admin/server', ServerStatus);
+}
+
+export async function getGameStats() {
+  return request('/admin/stats', GameStats);
+}
+
+export async function getCategoryStats(page: number, size: number) {
+  return request('/admin/stats/categories', PaginatedCategoryStats, { search: { page, size } });
 }

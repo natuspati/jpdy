@@ -53,3 +53,7 @@ export const AdminUserSortEnum = z.enum([
   'created_at_desc',
 ]);
 export type AdminUserSortEnum = z.infer<typeof AdminUserSortEnum>;
+
+// Mirrors be/src/enums/admin.py
+export const HealthStatusEnum = z.enum(['ok', 'degraded', 'down']);
+export type HealthStatusEnum = z.infer<typeof HealthStatusEnum>;
