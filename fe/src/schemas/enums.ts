@@ -44,3 +44,12 @@ export type GameResolutionEnum = z.infer<typeof GameResolutionEnum>;
 
 export const PlayerConnectionStatusEnum = z.enum(['connected', 'disconnected']);
 export type PlayerConnectionStatusEnum = z.infer<typeof PlayerConnectionStatusEnum>;
+
+// Mirrors AdminUserSortEnum in be/src/enums/user.py
+export const AdminUserSortEnum = z.enum([
+  'username_asc',
+  'username_desc',
+  'created_at_asc',
+  'created_at_desc',
+]);
+export type AdminUserSortEnum = z.infer<typeof AdminUserSortEnum>;

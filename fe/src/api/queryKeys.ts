@@ -19,4 +19,8 @@ export const queryKeys = {
     mine: (filters: Record<string, unknown>) => ['categories', 'mine', filters] as const,
     detail: (id: number) => ['categories', 'detail', id] as const,
   },
+  admin: {
+    all: () => ['admin'] as const,
+    users: (filters: Record<string, unknown>) => ['admin', 'users', filters] as const,
+  },
 } as const;

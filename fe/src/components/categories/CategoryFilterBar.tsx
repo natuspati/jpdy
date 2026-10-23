@@ -1,6 +1,7 @@
 import { type FC, useState } from 'react';
 
 import Button from '@/components/ui/Button';
+import FilterSelect from '@/components/ui/FilterSelect';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import { type CategoryListFilters, activeFilterCount } from './categoryFilters';
@@ -28,37 +29,6 @@ const SORT_OPTIONS = [
   { value: 'name_asc', label: 'A-Z' },
   { value: 'name_desc', label: 'Z-A' },
 ] as const satisfies ReadonlyArray<{ value: CategoryListFilters['sort']; label: string }>;
-
-const selectClass =
-  'h-9 rounded-md border border-slate-700 bg-slate-950 px-2 text-sm text-slate-100';
-
-// Narrows the raw <select> string back to one of the option values.
-const parseOption = <T extends string>(options: ReadonlyArray<{ value: T }>, raw: string): T =>
-  options.find((option) => option.value === raw)?.value ?? options[0].value;
-
-interface SelectProps<T extends string> {
-  label: string;
-  value: T;
-  options: ReadonlyArray<{ value: T; label: string }>;
-  onChange: (value: T) => void;
-}
-
-const FilterSelect = <T extends string>({ label, value, options, onChange }: SelectProps<T>) => (
-  <label className="flex items-center justify-between gap-2 text-xs text-slate-400">
-    {label}
-    <select
-      className={selectClass}
-      value={value}
-      onChange={(event) => onChange(parseOption(options, event.target.value))}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </label>
-);
 
 const FilterSelects: FC<Props & { className: string }> = ({ value, onChange, className }) => (
   <div className={className}>
