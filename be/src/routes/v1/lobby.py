@@ -7,13 +7,14 @@ from schemas.error import ErrorResponse
 from schemas.lobby.base import (
     LobbyFilterSchema,
     LobbyInDBSchema,
+    LobbyMineFilterSchema,
     LobbyUpdateSchema,
 )
 from schemas.lobby.nested import (
     LobbyActiveListItemSchema,
     LobbyDetailsSchema,
-    LobbyMineListItemSchema,
     LobbyWithCategoriesInDBSchema,
+    PaginatedLobbyMineListItemSchema,
     PaginatedLobbyWithCategoriesInDBSchema,
 )
 from schemas.user.base import UserInDBSchema
@@ -74,9 +75,10 @@ async def get_active_lobbies(
 )
 async def get_my_lobbies(
     current_user: Annotated[UserInDBSchema, Depends(get_current_user)],
+    filters: Annotated[LobbyMineFilterSchema, Query()],
     service: Annotated[LobbyService, Depends()],
-) -> list[LobbyMineListItemSchema]:
-    return await service.get_my_lobbies(user=current_user)
+) -> PaginatedLobbyMineListItemSchema:
+    return await service.get_my_lobbies(user=current_user, pagination=filters)
 
 
 @router.get(

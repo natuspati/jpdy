@@ -809,7 +809,7 @@ async def test_delete_lobby_removes_participants_before_sqlite_reuses_its_id(
 
     assert my_lobbies.status_code == 200, my_lobbies.text
     assert active_lobbies.status_code == 200, active_lobbies.text
-    assert my_lobbies.json() == []
+    assert my_lobbies.json()["contents"] == []
     assert [lobby["id"] for lobby in active_lobbies.json()] == [replacement_lobby_id]
 
 
@@ -991,7 +991,7 @@ async def test_my_lobbies_returns_owned_and_allowed_participant_lobbies(
     response = await http_client.get("/api/v1/lobby/mine", headers=authed_user["headers"])
 
     assert response.status_code == 200, response.text
-    by_id = {row["id"]: row for row in response.json()}
+    by_id = {row["id"]: row for row in response.json()["contents"]}
     assert {
         owned_draft_id,
         owned_waiting_id,
@@ -1002,6 +1002,28 @@ async def test_my_lobbies_returns_owned_and_allowed_participant_lobbies(
     assert by_id[owned_draft_id]["is_owner"] is True
     assert by_id[participant_waiting_id]["is_owner"] is False
     assert by_id[participant_waiting_id]["is_participant"] is True
+
+
+async def test_my_lobbies_are_paginated_newest_first(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    ids = [await _create_lobby(http_client, authed_user) for _ in range(3)]
+
+    first = await http_client.get(
+        "/api/v1/lobby/mine?size=2",
+        headers=authed_user["headers"],
+    )
+    second = await http_client.get(
+        "/api/v1/lobby/mine?page=1&size=2",
+        headers=authed_user["headers"],
+    )
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["total"] == 3
+    assert (first.json()["page"], first.json()["size"]) == (0, 2)
+    assert [row["id"] for row in first.json()["contents"]] == ids[::-1][:2]
+    assert [row["id"] for row in second.json()["contents"]] == ids[::-1][2:]
 
 
 async def test_completed_lobby_details_returns_competition_rankings_to_allowed_users(

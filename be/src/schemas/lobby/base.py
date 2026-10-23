@@ -39,6 +39,10 @@ class LobbyUpdateSchema(OneFieldSetSchemaMixin):
     )
 
 
+class LobbyMineFilterSchema(PaginationSchema):
+    size: int = Field(default=10, gt=0, le=100)
+
+
 class LobbyFilterSchema(PaginationSchema):
     ids: list[int] | None = None
     owner_ids: list[int] | None = None

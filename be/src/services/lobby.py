@@ -10,10 +10,11 @@ from schemas.lobby.base import LobbyFilterSchema, LobbyInDBSchema, LobbyUpdateSc
 from schemas.lobby.nested import (
     LobbyActiveListItemSchema,
     LobbyDetailsSchema,
-    LobbyMineListItemSchema,
     LobbyWithCategoriesInDBSchema,
+    PaginatedLobbyMineListItemSchema,
     PaginatedLobbyWithCategoriesInDBSchema,
 )
+from schemas.pagination import PaginationSchema
 from schemas.user.base import UserPublicSchema
 from services import game_timers
 from services.game_state_materializer import GameStateMaterializer
@@ -50,9 +51,13 @@ class LobbyService:
         async with self._uow as uow:
             return await uow.lobby_repo.select_active_lobbies(user_id=user.id)
 
-    async def get_my_lobbies(self, user: UserPublicSchema) -> list[LobbyMineListItemSchema]:
+    async def get_my_lobbies(
+        self,
+        user: UserPublicSchema,
+        pagination: PaginationSchema,
+    ) -> PaginatedLobbyMineListItemSchema:
         async with self._uow as uow:
-            return await uow.lobby_repo.select_my_lobbies(user_id=user.id)
+            return await uow.lobby_repo.select_my_lobbies(user_id=user.id, pagination=pagination)
 
     async def get_lobby(
         self,

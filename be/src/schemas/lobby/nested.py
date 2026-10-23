@@ -33,6 +33,10 @@ class LobbyMineListItemSchema(BaseSchema):
     is_participant: bool
 
 
+class PaginatedLobbyMineListItemSchema(PaginatedResponseSchema[LobbyMineListItemSchema]):
+    pass
+
+
 class LobbyFinalRankingSchema(BaseSchema):
     user_id: int | None
     username: str

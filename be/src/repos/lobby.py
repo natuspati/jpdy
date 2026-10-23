@@ -15,9 +15,11 @@ from schemas.lobby.nested import (
     LobbyMineListItemSchema,
     LobbyWithCategoriesInDBSchema,
     LobbyWithCategoryPromptsInDBSchema,
+    PaginatedLobbyMineListItemSchema,
     PaginatedLobbyWithCategoriesInDBSchema,
 )
 from schemas.lobby.participant import LobbyParticipantInDBSchema, LobbyRoundResultInDBSchema
+from schemas.pagination import PaginationSchema
 from schemas.user.base import UserPublicSchema
 from utils.model_validation import validate_model
 
@@ -129,7 +131,11 @@ class LobbyRepo:
         rows = (await self._session.execute(query)).all()
         return validate_model(rows, LobbyActiveListItemSchema)
 
-    async def select_my_lobbies(self, user_id: int) -> list[LobbyMineListItemSchema]:
+    async def select_my_lobbies(
+        self,
+        user_id: int,
+        pagination: PaginationSchema,
+    ) -> PaginatedLobbyMineListItemSchema:
         participant = LobbyParticipant
         player_count = _eligible_player_count_query()
         is_owner = case((Lobby.owner_id == user_id, True), else_=False)
@@ -172,10 +178,23 @@ class LobbyRepo:
                     ),
                 ),
             )
-            .order_by(Lobby.updated_at.desc(), Lobby.id.desc())
         )
-        rows = (await self._session.execute(query)).all()
-        return validate_model(rows, LobbyMineListItemSchema)
+        total = (
+            await self._session.execute(select(func.count()).select_from(query.subquery()))
+        ).scalar_one()
+        rows = (
+            await self._session.execute(
+                query.order_by(Lobby.updated_at.desc(), Lobby.id.desc())
+                .limit(pagination.limit)
+                .offset(pagination.offset),
+            )
+        ).all()
+        return PaginatedLobbyMineListItemSchema(
+            contents=validate_model(rows, LobbyMineListItemSchema),
+            total=total,
+            page=pagination.page,
+            size=pagination.size,
+        )
 
     async def select_eligible_player_count(self, lobby_id: int) -> int:
         query = select(func.count(LobbyParticipant.id)).where(
