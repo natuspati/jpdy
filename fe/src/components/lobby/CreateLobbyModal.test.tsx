@@ -28,7 +28,20 @@ vi.mock('@/hooks/usePromptCategories', () => ({
       data: {
         contents:
           kind === 'final'
-            ? [{ id: 100, name: 'Final history', kind: 'final', prompts: [{ id: 1000 }] }]
+            ? [
+                {
+                  id: 100,
+                  name: 'Final history',
+                  kind: 'final',
+                  updated_at: '2026-09-02T10:00:00Z',
+                },
+                {
+                  id: 101,
+                  name: 'Final science',
+                  kind: 'final',
+                  updated_at: '2026-09-01T10:00:00Z',
+                },
+              ]
             : categories.filter((category) => !name || category.name.includes(name)),
       },
       isLoading: false,
@@ -52,6 +65,10 @@ const renderModal = () =>
 
 const pick = (n: number, round: number) =>
   userEvent.click(screen.getByRole('button', { name: `Add Cat ${n} to round ${round}` }));
+const chooseFinal = async (option: string | RegExp) => {
+  await userEvent.click(screen.getByLabelText('Final category (optional)'));
+  await userEvent.click(screen.getByRole('option', { name: option }));
+};
 const catButton = (n: number, round: number) =>
   screen.getByRole('button', { name: `Add Cat ${n} to round ${round}` });
 
@@ -72,7 +89,7 @@ describe('CreateLobbyModal rounds editor', () => {
     expect(create).toBeEnabled();
 
     await userEvent.click(screen.getByRole('button', { name: 'Add round' }));
-    expect(screen.getByText(/values ×2/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Round 2' })).toBeInTheDocument();
     expect(create).toBeDisabled();
   });
 
@@ -82,7 +99,7 @@ describe('CreateLobbyModal rounds editor', () => {
     await userEvent.click(add);
     await userEvent.click(add);
     expect(add).toBeDisabled();
-    expect(screen.getByText(/values ×4/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Round 3' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove round 3' }));
     await userEvent.click(screen.getByRole('button', { name: 'Remove round 2' }));
@@ -183,7 +200,7 @@ describe('CreateLobbyModal rounds editor', () => {
     await pick(2, 2);
     await userEvent.click(screen.getByRole('button', { name: 'Add round' }));
     await pick(3, 3);
-    await userEvent.selectOptions(screen.getByLabelText('Final category (optional)'), '100');
+    await chooseFinal(/Final history/);
     await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
 
     expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
@@ -199,8 +216,8 @@ describe('CreateLobbyModal rounds editor', () => {
   it('allows removing the optional final without changing normal selections', async () => {
     renderModal();
     await pick(1, 1);
-    await userEvent.selectOptions(screen.getByLabelText('Final category (optional)'), '100');
-    await userEvent.selectOptions(screen.getByLabelText('Final category (optional)'), '');
+    await chooseFinal(/Final history/);
+    await chooseFinal('No final');
     await userEvent.click(screen.getByRole('button', { name: 'Create & open' }));
     expect(mocks.updateLobby).toHaveBeenNthCalledWith(1, {
       id: 42,
@@ -208,12 +225,25 @@ describe('CreateLobbyModal rounds editor', () => {
     });
   });
 
-  it("marks the viewer's own categories and shows prompt count and updated date", () => {
+  it('lists final categories with their updated date, searchable by name', async () => {
+    renderModal();
+    await userEvent.click(screen.getByLabelText('Final category (optional)'));
+    const options = screen.getAllByRole('option');
+    expect(options[1]).toHaveTextContent(
+      `Final historyUpdated ${formatLocalDateTime('2026-09-02T10:00:00Z')}`,
+    );
+    expect(options[2]).toHaveTextContent('Final science');
+
+    await userEvent.type(screen.getByLabelText('Search final categories'), 'sci');
+    expect(screen.queryByRole('option', { name: /Final history/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Final science/ })).toBeInTheDocument();
+  });
+
+  it("marks the viewer's own categories and shows the updated date", () => {
     renderModal();
     expect(screen.getAllByText('Yours')).toHaveLength(1);
     expect(catButton(1, 1)).toHaveTextContent('Yours');
     expect(catButton(2, 1)).not.toHaveTextContent('Yours');
-    expect(catButton(1, 1)).toHaveTextContent('5 prompts');
     expect(catButton(1, 1)).toHaveTextContent(
       `Updated ${formatLocalDateTime(categories[0].updated_at)}`,
     );
