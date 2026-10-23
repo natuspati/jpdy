@@ -6,12 +6,13 @@ import { GameAudioContext, type GameAudioContextValue } from '@/audio/gameAudioC
 import { useAuthStore } from '@/store/authStore';
 import TopBar from './TopBar';
 
-vi.mock('@/hooks/useMe', () => ({
-  useMe: () => ({ data: { username: 'alex' } }),
+const { queryClient, me } = vi.hoisted(() => ({
+  queryClient: { clear: vi.fn() },
+  me: { role: 'generic' as 'generic' | 'admin' },
 }));
 
-const { queryClient } = vi.hoisted(() => ({
-  queryClient: { clear: vi.fn() },
+vi.mock('@/hooks/useMe', () => ({
+  useMe: () => ({ data: { username: 'alex', role: me.role } }),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -154,6 +155,21 @@ describe('TopBar', () => {
       'aria-current',
       'page',
     );
+  });
+
+  it('shows the Admin link only to admins and marks it active on /admin', () => {
+    authenticate();
+    me.role = 'generic';
+    const { unmount } = renderTopBar();
+    expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
+    unmount();
+
+    me.role = 'admin';
+    renderTopBar(audioValue(), '/admin');
+    const adminLink = screen.getByRole('link', { name: 'Admin' });
+    expect(adminLink).toHaveAttribute('href', '/admin');
+    expect(adminLink).toHaveAttribute('aria-current', 'page');
+    me.role = 'generic';
   });
 
   it('does not mark lobby or category navigation active in a game route', () => {

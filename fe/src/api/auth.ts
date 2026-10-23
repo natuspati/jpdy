@@ -30,3 +30,7 @@ export const SignInArgs = z.object({
   username: z.string(),
   password: z.string(),
 });
+
+export async function claimAdminKey(key: string): Promise<void> {
+  return request('/user/admin-key', z.void(), { method: 'POST', body: { key } });
+}

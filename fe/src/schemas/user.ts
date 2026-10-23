@@ -36,6 +36,12 @@ export const SignInForm = z.object({
 });
 export type SignInForm = z.infer<typeof SignInForm>;
 
+// Form-side: admin key claim
+export const AdminKeyForm = z.object({
+  key: z.string().min(1, 'Required'),
+});
+export type AdminKeyForm = z.infer<typeof AdminKeyForm>;
+
 // TokenSchema
 export const TokenResponse = z.object({
   access_token: z.string(),

@@ -1,6 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { signIn } from '@/api/auth';
 import { ApiError } from '@/api/errors';
@@ -14,6 +15,10 @@ import { toastError } from '@/store/toastStore';
 const SignInForm = () => {
   const { setToken } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // RequireAuth/AdminRoute leave the wanted path here when they bounce a signed-out visitor.
+  const from = (location.state as { from?: unknown } | null)?.from;
   const {
     register,
     handleSubmit,
@@ -28,6 +33,7 @@ const SignInForm = () => {
     onSuccess: (data) => {
       setToken(data.access_token);
       queryClient.invalidateQueries();
+      if (typeof from === 'string') navigate(from, { replace: true });
     },
     onError: (e) => {
       toastError(e instanceof ApiError ? e.detail : 'Sign-in failed');

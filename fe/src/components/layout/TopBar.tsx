@@ -63,6 +63,7 @@ const TopBar = () => {
   const isLobbiesActive = location.pathname === '/';
   const isCategoriesActive =
     location.pathname === '/categories' || location.pathname.startsWith('/categories/');
+  const isAdminActive = location.pathname === '/admin';
   const navLinkClass = (isActive: boolean): string =>
     [
       'rounded-md px-2 py-1 text-sm font-medium transition-colors',
@@ -94,6 +95,15 @@ const TopBar = () => {
               >
                 Categories
               </Link>
+              {me?.role === 'admin' ? (
+                <Link
+                  to="/admin"
+                  aria-current={isAdminActive ? 'page' : undefined}
+                  className={navLinkClass(isAdminActive)}
+                >
+                  Admin
+                </Link>
+              ) : null}
             </nav>
           ) : null}
         </div>

@@ -13,6 +13,10 @@ export const PromptCategorySortEnum = z.enum([
 ]);
 export type PromptCategorySortEnum = z.infer<typeof PromptCategorySortEnum>;
 
+// Mirrors be/src/enums/user.py
+export const UserRole = z.enum(['generic', 'admin']);
+export type UserRole = z.infer<typeof UserRole>;
+
 // Mirrors be/src/enums/lobby.py
 export const LobbyStateEnum = z.enum(['created', 'waiting_start', 'in_progress', 'completed']);
 export type LobbyStateEnum = z.infer<typeof LobbyStateEnum>;

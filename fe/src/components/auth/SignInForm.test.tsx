@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAuthStore } from '@/store/authStore';
@@ -13,15 +14,40 @@ function makeToken(sub: number, exp: number): string {
   return `${header}.${payload}.sig`;
 }
 
-const renderWithQueryClient = () => {
+const LocationDisplay = () => <output>{useLocation().pathname}</output>;
+
+const renderWithQueryClient = (
+  initialEntry: string | { pathname: string; state: unknown } = '/',
+) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SignInForm />
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <SignInForm />
+        <LocationDisplay />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
+};
+
+const stubSignIn = () =>
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ access_token: makeToken(42, 2_000_000_000), token_type: 'bearer' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    ),
+  );
+
+const signInAsAlice = async () => {
+  await userEvent.type(screen.getByLabelText(/username/i), 'alice');
+  await userEvent.type(screen.getByLabelText(/password/i), 'pw');
+  await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 };
 
 describe('SignInForm', () => {
@@ -56,6 +82,21 @@ describe('SignInForm', () => {
     await userEvent.type(screen.getByLabelText(/password/i), 'pw');
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
     await waitFor(() => expect(useAuthStore.getState().userId).toBe(42));
+  });
+
+  it('returns to the page the visitor was sent away from', async () => {
+    stubSignIn();
+    renderWithQueryClient({ pathname: '/', state: { from: '/admin' } });
+    await signInAsAlice();
+    expect(await screen.findByText('/admin')).toBeInTheDocument();
+  });
+
+  it('stays put when there is no page to return to', async () => {
+    stubSignIn();
+    renderWithQueryClient();
+    await signInAsAlice();
+    await waitFor(() => expect(useAuthStore.getState().userId).toBe(42));
+    expect(screen.getByText('/')).toBeInTheDocument();
   });
 
   it('shows error detail toast on API error', async () => {

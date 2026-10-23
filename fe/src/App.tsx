@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
+import AdminRoute from '@/components/layout/AdminRoute';
 import AppShell from '@/components/layout/AppShell';
 import RequireAuth from '@/components/layout/RequireAuth';
+import AdminPage from '@/pages/AdminPage';
 import HomePage from '@/pages/HomePage';
 import RegisterPage from '@/pages/RegisterPage';
 import CategoriesPage from '@/pages/CategoriesPage';
@@ -45,6 +47,14 @@ const App = () => (
           <RequireAuth>
             <LobbyDetailsPage />
           </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <AdminPage />
+          </AdminRoute>
         }
       />
       <Route path="/404" element={<NotFoundPage />} />

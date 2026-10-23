@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { UserRole } from './enums';
 import { LobbyInDB } from './lobby';
 import { PromptCategoryInDB } from './prompt';
 
@@ -9,6 +10,8 @@ import { PromptCategoryInDB } from './prompt';
 export const MeResponse = z.object({
   id: z.number().int(),
   username: z.string(),
+  role: UserRole,
+  admin_key_attempted: z.boolean(),
   prompt_categories: z.array(PromptCategoryInDB),
   lobbies: z.array(LobbyInDB),
 });
