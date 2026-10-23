@@ -57,7 +57,29 @@ const ServerManagement = () => {
       ) : isError || !data ? (
         <p className="p-4 text-rose-400">Server status is unavailable.</p>
       ) : (
-        <div className="space-y-3 p-3">
+        <div className="grid items-start gap-3 p-3 lg:grid-cols-3">
+          <Panel title="Backend" status={data.backend.status} error={data.backend.error}>
+            <Row label="Instances" value={data.backend.instances.length} />
+            <Row label="Connected sockets" value={data.backend.connected_sockets} />
+            <Row label="Live games" value={data.backend.live_games} />
+            {data.backend.instances.map((instance) => (
+              <div
+                key={instance.id}
+                className="mt-2 space-y-1 rounded-md border border-slate-800 p-2 text-xs"
+              >
+                <Row label="Instance" value={instance.id.slice(0, 8)} />
+                <Row label="Host" value={instance.hostname} />
+                <Row label="Version" value={instance.version} />
+                <Row
+                  label="Uptime"
+                  value={formatDuration(
+                    (Date.now() - new Date(instance.started_at).getTime()) / 1000,
+                  )}
+                />
+                <Row label="Peak memory" value={formatBytes(instance.rss_bytes)} />
+              </div>
+            ))}
+          </Panel>
           <Panel title="Redis" status={data.redis.status} error={data.redis.error}>
             <Row label="Ping" value={orNull(data.redis.ping_ms, (ms) => `${ms} ms`)} />
             <Row label="Memory" value={orNull(data.redis.used_memory, formatBytes)} />
@@ -90,28 +112,6 @@ const ServerManagement = () => {
             <Row label="Categories" value={data.database.category_count} />
             <Row label="Size" value={orNull(data.database.size_bytes, formatBytes)} />
             <Row label="Connections" value={data.database.active_connections} />
-          </Panel>
-          <Panel title="Backend" status={data.backend.status} error={data.backend.error}>
-            <Row label="Instances" value={data.backend.instances.length} />
-            <Row label="Connected sockets" value={data.backend.connected_sockets} />
-            <Row label="Live games" value={data.backend.live_games} />
-            {data.backend.instances.map((instance) => (
-              <div
-                key={instance.id}
-                className="mt-2 space-y-1 rounded-md border border-slate-800 p-2 text-xs"
-              >
-                <Row label="Instance" value={instance.id.slice(0, 8)} />
-                <Row label="Host" value={instance.hostname} />
-                <Row label="Version" value={instance.version} />
-                <Row
-                  label="Uptime"
-                  value={formatDuration(
-                    (Date.now() - new Date(instance.started_at).getTime()) / 1000,
-                  )}
-                />
-                <Row label="Peak memory" value={formatBytes(instance.rss_bytes)} />
-              </div>
-            ))}
           </Panel>
         </div>
       )}
