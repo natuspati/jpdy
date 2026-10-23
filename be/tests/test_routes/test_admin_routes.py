@@ -250,6 +250,12 @@ async def test_delete_user_removes_unfinished_keeps_completed_history(
     mine = await http_client.get("/api/v1/lobby/mine", headers=another_authed_user["headers"])
     hosts = {lobby["id"]: lobby["host_username"] for lobby in mine.json()["contents"]}
     assert hosts[done] == "owner_user"
+    details = await http_client.get(
+        f"/api/v1/lobby/{done}",
+        headers=another_authed_user["headers"],
+    )
+    assert details.json()["owner"] is None
+    assert details.json()["owner_username_snapshot"] == "owner_user"
 
 
 async def test_delete_user_removes_unattached_media_and_keeps_attached(
