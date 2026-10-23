@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import Field from '@/components/ui/Field';
 import Input from '@/components/ui/Input';
 import { useCategory, useDeleteCategory, useUpdateCategory } from '@/hooks/usePromptCategories';
@@ -19,6 +20,7 @@ const CategoryEditor = ({ categoryId, onDeleted }: Props) => {
   const update = useUpdateCategory(categoryId);
   const remove = useDeleteCategory();
   const [name, setName] = useState(data?.name ?? '');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   if (isLoading || !data) return <p className="text-slate-400">Loading…</p>;
 
@@ -34,8 +36,8 @@ const CategoryEditor = ({ categoryId, onDeleted }: Props) => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete category "${data.name}" and all its prompts?`)) return;
     await remove.mutateAsync(categoryId);
+    setConfirmingDelete(false);
     onDeleted?.();
   };
 
@@ -56,8 +58,14 @@ const CategoryEditor = ({ categoryId, onDeleted }: Props) => {
               />
             </Field>
           </div>
-          <Button variant="danger" onClick={handleDelete}>
-            Delete
+          <Button
+            variant="danger"
+            aria-label="Delete category"
+            title="Delete category"
+            className="w-11 shrink-0 px-0"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            X
           </Button>
         </div>
         <p className="mt-2 text-xs text-slate-400">
@@ -80,6 +88,15 @@ const CategoryEditor = ({ categoryId, onDeleted }: Props) => {
           );
         })}
       </div>
+      <ConfirmModal
+        open={confirmingDelete}
+        title="Delete category"
+        message={`Delete category "${data.name}" and all its prompts? This cannot be undone.`}
+        confirmLabel={remove.isPending ? 'Deleting…' : 'Delete category'}
+        pending={remove.isPending}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   );
 };

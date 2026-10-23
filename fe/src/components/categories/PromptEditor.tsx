@@ -8,6 +8,7 @@ import { deleteMedia } from '@/api/media';
 import { queryKeys } from '@/api/queryKeys';
 import PromptMedia from '@/components/game/PromptMedia';
 import Button from '@/components/ui/Button';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import Field from '@/components/ui/Field';
 import HelpTip from '@/components/ui/HelpTip';
 import Input from '@/components/ui/Input';
@@ -296,6 +297,7 @@ const PromptEditor = ({ categoryId, order, existing, kind = 'standard' }: Props)
   const create = useCreatePrompt(categoryId);
   const update = useUpdatePrompt(categoryId);
   const remove = useDeletePrompt(categoryId);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [questionMedia, setQuestionMedia] = useState<MediaReference | null>(
     existing?.question_content.media ?? null,
   );
@@ -475,8 +477,8 @@ const PromptEditor = ({ categoryId, order, existing, kind = 'standard' }: Props)
 
   const handleDelete = async () => {
     if (!existing) return;
-    if (!window.confirm('Delete this prompt?')) return;
     await remove.mutateAsync(existing.id);
+    setConfirmingDelete(false);
   };
 
   const busy =
@@ -581,7 +583,7 @@ const PromptEditor = ({ categoryId, order, existing, kind = 'standard' }: Props)
       ) : null}
       <div className="flex justify-between gap-2">
         {existing ? (
-          <Button type="button" variant="danger" size="sm" disabled={busy} onClick={handleDelete}>
+          <Button type="button" variant="danger" size="sm" disabled={busy} onClick={() => setConfirmingDelete(true)}>
             Delete
           </Button>
         ) : (
@@ -591,6 +593,15 @@ const PromptEditor = ({ categoryId, order, existing, kind = 'standard' }: Props)
           {existing ? 'Save' : 'Add'}
         </Button>
       </div>
+      <ConfirmModal
+        open={confirmingDelete}
+        title="Delete prompt"
+        message="Delete this prompt? This cannot be undone."
+        confirmLabel={remove.isPending ? 'Deleting…' : 'Delete prompt'}
+        pending={remove.isPending}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => void handleDelete()}
+      />
     </form>
   );
 };

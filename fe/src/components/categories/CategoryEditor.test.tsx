@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +8,7 @@ import CategoryEditor from './CategoryEditor';
 const mocks = vi.hoisted(() => ({
   kind: 'final' as 'standard' | 'final',
   createPrompt: vi.fn(),
+  deleteCategory: vi.fn(),
   getCategory: vi.fn(),
 }));
 
@@ -18,7 +19,7 @@ vi.mock('@/hooks/usePromptCategories', () => ({
     isLoading: false,
   }),
   useUpdateCategory: () => ({ mutateAsync: vi.fn() }),
-  useDeleteCategory: () => ({ mutateAsync: vi.fn() }),
+  useDeleteCategory: () => ({ mutateAsync: mocks.deleteCategory, isPending: false }),
   useCreatePrompt: () => ({ mutateAsync: mocks.createPrompt, isPending: false }),
   useUpdatePrompt: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeletePrompt: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -37,6 +38,7 @@ describe('CategoryEditor kind', () => {
   beforeEach(() => {
     mocks.kind = 'final';
     mocks.createPrompt.mockReset().mockResolvedValue({ id: 1 });
+    mocks.deleteCategory.mockReset().mockResolvedValue(undefined);
     mocks.getCategory.mockReset().mockResolvedValue({ prompts: [] });
   });
 
@@ -68,5 +70,20 @@ describe('CategoryEditor kind', () => {
     renderEditor();
     expect(screen.getAllByRole('heading', { name: /Prompt [1-5]/ })).toHaveLength(5);
     expect(screen.getByText('Score: 500')).toBeInTheDocument();
+  });
+
+  it('asks in a styled dialog before deleting the category', async () => {
+    renderEditor();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete category' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Delete category "History"');
+    expect(mocks.deleteCategory).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete category' }));
+    const dialog = screen.getByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete category' }));
+    expect(mocks.deleteCategory).toHaveBeenCalledWith(9);
   });
 });
