@@ -33,7 +33,6 @@ class PaginatedAdminUserSchema(PaginatedResponseSchema[AdminUserListItemSchema])
 
 class GameStatsSchema(BaseSchema):
     active_lobbies: int
-    active_players: int
     completed_lobbies: int
 
 

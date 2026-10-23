@@ -3,11 +3,11 @@ import { useCallback } from 'react';
 import Badge from '@/components/ui/Badge';
 import Card from '@/components/ui/Card';
 import Spinner from '@/components/ui/Spinner';
-import { useCategoryStats, useGameStats } from '@/hooks/useAdmin';
+import { useCategoryStats, useGameStats, useServerStatus } from '@/hooks/useAdmin';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import AdminSection from './AdminSection';
 
-const Tile = ({ label, value }: { label: string; value: number | undefined }) => (
+const Tile = ({ label, value }: { label: string; value: number | null | undefined }) => (
   <Card className="p-3 text-center">
     <p className="text-2xl font-bold tabular-nums text-amber-300">{value ?? '-'}</p>
     <p className="text-xs text-slate-400">{label}</p>
@@ -16,6 +16,8 @@ const Tile = ({ label, value }: { label: string; value: number | undefined }) =>
 
 const GameStats = () => {
   const stats = useGameStats();
+  // sockets are already counted for the server panel, so the stats endpoint does not scan again
+  const server = useServerStatus();
   const categories = useCategoryStats();
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = categories;
   const loadMore = useCallback(() => void fetchNextPage(), [fetchNextPage]);
@@ -29,7 +31,7 @@ const GameStats = () => {
         {stats.isError ? <p className="text-rose-400">Stats are unavailable.</p> : null}
         <div className="grid grid-cols-3 gap-3">
           <Tile label="Active lobbies" value={stats.data?.active_lobbies} />
-          <Tile label="Active players" value={stats.data?.active_players} />
+          <Tile label="Active players" value={server.data?.backend.connected_sockets} />
           <Tile label="Completed lobbies" value={stats.data?.completed_lobbies} />
         </div>
         <h3 className="font-semibold text-slate-100">Popular categories</h3>

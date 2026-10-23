@@ -319,12 +319,11 @@ async def test_delete_user_removes_unattached_media_and_keeps_attached(
     assert (tmp_path / "used.png").exists()
 
 
-async def test_game_stats_count_active_completed_and_connected_players(
+async def test_game_stats_count_active_and_completed_lobbies(
     http_client: AsyncClient,
     admin_user: AuthedUser,
     authed_user: AuthedUser,
     db_session: AsyncSession,
-    redis_client: FakeAsyncRedis,
 ):
     owner = authed_user["user_id"]
     for state in (
@@ -335,12 +334,10 @@ async def test_game_stats_count_active_completed_and_connected_players(
         LobbyStateEnum.COMPLETED,
     ):
         await _lobby(db_session, owner, state)
-    await redis_client.set(game_connection_key(1, 10), "sid-a")
-    await redis_client.set(game_connection_key(1, 11), "sid-b")
 
     response = await http_client.get("/api/v1/admin/stats", headers=admin_user["headers"])
 
-    assert response.json() == {"active_lobbies": 2, "active_players": 2, "completed_lobbies": 2}
+    assert response.json() == {"active_lobbies": 2, "completed_lobbies": 2}
 
 
 async def test_category_stats_count_distinct_played_lobbies_ordered_and_paginated(

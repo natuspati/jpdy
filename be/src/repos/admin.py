@@ -27,6 +27,8 @@ from schemas.admin import (
 )
 from utils.model_validation import validate_model
 
+# keys per SCAN round trip (default 10)
+SCAN_COUNT = 1000
 _PLAYED_STATES = [LobbyStateEnum.IN_PROGRESS, LobbyStateEnum.COMPLETED]
 
 
@@ -42,7 +44,7 @@ class AdminRepo:
         self._redis = redis
 
     async def _count_keys(self, pattern: str) -> int:
-        return sum([1 async for _ in self._redis.scan_iter(match=pattern)])
+        return sum([1 async for _ in self._redis.scan_iter(match=pattern, count=SCAN_COUNT)])
 
     async def _count_lobbies(self, *states: LobbyStateEnum) -> int:
         query = select(func.count(Lobby.id)).where(Lobby.state.in_(states))
@@ -54,7 +56,6 @@ class AdminRepo:
         completed = await self._count_lobbies(LobbyStateEnum.COMPLETED)
         return GameStatsSchema(
             active_lobbies=active,
-            active_players=await self._count_keys("game:*:connection:*"),
             completed_lobbies=completed,
         )
 
@@ -157,7 +158,13 @@ class AdminRepo:
 
     async def probe_backend(self) -> BackendServerSchema:
         try:
-            keys = [key async for key in self._redis.scan_iter(match=f"{INSTANCE_KEY_PREFIX}*")]
+            keys = [
+                key
+                async for key in self._redis.scan_iter(
+                    match=f"{INSTANCE_KEY_PREFIX}*",
+                    count=SCAN_COUNT,
+                )
+            ]
             raw_values = await self._redis.mget(keys) if keys else []
             instances = []
             for raw in raw_values:

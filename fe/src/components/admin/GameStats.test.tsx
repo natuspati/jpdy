@@ -5,9 +5,10 @@ import GameStats from './GameStats';
 
 vi.mock('@/hooks/useAdmin', () => ({
   useGameStats: () => ({
-    data: { active_lobbies: 3, active_players: 8, completed_lobbies: 21 },
+    data: { active_lobbies: 3, completed_lobbies: 21 },
     isError: false,
   }),
+  useServerStatus: () => ({ data: { backend: { connected_sockets: 8 } } }),
   useCategoryStats: () => ({
     data: [
       { id: 1, name: 'Space', kind: 'standard', lobbies_played: 10 },

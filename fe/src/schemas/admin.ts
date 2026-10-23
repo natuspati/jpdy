@@ -20,7 +20,6 @@ export type PaginatedAdminUsers = z.infer<typeof PaginatedAdminUsers>;
 // GameStatsSchema
 export const GameStats = z.object({
   active_lobbies: z.number().int().nonnegative(),
-  active_players: z.number().int().nonnegative(),
   completed_lobbies: z.number().int().nonnegative(),
 });
 export type GameStats = z.infer<typeof GameStats>;
