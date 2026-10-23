@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import RoundRecap from '@/components/game/RoundRecap';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import Spinner from '@/components/ui/Spinner';
-import { useLobby } from '@/hooks/useLobbies';
+import DeleteLobbyModal from '@/components/lobby/DeleteLobbyModal';
+import { useDeleteLobby, useLobby } from '@/hooks/useLobbies';
 
 const stateLabels = {
   created: 'Setup',
@@ -19,6 +21,14 @@ const LobbyDetailsPage = () => {
   const lobbyIdSafe = lobbyId !== undefined && !Number.isNaN(lobbyId) ? lobbyId : undefined;
   const navigate = useNavigate();
   const { data, isLoading, isError } = useLobby(lobbyIdSafe);
+  const remove = useDeleteLobby();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const handleDelete = async () => {
+    if (!data) return;
+    await remove.mutateAsync(data.id);
+    navigate('/');
+  };
 
   if (lobbyIdSafe === undefined) return <p className="text-rose-400">Invalid lobby id.</p>;
   if (isLoading) return <Spinner />;
@@ -44,7 +54,12 @@ const LobbyDetailsPage = () => {
             Back to lobbies
           </span>
         </div>
-        <h1 className="text-2xl font-bold text-slate-50">Lobby #{data.id}</h1>
+        <h1 className="flex-1 text-2xl font-bold text-slate-50">Lobby #{data.id}</h1>
+        {data.is_owner ? (
+          <Button variant="danger" size="sm" onClick={() => setConfirmingDelete(true)}>
+            Delete lobby
+          </Button>
+        ) : null}
       </div>
       <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <div>
@@ -131,6 +146,12 @@ const LobbyDetailsPage = () => {
           </div>
         )}
       </div>
+      <DeleteLobbyModal
+        lobby={confirmingDelete ? data : null}
+        pending={remove.isPending}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => void handleDelete()}
+      />
     </Card>
   );
 };

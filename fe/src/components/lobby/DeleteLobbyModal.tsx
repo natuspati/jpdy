@@ -2,8 +2,10 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import type { MyLobby } from '@/schemas';
 
+type DeletableLobby = Pick<MyLobby, 'id' | 'state'>;
+
 interface Props {
-  lobby: MyLobby | null;
+  lobby: DeletableLobby | null;
   pending: boolean;
   onClose: () => void;
   onConfirm: () => void;

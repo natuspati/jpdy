@@ -1,14 +1,18 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { LobbyDetails } from '@/schemas';
 import LobbyDetailsPage from './LobbyDetailsPage';
 
-const { lobby } = vi.hoisted(() => ({ lobby: { current: null as LobbyDetails | null } }));
+const { lobby, deleteLobby } = vi.hoisted(() => ({
+  lobby: { current: null as LobbyDetails | null },
+  deleteLobby: vi.fn(),
+}));
 
 vi.mock('@/hooks/useLobbies', () => ({
   useLobby: () => ({ data: lobby.current, isLoading: false, isError: false }),
+  useDeleteLobby: () => ({ mutateAsync: deleteLobby, isPending: false }),
 }));
 
 const completedLobby: LobbyDetails = {
@@ -78,5 +82,26 @@ describe('LobbyDetailsPage', () => {
     const rankings = screen.getByRole('heading', { name: 'Final rankings' });
     const round = screen.getByRole('region', { name: 'Round 1' });
     expect(rankings.compareDocumentPosition(round) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('lets the owner delete the lobby after confirming, then returns home', async () => {
+    deleteLobby.mockResolvedValue(undefined);
+    lobby.current = completedLobby;
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete lobby' }));
+    const dialog = screen.getByRole('dialog');
+    expect(deleteLobby).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete lobby' }));
+
+    expect(await screen.findByText('Lobbies home')).toBeInTheDocument();
+    expect(deleteLobby).toHaveBeenCalledWith(7);
+  });
+
+  it('hides delete from non-owners', () => {
+    lobby.current = { ...completedLobby, is_owner: false, is_participant: true };
+    renderPage();
+
+    expect(screen.queryByRole('button', { name: 'Delete lobby' })).not.toBeInTheDocument();
   });
 });
