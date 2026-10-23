@@ -49,8 +49,14 @@ export type PlayerConnectionStatusEnum = z.infer<typeof PlayerConnectionStatusEn
 export const AdminUserSortEnum = z.enum([
   'username_asc',
   'username_desc',
+  'role_asc',
+  'role_desc',
   'created_at_asc',
   'created_at_desc',
+  'lobbies_played_asc',
+  'lobbies_played_desc',
+  'lobbies_hosted_asc',
+  'lobbies_hosted_desc',
 ]);
 export type AdminUserSortEnum = z.infer<typeof AdminUserSortEnum>;
 

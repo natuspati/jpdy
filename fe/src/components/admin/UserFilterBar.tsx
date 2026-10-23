@@ -17,13 +17,6 @@ const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
 ] as const satisfies ReadonlyArray<{ value: AdminUserFilters['role']; label: string }>;
 
-const SORT_OPTIONS = [
-  { value: 'created_at_desc', label: 'Newest' },
-  { value: 'created_at_asc', label: 'Oldest' },
-  { value: 'username_asc', label: 'A-Z' },
-  { value: 'username_desc', label: 'Z-A' },
-] as const satisfies ReadonlyArray<{ value: AdminUserFilters['sort']; label: string }>;
-
 const DateField: FC<{ label: string; value: string; onChange: (value: string) => void }> = ({
   label,
   value,
@@ -58,16 +51,10 @@ const FilterFields: FC<Props & { className: string }> = ({ value, onChange, clas
       value={value.createdTo}
       onChange={(createdTo) => onChange({ ...value, createdTo })}
     />
-    <FilterSelect
-      label="Sort"
-      value={value.sort}
-      options={SORT_OPTIONS}
-      onChange={(sort) => onChange({ ...value, sort })}
-    />
   </div>
 );
 
-/** Username search plus role, registration dates and sort. On mobile the rest opens in a bottom sheet. */
+/** Username search plus role, and registration dates. On mobile the rest opens in a bottom sheet. */
 const UserFilterBar: FC<Props> = ({ value, onChange }) => {
   const [sheetOpen, setSheetOpen] = useState(false);
   const activeCount = activeAdminFilterCount(value);

@@ -48,7 +48,7 @@ describe('UserManagement', () => {
     users.data = [user(1, 'me', 'admin'), user(2, 'other', 'admin'), user(3, 'bob')];
   });
 
-  it('starts with newest-first and no other filters', () => {
+  it('starts unsorted with no filters', () => {
     render(<UserManagement />);
 
     expect(lastFilters()).toEqual({
@@ -56,15 +56,14 @@ describe('UserManagement', () => {
       username: undefined,
       created_from: undefined,
       created_to: undefined,
-      sort: 'created_at_desc',
+      sort: undefined,
     });
   });
 
-  it('sends role, sort and date filters', () => {
+  it('sends role and date filters', () => {
     render(<UserManagement />);
 
     fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'generic' } });
-    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'username_asc' } });
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-01-01' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-01-31' } });
 
@@ -73,8 +72,33 @@ describe('UserManagement', () => {
       username: undefined,
       created_from: '2026-01-01',
       created_to: '2026-01-31',
-      sort: 'username_asc',
+      sort: undefined,
     });
+  });
+
+  it('cycles a column header through ascending, descending and unsorted', () => {
+    render(<UserManagement />);
+    const header = () => screen.getByRole('columnheader', { name: /Played/ });
+    const click = () => fireEvent.click(within(header()).getByRole('button'));
+
+    click();
+    expect(lastFilters().sort).toBe('lobbies_played_asc');
+    expect(header()).toHaveAttribute('aria-sort', 'ascending');
+    click();
+    expect(lastFilters().sort).toBe('lobbies_played_desc');
+    expect(header()).toHaveAttribute('aria-sort', 'descending');
+    click();
+    expect(lastFilters().sort).toBeUndefined();
+    expect(header()).toHaveAttribute('aria-sort', 'none');
+  });
+
+  it('sorts by one column at a time', () => {
+    render(<UserManagement />);
+
+    fireEvent.click(within(screen.getByRole('columnheader', { name: /User/ })).getByRole('button'));
+    fireEvent.click(within(screen.getByRole('columnheader', { name: /Role/ })).getByRole('button'));
+
+    expect(lastFilters().sort).toBe('role_asc');
   });
 
   it('debounces the username search', async () => {
