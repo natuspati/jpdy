@@ -188,6 +188,73 @@ async def test_search_categories_returns_paginated_envelope(
     assert body["contents"][0]["name"] == "C1"
 
 
+async def _search_names(client: AsyncClient, user: AuthedUser, sort: str) -> list[str]:
+    response = await client.get(
+        "/api/v1/category",
+        params={"sort": sort},
+        headers=user["headers"],
+    )
+    assert response.status_code == 200, response.text
+    return [category["name"] for category in response.json()["contents"]]
+
+
+async def test_search_categories_sorts_by_name_and_updated_at(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    for name in ("banana", "Apple", "cherry"):
+        await _create_category(http_client, authed_user, name)
+
+    assert await _search_names(http_client, authed_user, "name_asc") == [
+        "Apple",
+        "banana",
+        "cherry",
+    ]
+    assert await _search_names(http_client, authed_user, "name_desc") == [
+        "cherry",
+        "banana",
+        "Apple",
+    ]
+    assert await _search_names(http_client, authed_user, "updated_asc") == [
+        "banana",
+        "Apple",
+        "cherry",
+    ]
+    assert await _search_names(http_client, authed_user, "updated_desc") == [
+        "cherry",
+        "Apple",
+        "banana",
+    ]
+
+
+async def test_search_categories_own_first_puts_the_viewers_categories_ahead(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+    another_authed_user: AuthedUser,
+):
+    await _create_category(http_client, authed_user, "mine-old")
+    await _create_category(http_client, another_authed_user, "theirs")
+    await _create_category(http_client, authed_user, "mine-new")
+
+    assert await _search_names(http_client, authed_user, "own_first") == [
+        "mine-new",
+        "mine-old",
+        "theirs",
+    ]
+
+
+async def test_search_categories_rejects_unknown_sort(
+    http_client: AsyncClient,
+    authed_user: AuthedUser,
+):
+    response = await http_client.get(
+        "/api/v1/category",
+        params={"sort": "random"},
+        headers=authed_user["headers"],
+    )
+    assert response.status_code == 422
+
+
 async def test_get_category_returns_prompts_ordered_ascending(
     http_client: AsyncClient,
     authed_user: AuthedUser,

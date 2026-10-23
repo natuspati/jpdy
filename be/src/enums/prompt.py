@@ -6,6 +6,14 @@ class PromptCategoryKindEnum(StrEnum):
     FINAL = auto()
 
 
+class PromptCategorySortEnum(StrEnum):
+    UPDATED_DESC = auto()
+    UPDATED_ASC = auto()
+    NAME_ASC = auto()
+    NAME_DESC = auto()
+    OWN_FIRST = auto()
+
+
 class QuestionTypeEnum(StrEnum):
     TEXT = auto()
     IMAGE = auto()

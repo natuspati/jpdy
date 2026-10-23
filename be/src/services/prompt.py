@@ -41,7 +41,10 @@ class PromptService:
         user: UserPublicSchema,
     ) -> PaginatedPromptCategoryResponseSchema:
         async with self._uow as uow:
-            result = await uow.prompt_category_repo.search_prompt_categories(filters=filters)
+            result = await uow.prompt_category_repo.search_prompt_categories(
+                filters=filters,
+                user_id=user.id,
+            )
         return PaginatedPromptCategoryResponseSchema(
             contents=[
                 build_prompt_category_response(redact_category_prompts(category, user.id))

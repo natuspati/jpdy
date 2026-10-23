@@ -1,9 +1,10 @@
 from sqlalchemy import case, delete, distinct, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from configs.constants import NUM_PROMPTS_IN_CATEGORY
-from enums.prompt import PromptCategoryKindEnum
+from enums.prompt import PromptCategoryKindEnum, PromptCategorySortEnum
 from models.prompt import Prompt
 from models.prompt_category import PromptCategory
 from schemas.prompt.category import (
@@ -19,6 +20,21 @@ from schemas.prompt.nested import (
 from utils.model_validation import validate_model
 
 
+def _sort_order(sort: PromptCategorySortEnum, user_id: int) -> list[ColumnElement]:
+    updated_desc = [PromptCategory.updated_at.desc(), PromptCategory.id.desc()]
+    match sort:
+        case PromptCategorySortEnum.UPDATED_ASC:
+            return [PromptCategory.updated_at.asc(), PromptCategory.id.asc()]
+        case PromptCategorySortEnum.NAME_ASC:
+            return [func.lower(PromptCategory.name).asc(), PromptCategory.id.asc()]
+        case PromptCategorySortEnum.NAME_DESC:
+            return [func.lower(PromptCategory.name).desc(), PromptCategory.id.desc()]
+        case PromptCategorySortEnum.OWN_FIRST:
+            return [case((PromptCategory.owner_id == user_id, 0), else_=1), *updated_desc]
+        case _:
+            return updated_desc
+
+
 class PromptCategoryRepo:
     def __init__(self, session: AsyncSession):
         self._session = session
@@ -26,6 +42,7 @@ class PromptCategoryRepo:
     async def search_prompt_categories(
         self,
         filters: PromptCategoryFilterSchema,
+        user_id: int,
     ) -> PaginatedPromptCategoryWithPromptsInDBSchema:
         """
         Search prompt categories with pagination, returning each category with
@@ -38,6 +55,7 @@ class PromptCategoryRepo:
         counts, compared with the required prompt count for the category kind.
 
         :param filters: validated search/pagination payload
+        :param user_id: viewer, used by the ``own_first`` sort
         :return: page of categories with prompts plus total count
         """
         required_count = case(
@@ -110,7 +128,7 @@ class PromptCategoryRepo:
                 selectinload(PromptCategory.prompts).selectinload(Prompt.question_media_asset),
                 selectinload(PromptCategory.prompts).selectinload(Prompt.answer_media_asset),
             )
-            .order_by(PromptCategory.updated_at.desc(), PromptCategory.id.desc())
+            .order_by(*_sort_order(filters.sort, user_id))
             .limit(filters.limit)
             .offset(filters.offset)
         )
