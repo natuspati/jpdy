@@ -50,8 +50,9 @@ Replace every placeholder in `deployment/prod.env`:
 | `__DB_PASSWORD__` | Same generated password for `POSTGRES_PASSWORD` and `BE_DB_PASSWORD` |
 | `__SECRET_KEY__` | Generated signing secret |
 | `__INVITE_CODE__` | Private registration code to share with players |
+| `__ADMIN_KEY__` | Private key that lets you claim the admin role (see below) |
 
-Generate secrets with `openssl rand -hex 32`. Keep the environment file private
+Generate secrets with `openssl rand -hex 32` (use that for `__ADMIN_KEY__` too). Keep the environment file private
 and untracked. Changing its database password does not update an existing
 database's password.
 
@@ -76,6 +77,14 @@ Verify the Tailscale DNS name matches `PUBLIC_URL` and `BE_ALLOWED_HOSTS`,
 then check sign-in and lobby connectivity at the public URL.
 No demo accounts are created. Register your host account, then share
 `PUBLIC_URL` and the private `BE_REGISTRATION_CODE` with players.
+
+To become an admin, sign in, open `/admin`, and enter `BE_ADMIN_KEY`. Each
+account gets exactly one guess: a wrong key redirects home silently and spends
+the attempt, while closing the form without submitting does not. Admins manage users and see
+server health and game stats on that page. Without `BE_ADMIN_KEY` nobody can
+claim the role, and an existing admin can promote others from the user list.
+Deleting a user also deletes their unfinished lobbies and unused uploads;
+completed lobbies stay as history.
 Closing the terminal does not stop the session. On macOS, `make start` also runs
 the built-in `caffeinate` so the host does not sleep until `make stop`
 (`make status` shows whether it is running). That does not stop a closed lid on
@@ -126,6 +135,7 @@ with 25 clues and these accounts:
 | Player | alice | alice123 |
 | Player | bob | bob123 |
 | Player | carol | carol123 |
+| Admin | admin | admin123 |
 
 Use separate browser profiles for test users. As host, create a lobby and
 assign categories to one to three rounds (each category can be used once, so
