@@ -31,7 +31,11 @@ services:
     image: tailscale/tailscale:v1.104.1
     restart: unless-stopped
     hostname: jpdy
+    # Kernel TUN instead of userspace networking, to rule out netstack as the cause of dropped sockets.
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
     environment:
+      TS_USERSPACE: "false"
       TS_AUTHKEY: ${TS_AUTHKEY}
       TS_HOSTNAME: jpdy
       TS_STATE_DIR: /var/lib/tailscale
